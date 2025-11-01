@@ -1,9 +1,3 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from apuntesya2.models import WebhookEvent
-from flask import redirect
-from flask import render_template
-from flask import request, redirect, url_for, flash
 import os
 import secrets
 import math
@@ -18,10 +12,16 @@ from flask import (
 from flask_login import (
     LoginManager, login_user, logout_user, current_user, login_required
 )
-from sqlalchemy import create_engine, select, or_, and_, func
+from sqlalchemy import create_engine, select, or_, and_, func, text
 from sqlalchemy.orm import sessionmaker, scoped_session
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+
+# modelos
+from apuntesya2.models import Base, User, Note, Purchase, University, Faculty, Career, WebhookEvent
+
+# helpers MP
+from apuntesya2 import mp
 
 load_dotenv()
 
@@ -44,7 +44,6 @@ def fees_ctx():
         except Exception:
             return 0.0
     return dict(MP_FEE_IMMEDIATE_TOTAL_PCT=MP_FEE_IMMEDIATE_TOTAL_PCT, mp_fee_estimate=mp_fee_estimate)
-
 
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", secrets.token_hex(16))
 app.config["ENV"] = os.getenv("FLASK_ENV", "production")
@@ -80,12 +79,10 @@ engine = create_engine(DB_URL, **engine_kwargs)
 # -----------------------------------------------------------------------------
 # Modelos e inicio de sesión
 # -----------------------------------------------------------------------------
-from apuntesya2.models import Base, User, Note, Purchase, University, Faculty, Career
-
 # Crear tablas
 Base.metadata.create_all(engine)
 
-# Sesión global
+# Sesión global (¡OJO! no importamos Session arriba para no ensombrecer)
 Session = scoped_session(sessionmaker(bind=engine, autoflush=False, expire_on_commit=False))
 
 login_manager = LoginManager(app)
@@ -140,16 +137,12 @@ def inject_contacts():
                 CONTACT_WHATSAPP=app.config.get("CONTACT_WHATSAPP"),
                 SUGGESTIONS_URL=app.config.get("SUGGESTIONS_URL"))
 
-# MP helpers
-from apuntesya2 import mp
-
 def get_valid_seller_token(seller: User) -> str | None:
     return seller.mp_access_token if (seller and seller.mp_access_token) else None
 
 # -----------------------------------------------------------------------------
-# Admin blueprint (si existe)
+# Admin blueprint (si existe) + auth_reset
 # -----------------------------------------------------------------------------
-# --- Admin (opcional) ---
 try:
     from .admin.routes import admin_bp
 except Exception:
@@ -160,11 +153,10 @@ except Exception:
 
 from apuntesya2.auth_reset.routes import bp as auth_reset_bp
 
-
 if admin_bp:
     app.register_blueprint(admin_bp)
-
 app.register_blueprint(auth_reset_bp)
+
 # -----------------------------------------------------------------------------
 # Utils
 # -----------------------------------------------------------------------------
@@ -174,78 +166,19 @@ def allowed_pdf(filename: str) -> bool:
 def ensure_dirs():
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-
-@app.route("/webhooks/mercadopago", methods=["POST"])
-def mp_webhook():
-    """Webhook idempotente de Mercado Pago con secret opcional."""
-    try:
-        configured_secret = app.config.get("MP_WEBHOOK_SECRET")
-        incoming_secret = request.args.get("secret")
-        if configured_secret and configured_secret != incoming_secret:
-            return {"ok": False, "error": "unauthorized"}, 401
-
-        payload = request.get_json(silent=True) or {}
-        topic = payload.get("type") or payload.get("topic")
-        action = payload.get("action") or (payload.get("data", {}) or {}).get("action")
-        provider_id = str(
-            payload.get("id")
-            or (payload.get("data") or {}).get("id")
-            or request.headers.get("X-Idempotency-Key")
-            or ""
-        ).strip()
-        if not provider_id:
-            provider_id = "no-id-" + str(abs(hash(request.data)))
-
-        with Session(engine) as sx:
-            exists = sx.execute(
-                text("SELECT 1 FROM webhook_events WHERE provider_id = :pid"),
-                {"pid": provider_id}
-            ).first()
-            if exists:
-                return {"ok": True, "duplicate": True}, 200
-
-            evt = WebhookEvent(
-                provider="mercadopago",
-                provider_id=provider_id,
-                topic=topic,
-                action=action,
-                payload=payload
-            )
-            sx.add(evt)
-            sx.commit()
-
-        return {"ok": True}, 200
-    except Exception as e:
-        try:
-            app.logger.exception("mp_webhook error")
-        except Exception:
-            pass
-        return {"ok": False, "error": str(e)}, 200
-
-def _register_webhook_route_once(app):
-    try:
-        # Evita doble registro por importaciones múltiples
-        endpoints = {r.endpoint for r in app.url_map.iter_rules()}
-        if "mp_webhook" not in endpoints:
-            app.add_url_rule(
-                "/webhooks/mercadopago",
-                view_func=mp_webhook,
-                methods=["POST"],
-                endpoint="mp_webhook",
-            )
-    except Exception as e:
-        try:
-            app.logger.warning("could not register webhook route: %s", e)
-        except Exception:
-            pass
-        
-_register_webhook_route_once(app)
 # -----------------------------------------------------------------------------
 # Health
 # -----------------------------------------------------------------------------
 @app.get("/health")
 def health():
     return {"ok": True}, 200
+
+@app.route("/healthz")
+def healthz():
+    try:
+        return {"status":"ok","version": app.config.get("APP_VERSION","unknown")}, 200
+    except Exception as e:
+        return {"status":"degraded","error": str(e)}, 200
 
 # -----------------------------------------------------------------------------
 # PROMOTE ADMIN (habilitado sólo con ENVs)
@@ -405,7 +338,6 @@ def profile_balance():
         apy_commission_cents = int(round(gross_cents * float(APY_COMMISSION_RATE)))
         net_cents = gross_cents - mp_commission_cents - apy_commission_cents
 
-        # Detalle por apunte (+ conversión si hay 'views')
         has_views = hasattr(Note, "views")
         if has_views:
             rows = s.execute(
@@ -687,7 +619,7 @@ def buy_note(note_id):
                 marketplace_fee=marketplace_fee,
                 external_reference=f"purchase:{p.id}",
                 back_urls=back_urls,
-                notification_url=url_for("mp_webhook", _external=True)
+                notification_url=url_for("mp_webhook", _external=True)  # apunta al endpoint nuevo
             )
 
             with Session() as s2:
@@ -702,7 +634,7 @@ def buy_note(note_id):
             return redirect(url_for("note_detail", note_id=note.id))
 
 # -----------------------------------------------------------------------------
-# MP return + webhook
+# MP return
 # -----------------------------------------------------------------------------
 @app.route("/mp/return/<int:note_id>")
 def mp_return(note_id):
@@ -775,29 +707,96 @@ def mp_return(note_id):
     flash("Pago registrado. Si ya figura aprobado, el botón de descarga estará disponible.")
     return redirect(url_for("note_detail", note_id=note_id))
 
-@app.route("/mp/webhook", methods=["POST", "GET"])
-def mp_webhook():
-    payment_id = request.args.get("id") or (request.json.get("data", {}).get("id") if request.is_json else None)
-    if not payment_id:
-        return ("ok", 200)
-
-    token = app.config["MP_ACCESS_TOKEN_PLATFORM"]
+# -----------------------------------------------------------------------------
+# Webhook único (dos rutas válidas -> mismo handler, endpoints distintos)
+# -----------------------------------------------------------------------------
+def _upsert_purchase_from_payment(pay: dict):
+    """Actualiza la compra si el payment trae external_reference=purchase:<id>"""
     try:
-        pay = mp.get_payment(token, str(payment_id))
+        status = (pay or {}).get("status")
+        external_reference = (pay or {}).get("external_reference") or ""
+        if external_reference.startswith("purchase:"):
+            pid = int(external_reference.split(":")[1])
+            with Session() as s:
+                p = s.get(Purchase, pid)
+                if p:
+                    p.payment_id = str(pay.get("id") or "")
+                    if status:
+                        p.status = status
+                    s.commit()
     except Exception:
+        pass
+
+def mp_webhook():
+    """Webhook idempotente. Acepta POST (y GET legacy). Registra evento + actualiza Purchase si corresponde."""
+    if request.method == "GET":
+        # ping o verificación legacy
         return ("ok", 200)
 
-    status = pay.get("status")
-    external_reference = pay.get("external_reference") or ""
-    if external_reference.startswith("purchase:"):
-        pid = int(external_reference.split(":")[1])
-        with Session() as s:
-            purchase = s.get(Purchase, pid)
-            if purchase:
-                purchase.payment_id = str(payment_id)
-                purchase.status = status
-                s.commit()
-    return ("ok", 200)
+    try:
+        # Secret opcional (solo aplicable a la ruta nueva; si lo configuran, exigirlo en ambas)
+        configured_secret = (app.config.get("MP_WEBHOOK_SECRET") or "").strip()
+        incoming_secret = (request.args.get("secret") or "").strip()
+        if configured_secret and configured_secret != incoming_secret:
+            return {"ok": False, "error": "unauthorized"}, 401
+
+        payload = request.get_json(silent=True) or {}
+        topic = payload.get("type") or payload.get("topic")
+        action = payload.get("action") or (payload.get("data", {}) or {}).get("action")
+
+        # idempotency key
+        provider_id = str(
+            payload.get("id")
+            or (payload.get("data") or {}).get("id")
+            or request.headers.get("X-Idempotency-Key")
+            or ""
+        ).strip()
+        if not provider_id:
+            provider_id = "no-id-" + str(abs(hash(request.data)))
+
+        # Guardar evento si no existe
+        with Session() as sx:
+            exists = sx.execute(
+                text("SELECT 1 FROM webhook_events WHERE provider_id = :pid"),
+                {"pid": provider_id}
+            ).first()
+            if not exists:
+                evt = WebhookEvent(
+                    provider="mercadopago",
+                    provider_id=provider_id,
+                    topic=topic,
+                    action=action,
+                    payload=payload
+                )
+                sx.add(evt)
+                sx.commit()
+
+        # Si viene payment id, intentar actualizar compra
+        payment_id = (
+            request.args.get("id")
+            or (payload.get("data", {}) or {}).get("id")
+            or payload.get("id")
+        )
+        if payment_id:
+            try:
+                token = app.config["MP_ACCESS_TOKEN_PLATFORM"]
+                pay = mp.get_payment(token, str(payment_id))
+                if isinstance(pay, dict):
+                    _upsert_purchase_from_payment(pay)
+            except Exception:
+                pass
+
+        return {"ok": True}, 200
+    except Exception as e:
+        try:
+            app.logger.exception("mp_webhook error")
+        except Exception:
+            pass
+        return {"ok": False, "error": str(e)}, 200
+
+# Registramos UNA sola vez, endpoints diferentes
+app.add_url_rule("/webhooks/mercadopago", view_func=mp_webhook, methods=["POST"], endpoint="mp_webhook")
+app.add_url_rule("/mp/webhook",            view_func=mp_webhook, methods=["POST", "GET"], endpoint="mp_webhook_legacy")
 
 # -----------------------------------------------------------------------------
 # Términos
@@ -940,15 +939,8 @@ def upload_profile_image():
     return redirect(url_for("profile"))
 
 # -----------------------------------------------------------------------------
-# Main
+# Cambio de contraseña (POST /profile/change_password)
 # -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    app.run(debug=True)
-
-from werkzeug.security import check_password_hash, generate_password_hash
-from flask_login import login_required, current_user
-from sqlalchemy import select
-
 @app.route("/profile/change_password", methods=["POST"])
 @login_required
 def change_password():
@@ -964,60 +956,31 @@ def change_password():
         flash("La confirmación no coincide.", "danger")
         return redirect(url_for("profile"))
 
-    # Try to access DB session and User model
     try:
-        from apuntesya2.models import User  # common location
-    except Exception:
-        pass
-
-    # Try Session pattern
-    user_obj = None
-    try:
-        # If using SQLAlchemy Core/Session style
         with Session() as s:
             user_obj = s.execute(select(User).where(User.id == current_user.id)).scalar_one()
             user_obj.password_hash = generate_password_hash(new_pw)
             s.commit()
-    except Exception:
-        # Fallback: Flask-SQLAlchemy style db.session
-        try:
-            user_obj = User.query.get(current_user.id)
-            if user_obj is None:
-                flash("No se encontró el usuario.", "danger")
-                return redirect(url_for("profile"))
-            user_obj.password_hash = generate_password_hash(new_pw)
-            db.session.commit()
-        except Exception as e:
-            flash("Error al actualizar la contraseña: {}".format(e), "danger")
-            return redirect(url_for("profile"))
+    except Exception as e:
+        flash("Error al actualizar la contraseña: {}".format(e), "danger")
+        return redirect(url_for("profile"))
 
     flash("¡Contraseña actualizada correctamente!", "success")
     return redirect(url_for("profile"))
 
-
+# -----------------------------------------------------------------------------
+# Ayuda
+# -----------------------------------------------------------------------------
 @app.route("/help/mercadopago")
 def help_mp():
     return render_template("help/mp_linking.html")
 
-
-@app.route("/connect/mercadopago")
-@login_required
-def oauth_start():
-    try:
-        from .mp import oauth_authorize_url
-    except Exception:
-        from mp import oauth_authorize_url
-    return redirect(oauth_authorize_url())
-
-
-@app.route("/healthz")
-def healthz():
-    try:
-        return {"status":"ok","version": app.config.get("APP_VERSION","unknown")}, 200
-    except Exception as e:
-        return {"status":"degraded","error": str(e)}, 200
 @app.route("/help/comisiones")
 def help_commissions():
     return render_template("help/commissions.html")
 
-
+# -----------------------------------------------------------------------------
+# Main
+# -----------------------------------------------------------------------------
+if __name__ == "__main__":
+    app.run(debug=True)
