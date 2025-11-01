@@ -93,4 +93,66 @@
         {% endfor %}
     </tbody>
 </table>
+<hr>
+<h2>Actividad últimos 30 días</h2>
+
+<div style="max-width: 980px; margin: 12px 0;">
+    <canvas id="salesChart"></canvas>
+</div>
+
+<div style="max-width: 980px; margin: 12px 0;">
+    <canvas id="revenueChart"></canvas>
+</div>
+
+<!-- Chart.js desde CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Datos desde el servidor (safe) 
+    const LABELS = {{ labels| tojson }};
+    const SALES = {{ sales_series| tojson }};
+    const REVENUE = {{ revenue_series_ars| tojson }};
+
+    // Ventas (unidades)
+    new Chart(document.getElementById('salesChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: LABELS,
+            datasets: [{
+                label: 'Ventas (unid.)',
+                data: SALES,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: true } },
+            scales: {
+                x: { title: { display: true, text: 'Fecha' } },
+                y: { title: { display: true, text: 'Cantidad' }, beginAtZero: true, precision: 0 }
+            }
+        }
+    });
+
+    // Ingresos ($ ARS)
+    new Chart(document.getElementById('revenueChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: LABELS,
+            datasets: [{
+                label: 'Ingresos (ARS)',
+                data: REVENUE,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: true } },
+            scales: {
+                x: { title: { display: true, text: 'Fecha' } },
+                y: { title: { display: true, text: '$' }, beginAtZero: true }
+            }
+        }
+    });
+</script>
+
 {% endblock %}

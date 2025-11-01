@@ -176,7 +176,13 @@ def admin_summary():
     if not getattr(current_user, "is_admin", False):
         abort(403)
 
+    from datetime import datetime, timedelta, date
+    from sqlalchemy import func, and_
+
+    start_date = (datetime.utcnow().date() - timedelta(days=29))  # últimos 30 días inclusive
+
     with Session() as s:
+        # KPI generales
         total_users = s.execute(select(func.count(User.id))).scalar_one()
         total_notes = s.execute(select(func.count(Note.id))).scalar_one()
         total_purchases = s.execute(select(func.count(Purchase.id))).scalar_one()
@@ -192,6 +198,7 @@ def admin_summary():
         apy_commission_cents = int(round(gross_cents * float(APY_COMMISSION_RATE)))
         net_cents = gross_cents - mp_commission_cents - apy_commission_cents
 
+        # Top 10 apuntes (por ventas)
         top_notes = s.execute(
             select(
                 Note.id, Note.title,
@@ -201,22 +208,55 @@ def admin_summary():
             .join(Purchase, Purchase.note_id == Note.id)
             .where(Purchase.status == "approved")
             .group_by(Note.id, Note.title)
-            .order_by(desc("sold_count"))
+            .order_by(func.desc("sold_count"))
             .limit(10)
         ).all()
 
+        # Reportados (si existe columna)
         reported_notes = []
         if hasattr(Note, "is_reported"):
             reported_notes = s.execute(
                 select(Note.id, Note.title).where(Note.is_reported == True).order_by(Note.id.desc()).limit(20)
             ).all()
 
+        # Últimas compras
         last_purchases = s.execute(
             select(Purchase.id, Purchase.status, Purchase.amount_cents, Purchase.created_at, Note.title)
             .join(Note, Note.id == Purchase.note_id)
             .order_by(Purchase.created_at.desc())
             .limit(15)
         ).all()
+
+        # ======= Series de 30 días: ventas e ingresos =======
+        # Agrupamos por fecha (usando func.date, funciona en SQLite/Postgres)
+        rows = s.execute(
+            select(
+                func.date(Purchase.created_at).label("d"),
+                func.count(Purchase.id).label("cnt"),
+                func.coalesce(func.sum(Purchase.amount_cents), 0).label("sum_cents"),
+            )
+            .where(
+                and_(
+                    Purchase.status == "approved",
+                    Purchase.created_at >= datetime.combine(start_date, datetime.min.time())
+                )
+            )
+            .group_by(func.date(Purchase.created_at))
+            .order_by(func.date(Purchase.created_at))
+        ).all()
+
+    # Normalizamos a una serie continua de 30 días
+    by_date = {str(r.d): (int(r.cnt or 0), int(r.sum_cents or 0)) for r in rows}
+    labels = []
+    sales_series = []
+    revenue_series_ars = []
+    for i in range(30):
+        d = start_date + timedelta(days=i)
+        key = d.strftime("%Y-%m-%d")
+        labels.append(key)
+        cnt, cents = by_date.get(key, (0, 0))
+        sales_series.append(cnt)
+        revenue_series_ars.append(round(cents / 100.0, 2))
 
     return render_template(
         "admin_summary.html",
@@ -233,4 +273,8 @@ def admin_summary():
         top_notes=top_notes,
         reported_notes=reported_notes,
         last_purchases=last_purchases,
+        # series para Chart.js
+        labels=labels,
+        sales_series=sales_series,
+        revenue_series_ars=revenue_series_ars,
     )
