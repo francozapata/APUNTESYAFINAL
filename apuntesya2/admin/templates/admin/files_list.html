@@ -1,0 +1,33 @@
+{% extends 'admin/base.html' %}
+{% block admin_content %}
+<h2>Listado de archivos (Apuntes)</h2>
+<table class="table">
+  <thead>
+    <tr><th>ID</th><th>Título</th><th>Vendedor</th><th>Archivo</th><th>Activo</th><th>Creado</th><th>Acciones</th></tr>
+  </thead>
+  <tbody>
+  {% for n in notes %}
+    <tr>
+      <td>{{ n.id }}</td>
+      <td>{{ n.title }}</td>
+      <td>{{ n.seller.name if n.seller else '—' }}</td>
+      <td>
+        {% if n.file_path %}
+          <a href="{{ url_for('static', filename='placeholder') }}">{{ n.file_path }}</a>
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td>{{ 'Sí' if n.is_active else 'No' }}</td>
+      <td>{{ n.created_at }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin.hard_delete_note', note_id=n.id) }}" onsubmit="return confirm('Eliminar permanentemente? Esta acción NO se puede deshacer.');">
+          <input type="hidden" name="reason" value="admin_manual_delete"/>
+          <button class="btn btn-danger btn-sm" type="submit">Eliminar permanentemente</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: apuntesya
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -c gunicorn.conf.py apuntesya2.app:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      # Provide DATABASE_URL from Render Postgres add-on or set manually.
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: apuntesya-db
+      #     property: connectionString
+      - key: PLATFORM_COMMISSION
+        value: "0.05"
+      - key: MP_COMMISSION_RATE
+        value: "0.064"
+    routes:
+      - type: rewrite
+        source: /.well-known/acme-challenge/*
+        destination: /
+# Optional managed Postgres (create in Render UI and then uncomment the DATABASE_URL mapping above)
+databases:
+  - name: apuntesya-db

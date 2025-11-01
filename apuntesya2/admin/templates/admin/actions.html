@@ -1,0 +1,20 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Acciones de Admin</h1>
+<table class="table" style="width:100%;border-collapse:collapse;">
+  <thead><tr><th>Fecha</th><th>Admin</th><th>Acción</th><th>Target</th><th>Motivo</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for a in actions %}
+    <tr>
+      <td>{{ a.created_at }}</td>
+      <td>{{ a.admin_id }}</td>
+      <td>{{ a.action }}</td>
+      <td>{{ a.target_type }} #{{ a.target_id }}</td>
+      <td>{{ a.reason or '-' }}</td>
+      <td>{{ a.ip or '-' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

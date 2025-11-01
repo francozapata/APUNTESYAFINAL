@@ -1,0 +1,27 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1>Usuarios</h1>
+<table class="table" style="width:100%;border-collapse:collapse;">
+  <thead><tr><th>ID</th><th>Nombre</th><th>Email</th><th>Activo</th><th>Admin</th><th>Acciones</th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr>
+      <td>{{ u.id }}</td>
+      <td>{{ u.name }}</td>
+      <td>{{ u.email }}</td>
+      <td>{{ 'Sí' if u.is_active else 'No' }}</td>
+      <td>{{ 'Sí' if u.is_admin else 'No' }}</td>
+      <td>
+        {% if u.is_active %}
+        <form method="post" action="{{ url_for('admin.deactivate_user', user_id=u.id) }}" onsubmit="return confirm('¿Desactivar usuario?');">
+          <input type="hidden" name="reason" value="Acción manual desde panel." />
+          <button class="btn btn-warning">Desactivar</button>
+        </form>
+        {% else %}-{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

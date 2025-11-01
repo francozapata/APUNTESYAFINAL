@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Crear cuenta</h2>
+  <form method="post">
+    <label>Nombre</label><input class="input" name="name" required>
+    <label>Email</label><input class="input" name="email" type="email" required>
+    <label>Contraseña</label><input class="input" name="password" type="password" required>
+    <div class="grid">
+      <div><label>Universidad</label><input class="input" name="university" required></div>
+      <div><label>Facultad</label><input class="input" name="faculty" required></div>
+      <div><label>Carrera</label><input class="input" name="career" required></div>
+    </div>
+    <button class="btn">Registrarme</button>
+  </form>
+</div>
+{% endblock %}

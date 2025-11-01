@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card mb-3">
+  <h3>Comisiones y neto estimado</h3>
+  <p class="text-sm">
+    El <strong>neto estimado</strong> incluye la comisión de ApuntesYa (<strong>{{ config.PLATFORM_FEE_PCT or 5
+      }}%</strong>)
+    y una <strong>estimación</strong> de la comisión de Mercado Pago para <strong>acreditación inmediata</strong> (≈
+    <strong>{{ '%.2f' % MP_FEE_IMMEDIATE_TOTAL_PCT }}%</strong>).
+    Este valor es orientativo y puede variar según el medio de pago, la configuración de acreditación, tu condición
+    fiscal y la provincia.
+  </p>
+</div>
+
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-md-3">
+    <label class="form-label">Desde</label>
+    <input type="date" class="form-control" name="start" value="{{ start }}">
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Hasta</label>
+    <input type="date" class="form-control" name="end" value="{{ end }}">
+  </div>
+  <div class="col-md-3 d-flex align-items-end gap-2">
+    <button class="btn btn-primary">Filtrar</button>
+  </div>
+</form>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card p-3">
+      <div class="muted">Ventas</div>
+      <div class="h4">{{ sold_count }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3">
+      <div class="muted">Ingresos brutos</div>
+      <div class="h4">${{ '%.2f' % (total_cents/100) }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3">
+      <div class="muted">Comisión MP ({{ (MP_COMMISSION_RATE*100)|round(2) }}%)</div>
+      <div class="h4">${{ '%.2f' % (mp_commission_cents/100) }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card p-3">
+      <div class="muted">Comisión ApuntesYa ({{ (APY_COMMISSION_RATE*100)|round(2) }}%)</div>
+      <div class="h4">${{ '%.2f' % (apy_commission_cents/100) }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card p-3 border-success">
+      <div class="muted">Total a recibir</div>
+      <div class="h4">${{ '%.2f' % (net_cents/100) }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="alert alert-info">
+  <small>La comisión de <b>ApuntesYa</b> se utiliza únicamente para la vinculación y mantenimiento con Mercado Pago.
+    Actualmente es de <b>{{ (APY_COMMISSION_RATE*100)|round(2) }}%</b>.</small>
+
+  <div class="alert alert-warning mt-3">
+    <small>
+      <b>Importante:</b> ApuntesYa no cobra retenciones de Ingresos Brutos (IIBB) actualmente.
+      Dependiendo de la situación fiscal del usuario o del comprador, <b>Mercado Pago</b> podría
+      aplicar percepciones o retenciones automáticas según normativa vigente.
+      {% if IIBB_ENABLED %}
+      <br>Actualmente tenés activa una retención de IIBB en la plataforma: {{ (IIBB_RATE*100)|round(2) }}%.
+      {% endif %}
+    </small>
+  </div>
+
+
+  <div class="card">
+    <h3 class="p-3">Detalle por apunte</h3>
+    <div class="table">
+      <div class="thead">
+        <div>Título</div>
+        <div class="right">Vendidos</div>
+        <div class="right">Bruto</div>
+        <div class="right">MP</div>
+        <div class="right">ApY</div>
+        <div class="right">Neto</div>
+        <div class="right">Views</div>
+        <div class="right">% Conv.</div>
+        <div></div>
+      </div>
+      {% for r in per_note %}
+      <div class="row">
+        <div>{{ r.title }}</div>
+        <div class="right">{{ r.sold_count }}</div>
+        <div class="right">${{ '%.2f' % (r.gross_cents/100) }}</div>
+        <div class="right">${{ '%.2f' % (r.mp_commission_cents/100) }}</div>
+        <div class="right">${{ '%.2f' % (r.apy_commission_cents/100) }}</div>
+        <div class="right">${{ '%.2f' % (r.net_cents/100) }}</div>
+        <div class="right">{{ r.views if r.views is not none else '—' }}</div>
+        <div class="right">
+          {% if r.conversion is not none %}
+          {{ '%.1f' % r.conversion }}%
+          {% else %}
+          —
+          {% endif %}
+        </div>
+        <div><a class="btn small" href="{{ url_for('note_detail', note_id=r.id) }}">Ver</a></div>
+      </div>
+      {% else %}
+      <div class="p-3">No hay resultados para este período. <a href="{{ url_for('upload_note') }}">Subir apunte</a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endblock %}

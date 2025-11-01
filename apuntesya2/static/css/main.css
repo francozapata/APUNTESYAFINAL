@@ -1,0 +1,362 @@
+:root {
+  --bg: #ffffff;
+  --card: #111318;
+  --ink: #e8e8ea;
+  --muted: #a1a1aa;
+  --brand: #4f46e5;
+}
+
+* {
+  box-sizing: border-box
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Ubuntu, Arial
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none
+}
+
+.container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 16px
+}
+
+.nav {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  margin-bottom: 8px;
+  background: linear-gradient(180deg, #121420, #0b0c10)
+}
+
+.brand {
+  display: flex;
+  gap: 10px;
+  align-items: center
+}
+
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--brand)
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid #1b1f2a;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+  margin-bottom: 16px
+}
+
+.btn {
+  display: inline-block;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--brand);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-weight: 600
+}
+
+.btn.secondary {
+  background: #1f2937
+}
+
+.input,
+select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #0e1117;
+  border: 1px solid #232938;
+  color: var(--ink);
+  margin: 6px 0 12px
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px
+}
+
+.note {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #232938;
+  background: #0e1117
+}
+
+.note .title {
+  font-weight: 700;
+  margin-bottom: 6px
+}
+
+.badge {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #111827;
+  border: 1px solid #233047
+}
+
+.footer {
+  opacity: .7;
+  padding: 24px;
+  text-align: center
+}
+
+.brand-logo-img {
+  width: 50px;
+  height: 50px;
+  border-radius: 5px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .08)
+}
+
+.brand-logo1-img {
+  width: 120px;
+  height: 30px;
+  border-radius: 5px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .08)
+}
+
+.brand-title {
+  font-size: 18px
+}
+
+.nav-actions .btn {
+  margin-left: 8px
+}
+
+
+:root {
+  --nav-from: #1d4ed8;
+  --nav-to: #60a5fa;
+}
+
+.nav {
+  background: linear-gradient(90deg, var(--nav-from), var(--nav-to)) !important;
+  border-bottom: none !important;
+  color: #fff;
+}
+
+.nav .brand-title {
+  color: #fff
+}
+
+.nav a {
+  color: #fff
+}
+
+.nav .btn {
+  background: rgba(255, 255, 255, .18);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .28);
+  box-shadow: none;
+}
+
+.nav .btn:hover {
+  background: rgba(255, 255, 255, .28)
+}
+
+.btn {
+  background: linear-gradient(135deg, #2563eb, #60a5fa);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, .20)
+}
+
+
+
+:root {
+  --surface: #ffffff;
+  --surface-2: #f6faff;
+  --border: #e5e7eb;
+  --ink: #0f172a;
+  --muted: #64748b;
+}
+
+.card {
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 10px 30px rgba(2, 6, 23, .08) !important;
+}
+
+.note {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--ink) !important;
+}
+
+.input,
+select,
+textarea {
+  background: var(--surface-2) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.badge {
+  background: #eef2ff !important;
+  color: #1e40af !important;
+  border: 1px solid #e0e7ff !important;
+}
+
+body,
+.container {
+  background: #ffffff !important;
+}
+
+.footer .btn {
+  padding: 6px 10px;
+  font-weight: 600;
+  border-radius: 999px;
+}
+
+
+
+/* --- Contact Widget (popup above button) --- */
+#contact-widget-button {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1040;
+  border-radius: 50%;
+  width: 54px;
+  height: 54px;
+  background-color: #2563eb;
+  color: #fff;
+  font-size: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: all .2s ease;
+}
+
+#contact-widget-button:hover {
+  transform: scale(1.08);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  background-color: #1d4ed8;
+}
+
+#contact-widget-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(1px);
+  z-index: 1038;
+}
+
+#contact-widget-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 78px;
+  width: min(92vw, 320px);
+  background: #fff;
+  color: #111;
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+  padding: 14px;
+  z-index: 1039;
+  animation: cw-pop .16s ease-out;
+}
+
+#contact-widget-panel::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  bottom: -8px;
+  border-width: 8px 8px 0 8px;
+  border-style: solid;
+  border-color: #fff transparent transparent transparent;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.12));
+}
+
+@keyframes cw-pop {
+  from {
+    transform: translateY(6px);
+    opacity: .0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.contact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.contact-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.contact-sub {
+  color: #555;
+  font-size: .9rem;
+}
+
+.contact-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.contact-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-decoration: none;
+  color: inherit;
+  background: #fafafa;
+}
+
+.contact-chip:hover {
+  background: #f2f2f2;
+}
+
+.contact-chip .ico {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Ensure .hidden exists in case Tailwind isn't loaded */
+.hidden {
+  display: none !important;
+}
+
+
+/* Emphasis button for suggestions */
+.contact-primary {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.contact-primary:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}

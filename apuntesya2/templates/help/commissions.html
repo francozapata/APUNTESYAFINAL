@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Comisiones y acreditaciones</h2>
+  <p class="mb-2">
+    En cada venta, ApuntesYa aplica una <strong>comisión del {{ config.PLATFORM_FEE_PCT or 5 }}%</strong> por gestión y vinculación con Mercado Pago.
+    Adicionalmente, <strong>Mercado Pago</strong> puede aplicar <strong>comisiones o retenciones impositivas</strong> (IIBB, IVA, etc.) según tu cuenta y jurisdicción.
+  </p>
+  <p class="text-sm mb-4">Como referencia, MP puede cobrar entre <strong>~0,8% y ~6,3% + IVA</strong> según el medio de pago y el <strong>tiempo de acreditación</strong> que elijas (inmediata vs. a 7/10 días, etc.).</p>
+
+  <h3 class="mt-4">Ejemplo: venta de $1.000</h3>
+  <div class="overflow-x-auto">
+    <table class="table w-full">
+      <thead>
+        <tr>
+          <th>Escenario</th>
+          <th>ApuntesYa ({{ config.PLATFORM_FEE_PCT or 5 }}%)</th>
+          <th>Mercado Pago</th>
+          <th>Vendedor recibe</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Acreditación inmediata (MP ~6,29% + IVA ≈ 7,61%)</td>
+          <td>$50,00</td>
+          <td>$76,10</td>
+          <td><strong>$873,90</strong></td>
+        </tr>
+        <tr>
+          <td>Acreditación en 10 días (MP ~4,39% + IVA ≈ 5,31%)</td>
+          <td>$50,00</td>
+          <td>$53,10</td>
+          <td><strong>$896,90</strong></td>
+        </tr>
+        <tr>
+          <td>QR / Dinero en cuenta MP (MP ~0,8% + IVA ≈ 0,97%)</td>
+          <td>$50,00</td>
+          <td>$9,70</td>
+          <td><strong>$940,30</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="text-sm mt-3">
+    ⚠️ <strong>Aclaración:</strong> los porcentajes de MP son <em>orientativos</em> y pueden variar según el medio de pago,
+    la configuración de acreditación, la categoría fiscal y la provincia. Si aplican <strong>IIBB/IVA/Ganancias</strong>,
+    el neto puede ser menor.
+  </p>
+
+  <p class="mt-4">
+    ¿Tenés dudas? Revisá también <a class="text-blue-600 hover:underline" href="{{ url_for('help_mp') }}">cómo vincular tu cuenta de Mercado Pago</a>.
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <h2>Mi perfil</h2>
+  <div style="display:flex;align-items:center;gap:16px;margin:10px 0;">
+    <img
+      src="{% if (current_user.imagen_de_perfil or current_user.profile_image) %}{{ url_for('static', filename='uploads/profile_images/' ~ (current_user.imagen_de_perfil or current_user.profile_image)) }}{% else %}{{ url_for('static', filename='img/default_profile.png') }}{% endif %}"
+      alt="Foto de perfil"
+      style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:2px solid #fff;box-shadow:0 0 6px rgba(0,0,0,0.2)">
+
+    <form action="{{ url_for('upload_profile_image') }}" method="post" enctype="multipart/form-data">
+      <input class="input" type="file" name="file" accept="image/png, image/jpeg" required>
+      <button class="btn">Cambiar foto de perfil</button>
+    </form>
+  </div>
+  <p><strong>{{ current_user.name }}</strong> — <strong> {{ current_user.email }}</strong></p>
+  <p>{{ current_user.university }} • {{ current_user.faculty }} • {{ current_user.career }}</p>
+  <a class="btn secondary" href="{{ url_for('auth_reset.reset_password_request') }}">Cambiar contraseña</a>
+</div>
+
+<div class="card">
+  {% if current_user.mp_access_token %}
+  <p>Mercado Pago: <span class="badge">Conectado</span></p>
+  <a class="btn secondary" href="{{ url_for('disconnect_mp') }}">Desconectar</a>
+  {% else %}
+  <p>Mercado Pago: <span class="badge">No conectado</span></p>
+  <a class="btn" href="{{ url_for('connect_mp') }}">Conectar con Mercado Pago</a>
+  {% endif %}
+</div>
+
+
+<div class="card">
+  <h3>Mis apuntes</h3>
+  <div class="grid">
+    {% for n in my_notes %}
+    <div class="note">
+      <div class="title">{{ n.title }}</div>
+      {% if n.price_cents>0 %}<div class="badge">Pago</div>{% else %}<div class="badge">Gratis</div>{% endif %}
+      <a class="btn" href="{{ url_for('note_detail', note_id=n.id) }}">Ver</a>
+    </div>
+    {% else %}
+    <div>No subiste apuntes aún.</div>
+    {% endfor %}
+  </div>
+  <div class="actions" style="margin: 12px 0; display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn" href="{{ url_for('profile_balance') }}">Ver balance</a>
+    <a class="btn secondary" href="{{ url_for('profile_purchases') }}">Mis compras</a>
+  </div>
+</div>
+{% endblock %}
+
+
+<div class="card mt-4">
+  <h3>Cambiar contraseña</h3>
+  <form method="post" action="{{ url_for('change_password') }}">
+    <label>Contraseña actual</label>
+    <input class="input" type="password" name="current_password" required>
+
+    <label>Nueva contraseña (mínimo 8)</label>
+    <input class="input" type="password" name="new_password" minlength="8" required>
+
+    <label>Confirmar nueva contraseña</label>
+    <input class="input" type="password" name="confirm_password" minlength="8" required>
+
+    <button class="btn">Actualizar contraseña</button>
+  </form>
+</div>

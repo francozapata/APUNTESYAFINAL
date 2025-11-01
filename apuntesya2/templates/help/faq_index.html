@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Centro de ayuda{% endblock %}
+{% block content %}
+<h1 class="mb-3">Centro de ayuda</h1>
+<form method="get" class="mb-3">
+  <div class="row g-2">
+    <div class="col-md-6">
+      <input name="q" value="{{ q }}" class="form-control" placeholder="Buscá por tema o palabra clave">
+    </div>
+    <div class="col-md-3">
+      <select name="cat" class="form-select">
+        <option value="">Todas las categorías</option>
+        {% for c in categories %}
+          <option value="{{ c }}" {% if c==cat %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <button class="btn btn-primary w-100">Buscar</button>
+    </div>
+  </div>
+</form>
+<div class="accordion" id="faqAccordion">
+  {% for f in faqs %}
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="q{{ f.id }}">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#a{{ f.id }}">
+          <span class="badge text-bg-secondary me-2">{{ f.category }}</span> {{ f.question }}
+        </button>
+      </h2>
+      <div id="a{{ f.id }}" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+        <div class="accordion-body">
+          {{ f.answer|safe }}
+          <div class="mt-2">
+            <a class="small" href="{{ url_for('helpcenter.faq_detail', faq_id=f.id, slug=f.slug) }}">Enlace permanente</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <p class="text-muted">No encontramos resultados con tus filtros.</p>
+  {% endfor %}
+</div>
+<script type="application/ld+json">
+{{ jsonld|tojson }}
+</script>
+{% endblock %}

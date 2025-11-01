@@ -1,0 +1,452 @@
+import os, secrets, math
+from datetime import datetime, timedelta
+from urllib.parse import urlencode
+from dotenv import load_dotenv
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, abort, jsonify
+from flask_login import LoginManager, login_user, logout_user, current_user, login_required
+from sqlalchemy import create_engine, select, or_, and_
+from sqlalchemy.orm import sessionmaker, scoped_session
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+
+from apuntesya2.models import Base, User, Note, Purchase
+from apuntesya2 import mp
+
+load_dotenv()
+
+app = Flask(__name__, instance_relative_config=True)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", secrets.token_hex(16))
+db_url = os.getenv("DATABASE_URL", "sqlite:///instance/apuntesya2.db")
+# Convert relative sqlite path to absolute (Windows-safe)
+if db_url.startswith("sqlite:///"):
+    rel_path = db_url.replace("sqlite:///", "", 1)
+    abs_db = os.path.abspath(os.path.join(os.path.dirname(__file__), rel_path))
+    os.makedirs(os.path.dirname(abs_db), exist_ok=True)  # ensure instance/
+    db_url = f"sqlite:///{abs_db}"
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["UPLOAD_FOLDER"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "uploads"))
+app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # 25MB
+app.config["PLATFORM_FEE_PERCENT"] = float(os.getenv("MP_PLATFORM_FEE_PERCENT", "5.0"))
+app.config["MP_ACCESS_TOKEN_PLATFORM"] = os.getenv("MP_ACCESS_TOKEN")  # token de la cuenta plataforma
+app.config["MP_OAUTH_REDIRECT_URL"] = os.getenv("MP_OAUTH_REDIRECT_URL")
+
+engine = create_engine(app.config["SQLALCHEMY_DATABASE_URI"].replace("sqlite:///", "sqlite:///"), future=True)
+Base.metadata.create_all(engine)
+Session = scoped_session(sessionmaker(bind=engine, autoflush=False, expire_on_commit=False))
+
+# --- Admin panel ---
+try:
+    from .admin.routes import admin_bp
+except ImportError:
+    from admin.routes import admin_bp
+app.register_blueprint(admin_bp)
+
+
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
+
+@login_manager.user_loader
+def load_user(user_id):
+    with Session() as s:
+        return s.get(User, int(user_id))
+
+# Helpers
+def allowed_pdf(filename:str)->bool:
+    return "." in filename and filename.rsplit(".",1)[1].lower() == "pdf"
+
+def ensure_dirs():
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+
+# --- Contact widget config (emails & WhatsApp) ---
+app.config.from_mapping(
+    CONTACT_EMAILS=os.getenv("CONTACT_EMAILS", "soporte.apuntesya@gmail.com"),
+    CONTACT_WHATSAPP=os.getenv("CONTACT_WHATSAPP", "+543510000000"),
+    SUGGESTIONS_URL=os.getenv("SUGGESTIONS_URL", "https://docs.google.com/forms/d/e/1FAIpQLScDEukn0sLtjOoWgmvTNaF_qG0iDHue9EOqCYxz_z6bGxzErg/viewform?usp=header"),
+)
+
+@app.context_processor
+def inject_contacts():
+    emails = [e.strip() for e in str(app.config.get("CONTACT_EMAILS","")).split(",") if e.strip()]
+    return dict(CONTACT_EMAILS=emails, CONTACT_WHATSAPP=app.config.get("CONTACT_WHATSAPP"), SUGGESTIONS_URL=app.config.get("SUGGESTIONS_URL"))
+# --- end contact widget config ---
+
+@app.route("/")
+def index():
+    with Session() as s:
+        notes = s.execute(select(Note).where(Note.is_active==True).order_by(Note.created_at.desc()).limit(30)).scalars().all()
+    return render_template("index.html", notes=notes)
+
+@app.route("/search")
+def search():
+    q = request.args.get("q","").strip()
+    university = request.args.get("university","").strip()
+    faculty = request.args.get("faculty","").strip()
+    career = request.args.get("career","").strip()
+    t = request.args.get("type","")
+
+    with Session() as s:
+        stmt = select(Note).where(Note.is_active==True)
+        if q:
+            stmt = stmt.where(or_(Note.title.ilike(f"%{q}%"), Note.description.ilike(f"%{q}%")))
+        if university: stmt = stmt.where(Note.university.ilike(f"%{university}%"))
+        if faculty: stmt = stmt.where(Note.faculty.ilike(f"%{faculty}%"))
+        if career: stmt = stmt.where(Note.career.ilike(f"%{career}%"))
+        if t == "free":
+            stmt = stmt.where(Note.price_cents == 0)
+        elif t == "paid":
+            stmt = stmt.where(Note.price_cents > 0)
+        notes = s.execute(stmt.order_by(Note.created_at.desc()).limit(100)).scalars().all()
+    return render_template("index.html", notes=notes)
+
+@app.route("/register", methods=["GET","POST"])
+def register():
+    if request.method == "POST":
+        name = request.form["name"].strip()
+        email = request.form["email"].strip().lower()
+        password = request.form["password"]
+        university = request.form["university"].strip()
+        faculty = request.form["faculty"].strip()
+        career = request.form["career"].strip()
+        with Session() as s:
+            exists = s.execute(select(User).where(User.email==email)).scalar_one_or_none()
+            if exists:
+                flash("Ese email ya está registrado.")
+                return redirect(url_for("register"))
+            u = User(name=name, email=email, password_hash=generate_password_hash(password),
+                     university=university, faculty=faculty, career=career)
+            s.add(u); s.commit()
+            login_user(u)
+            return redirect(url_for("index"))
+    return render_template("register.html")
+
+@app.route("/login", methods=["GET","POST"])
+def login():
+    if request.method == "POST":
+        email = request.form["email"].strip().lower()
+        password = request.form["password"]
+        with Session() as s:
+            u = s.execute(select(User).where(User.email==email)).scalar_one_or_none()
+            if not u or not check_password_hash(u.password_hash, password):
+                flash("Credenciales inválidas.")
+                return redirect(url_for("login"))
+            login_user(u); return redirect(url_for("index"))
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    logout_user(); return redirect(url_for("index"))
+
+@app.route("/profile")
+@login_required
+def profile():
+    with Session() as s:
+        my_notes = s.execute(select(Note).where(Note.seller_id==current_user.id).order_by(Note.created_at.desc())).scalars().all()
+    return render_template("profile.html", my_notes=my_notes)
+
+@app.route("/upload", methods=["GET","POST"])
+@login_required
+def upload_note():
+    if request.method == "POST":
+        title = request.form["title"].strip()
+        description = request.form["description"].strip()
+        university = request.form["university"].strip()
+        faculty = request.form["faculty"].strip()
+        career = request.form["career"].strip()
+        price = request.form.get("price","").strip()
+        price_cents = int(round(float(price)*100)) if price else 0
+        file = request.files.get("file")
+        if not file or file.filename == "":
+            flash("Seleccioná un PDF.")
+            return redirect(url_for("upload_note"))
+        if not allowed_pdf(file.filename):
+            flash("Sólo PDF.")
+            return redirect(url_for("upload_note"))
+        ensure_dirs()
+        filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secure_filename(file.filename)}"
+        fpath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(fpath)
+        with Session() as s:
+            note = Note(title=title, description=description, university=university, faculty=faculty, career=career,
+                        price_cents=price_cents, file_path=filename, seller_id=current_user.id)
+            s.add(note); s.commit()
+        flash("Apunte subido correctamente.")
+        return redirect(url_for("note_detail", note_id=note.id))
+    return render_template("upload.html")
+
+@app.route("/note/<int:note_id>")
+def note_detail(note_id):
+    with Session() as s:
+        note = s.get(Note, note_id)
+        if not note or not note.is_active:
+            abort(404)
+        can_download = False
+        if current_user.is_authenticated:
+            if note.price_cents==0 or note.seller_id==current_user.id:
+                can_download = True
+            else:
+                # check purchase approved
+                p = s.execute(select(Purchase).where(Purchase.buyer_id==current_user.id, Purchase.note_id==note.id, Purchase.status=='approved')).scalar_one_or_none()
+                can_download = p is not None
+    return render_template("note_detail.html", note=note, can_download=can_download)
+
+@app.route("/download/<int:note_id>")
+@login_required
+def download_note(note_id):
+    with Session() as s:
+        note = s.get(Note, note_id)
+        if not note or not note.is_active: abort(404)
+        allowed = False
+        if note.seller_id==current_user.id or note.price_cents==0:
+            allowed = True
+        else:
+            p = s.execute(select(Purchase).where(Purchase.buyer_id==current_user.id, Purchase.note_id==note.id, Purchase.status=='approved')).scalar_one_or_none()
+            allowed = p is not None
+        if not allowed:
+            flash("Necesitás comprar este apunte para descargarlo.")
+            return redirect(url_for("note_detail", note_id=note.id))
+        return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
+
+# === Mercado Pago OAuth ===
+@app.route("/mp/connect")
+@login_required
+def connect_mp():
+    return redirect(mp.oauth_authorize_url())
+
+@app.route("/mp/oauth/callback")
+@login_required
+def mp_oauth_callback():
+    if not current_user.is_authenticated:
+        flash("Necesitás iniciar sesión para vincular Mercado Pago.")
+        return redirect(url_for("login"))
+    code = request.args.get("code")
+    if not code:
+        flash("No se recibió 'code' de autorización.")
+        return redirect(url_for("profile"))
+    try:
+        data = mp.oauth_exchange_code(code)
+    except Exception as e:
+        flash(f"Error al intercambiar código: {e}")
+        return redirect(url_for("profile"))
+    access_token = data.get("access_token")
+    refresh_token = data.get("refresh_token")
+    user_id = str(data.get("user_id"))
+    expires_in = int(data.get("expires_in", 0))
+    expires_at = datetime.utcnow() + timedelta(seconds=expires_in-60)
+    with Session() as s:
+        u = s.get(User, current_user.id)
+        u.mp_user_id = user_id
+        u.mp_access_token = access_token
+        u.mp_refresh_token = refresh_token
+        u.mp_token_expires_at = expires_at
+        s.commit()
+    flash("¡Cuenta de Mercado Pago conectada!")
+    return redirect(url_for("profile"))
+
+@app.route("/mp/disconnect")
+@login_required
+def disconnect_mp():
+    with Session() as s:
+        u = s.get(User, current_user.id)
+        u.mp_user_id = None
+        u.mp_access_token = None
+        u.mp_refresh_token = None
+        u.mp_token_expires_at = None
+        s.commit()
+    flash("Se desvinculó Mercado Pago.")
+    return redirect(url_for("profile"))
+
+def get_valid_seller_token(seller:User)->str|None:
+    # Devuelve token del vendedor si está conectado, en caso contrario None.
+    return seller.mp_access_token if seller and seller.mp_access_token else None
+
+# === Comprar ===
+@app.route("/buy/<int:note_id>")
+@login_required
+def buy_note(note_id):
+    with Session() as s:
+        note = s.get(Note, note_id)
+        if not note or not note.is_active: abort(404)
+        if note.seller_id == current_user.id:
+            flash("No podés comprar tu propio apunte.")
+            return redirect(url_for("note_detail", note_id=note.id))
+        if note.price_cents == 0:
+            flash("Este apunte es gratuito.")
+            return redirect(url_for("download_note", note_id=note.id))
+        seller = s.get(User, note.seller_id)
+
+        # Crear registro de compra pendiente
+        p = Purchase(buyer_id=current_user.id, note_id=note.id, status="pending", amount_cents=note.price_cents)
+        s.add(p); s.commit()
+
+        price_ars = round(note.price_cents/100, 2)
+        platform_fee_percent = (app.config["PLATFORM_FEE_PERCENT"]/100.0)
+        back_urls = {
+            "success": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
+            "failure": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
+            "pending": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
+        }
+
+        try:
+            seller_token = get_valid_seller_token(seller)
+            # Fallback seguro: si el vendedor NO está conectado a MP, usamos token de plataforma y fee = 0
+            if seller_token is None:
+                use_token = app.config["MP_ACCESS_TOKEN_PLATFORM"]
+                marketplace_fee = 0.0
+                flash("El vendedor no tiene Mercado Pago vinculado. Se procesa con token de la plataforma y sin comisión.", "info")
+            else:
+                use_token = seller_token
+                marketplace_fee = round(price_ars * platform_fee_percent, 2)
+
+            pref = mp.create_preference_for_seller_token(
+                seller_access_token=use_token,
+                title=note.title,
+                unit_price=price_ars,
+                quantity=1,
+                marketplace_fee=marketplace_fee,
+                external_reference=f"purchase:{p.id}",
+                back_urls=back_urls,
+                notification_url=url_for("mp_webhook", _external=True)
+            )
+            # Guardar preference_id
+            with Session() as s2:
+                p2 = s2.get(Purchase, p.id)
+                if p2:
+                    p2.preference_id = pref.get("id") or pref.get("preference_id")
+                    s2.commit()
+            init_point = pref.get("init_point") or pref.get("sandbox_init_point")
+            return redirect(init_point)
+        except Exception as e:
+            flash(f"Error al crear preferencia en Mercado Pago: {e}")
+            return redirect(url_for("note_detail", note_id=note.id))
+
+# Webhook        except Exception as e:
+            flash(f"Error al crear preferencia en Mercado Pago: {e}")
+            return redirect(url_for("note_detail", note_id=note.id))
+
+
+@app.route("/mp/return/<int:note_id>")
+def mp_return(note_id):
+    # MP puede enviar payment_id o collection_id según versión
+    payment_id = request.args.get("payment_id") or request.args.get("collection_id") or request.args.get("id")
+    ext_ref = request.args.get("external_reference", "")
+    pref_id = request.args.get("preference_id", "")
+
+    token = app.config["MP_ACCESS_TOKEN_PLATFORM"]
+
+    pay = None
+    # 1) Si vino payment_id, obtenerlo directo
+    if payment_id:
+        try:
+            pay = mp.get_payment(token, str(payment_id))
+        except Exception as e:
+            flash(f"No se pudo verificar el pago aún: {e}")
+            return redirect(url_for("note_detail", note_id=note_id))
+    # 2) Si no vino, pero tenemos external_reference, buscar por ahí
+    elif ext_ref:
+        try:
+            res = mp.search_payments_by_external_reference(token, ext_ref)
+            results = (res or {}).get("results") or []
+            if results:
+                pay = results[0].get("payment") or results[0]
+                payment_id = str(pay.get("id")) if pay else None
+        except Exception as e:
+            pass
+    # 3) Si tampoco, buscar la Purchase más reciente y consultar por su external_reference
+    if not pay:
+        with Session() as s:
+            p_last = s.execute(select(Purchase).where(Purchase.note_id==note_id).order_by(Purchase.created_at.desc())).scalars().first()
+            if p_last:
+                try:
+                    res = mp.search_payments_by_external_reference(token, f"purchase:{p_last.id}")
+                    results = (res or {}).get("results") or []
+                    if results:
+                        pay = results[0].get("payment") or results[0]
+                        payment_id = str(pay.get("id")) if pay else None
+                        ext_ref = f"purchase:{p_last.id}"
+                except Exception:
+                    pass
+
+    status = (pay or {}).get("status")
+    external_reference = (pay or {}).get("external_reference") or ext_ref or ""
+    purchase_id = None
+    if external_reference and external_reference.startswith("purchase:"):
+        try:
+            purchase_id = int(external_reference.split(":")[1])
+        except Exception:
+            purchase_id = None
+
+    with Session() as s:
+        if purchase_id:
+            p = s.get(Purchase, purchase_id)
+        else:
+            # Fallback: buscar por buyer actual y note_id más reciente
+            p = s.execute(select(Purchase).where(Purchase.note_id==note_id).order_by(Purchase.created_at.desc())).scalars().first()
+
+        if p:
+            p.payment_id = str(payment_id)
+            if status:
+                p.status = status
+            s.commit()
+
+        # Si está aprobado, ir directo a descargar
+        if status == "approved":
+            flash("¡Pago verificado! Descargando el apunte...")
+            return redirect(url_for("download_note", note_id=note_id))
+
+    flash("Pago registrado. Si ya figura aprobado, el botón de descarga estará disponible.")
+    return redirect(url_for("note_detail", note_id=note_id))
+
+@app.route("/mp/webhook", methods=["POST","GET"])
+def mp_webhook():
+    topic = request.args.get("topic") or request.args.get("type")
+    # payment_id puede venir por 'id' o 'data.id'
+    payment_id = request.args.get("id") or (request.json.get("data",{}).get("id") if request.is_json else None)
+    if not payment_id:
+        return ("ok", 200)
+    token = app.config["MP_ACCESS_TOKEN_PLATFORM"]
+    try:
+        pay = mp.get_payment(token, str(payment_id))
+    except Exception:
+        # como fallback intentamos con el token de plataforma
+        return ("ok", 200)
+    status = pay.get("status")
+    external_reference = pay.get("external_reference") or ""
+    if external_reference.startswith("purchase:"):
+        pid = int(external_reference.split(":")[1])
+        with Session() as s:
+            purchase = s.get(Purchase, pid)
+            if purchase:
+                purchase.payment_id = str(payment_id)
+                # 'approved' habilita descarga
+                purchase.status = status
+                s.commit()
+    return ("ok", 200)
+
+from flask import render_template  # (si no está importado ya)
+
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+
+
+
+
+
+
+@app.route('/note/<int:note_id>/report', methods=['POST'])
+@login_required
+def report_note(note_id):
+    with Session() as s:
+        n = s.get(Note, note_id)
+        if not n:
+            abort(404)
+        if hasattr(n, "is_reported"):
+            n.is_reported = True
+            s.commit()
+    flash('Gracias por tu reporte. Un administrador lo revisará.')
+    return redirect(url_for('note_detail', note_id=note_id))

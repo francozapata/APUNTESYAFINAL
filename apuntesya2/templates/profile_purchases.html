@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  \1
+
+<div class="card mb-3">
+  <p class="text-sm">
+    Los montos mostrados pueden diferir del acreditado en tu cuenta de Mercado Pago por comisiones y retenciones aplicadas por MP.
+    Este panel asume <strong>acreditación inmediata</strong> para estimar comisiones de MP (≈ {{ '%.2f' % MP_FEE_IMMEDIATE_TOTAL_PCT }}%).
+  </p>
+</div>
+
+  <div class="grid">
+    {% for it in items %}
+    <div class="note">
+      <div class="title">{{ it.title }}</div>
+      <div>Pagado: ${{ '%.2f' % (it.price_cents/100) }}</div>
+      <div class="muted">Fecha: {{ it.created_at }}</div>
+      <a class="btn" href="{{ url_for('note_detail', note_id=it.note_id) }}">Ver</a>
+      <a class="btn secondary" href="{{ url_for('download_note', note_id=it.note_id) }}">Descargar</a>
+    </div>
+    {% else %}
+    <div>No realizaste compras todavía.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

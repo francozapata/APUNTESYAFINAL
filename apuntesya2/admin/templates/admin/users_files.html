@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Archivos de usuarios{% endblock %}
+{% block content %}
+<div class="section">
+  <h1>Archivos de usuarios</h1>
+  <form class="row" method="get" style="margin:1rem 0;">
+    <input type="text" name="email" value="{{ email }}" placeholder="Filtrar por email" />
+    <select name="reported">
+      <option value="">Todos</option>
+      <option value="1" {% if reported=='1' %}selected{% endif %}>Solo reportados</option>
+    </select>
+    <button type="submit">Filtrar</button>
+    <a href="{{ url_for('admin.users_files') }}">Limpiar</a>
+  </form>
+  <div class="table">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Título</th>
+          <th>Archivo</th>
+          <th>Usuario</th>
+          <th>Reportado</th>
+          <th>Creado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for n in notes %}
+        <tr>
+          <td>{{ n.id }}</td>
+          <td>{{ n.title }}</td>
+          <td><code>{{ n.file_path }}</code></td>
+          <td>{{ n.seller.email if n.seller else "—" }}</td>
+          <td>
+            {% if n.is_reported is defined and n.is_reported %}
+            <span class="badge danger">Sí</span>
+            {% else %}
+            <span class="badge">No</span>
+            {% endif %}
+          </td>
+          <td>{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '—' }}</td>
+          <td>
+            <form action="{{ url_for('admin.delete_user_file', note_id=n.id) }}" method="post"
+              onsubmit="return confirm('¿Borrar este archivo (soft delete)?');">
+              <input type="hidden" name="reason" value="admin_users_files_delete" />
+              {% if n.is_reported is defined and n.is_reported %}
+              <input type="hidden" name="force" value="1" />
+              {% endif %}
+              <button type="submit">Borrar</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

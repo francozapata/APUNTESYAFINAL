@@ -1,0 +1,42 @@
+{% extends "admin/base.html" %}
+{% block title %}FAQ - Admin{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4">Preguntas frecuentes</h1>
+  <a href="{{ url_for('admin_faq.new_faq') }}" class="btn btn-primary">Nueva FAQ</a>
+</div>
+<form method="get" class="mb-3">
+  <input class="form-control" name="q" value="{{ q }}" placeholder="Buscar por pregunta">
+</form>
+<table class="table align-middle">
+  <thead>
+    <tr>
+      <th>#</th><th>Pregunta</th><th>Categoría</th><th>Posición</th><th>Activa</th><th>Vistas</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in faqs %}
+    <tr>
+      <td>{{ f.id }}</td>
+      <td>{{ f.question }}</td>
+      <td>{{ f.category }}</td>
+      <td>{{ f.position }}</td>
+      <td>
+        {% if f.is_active %}
+          <span class="badge text-bg-success">Sí</span>
+        {% else %}
+          <span class="badge text-bg-secondary">No</span>
+        {% endif %}
+      </td>
+      <td>{{ f.view_count }}</td>
+      <td class="text-end">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_faq.edit_faq', faq_id=f.id) }}">Editar</a>
+        <form class="d-inline" method="post" action="{{ url_for('admin_faq.delete_faq', faq_id=f.id) }}" onsubmit="return confirm('¿Eliminar FAQ?');">
+          <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

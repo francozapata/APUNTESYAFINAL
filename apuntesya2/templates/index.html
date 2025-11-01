@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Buscar apuntes</h2>
+  <form method="get" action="{{ url_for('search') }}">
+    <div class="grid">
+      <div><label>Universidad</label><input class="input" name="university"
+          value="{{ request.args.get('university','') }}"></div>
+      <div><label>Facultad</label><input class="input" name="faculty" value="{{ request.args.get('faculty','') }}">
+      </div>
+      <div><label>Carrera</label><input class="input" name="career" value="{{ request.args.get('career','') }}"></div>
+    </div>
+    <div class="grid">
+      <div><label>Título</label><input class="input" name="q" value="{{ request.args.get('q','') }}"></div>
+      <div><label>Tipo</label>
+        <select name="type">
+          <option value="">Todos</option>
+          <option value="free" {% if request.args.get('type')=='free' %}selected{% endif %}>Gratuitos</option>
+          <option value="paid" {% if request.args.get('type')=='paid' %}selected{% endif %}>De pago</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:end;gap:8px">
+        <button class="btn" type="submit">Buscar</button>
+        <button class="btn" href="{{ url_for('index') }}">Limpiar</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="grid">
+  {% for n in notes %}
+  <div class="note">
+    <div class="title">{{ n.title }}</div>
+    <div class="muted">{{ n.university }} • {{ n.faculty }} • {{ n.career }}</div>
+    {% if n.price_cents and n.price_cents>0 %}
+    <div class="badge">Pago — ${{ '%.2f'|format(n.price_cents/100) }}</div>
+    {% else %}
+    <div class="badge">Gratis</div>
+    {% endif %}
+    <div style="margin-top:8px">
+      <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn">Ver</a>
+    </div>
+  </div>
+  {% else %}
+  <div class="card">No hay resultados.</div>
+  {% endfor %}
+</div>
+{% endblock %}

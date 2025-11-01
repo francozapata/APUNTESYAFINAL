@@ -1,0 +1,15 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h1 class="mb-4">Panel de Administración</h1>
+<div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;">
+  <div class="card" style="padding:1rem;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.06)">
+    <h3>Usuarios</h3>
+    <p style="font-size:2rem;margin:0;">{{ users_count }}</p>
+  </div>
+  <div class="card" style="padding:1rem;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.06)">
+    <h3>Apuntes</h3>
+    <p style="font-size:2rem;margin:0;">{{ notes_count }}</p>
+  </div>
+</div>
+{% endblock %}

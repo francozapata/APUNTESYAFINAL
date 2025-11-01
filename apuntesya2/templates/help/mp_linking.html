@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Vincular tu cuenta de Mercado Pago</h2>
+  <ol class="list-decimal pl-6 space-y-2">
+    <li>Ingresá a tu perfil y hacé clic en <strong>“Vincular Mercado Pago”</strong>.</li>
+    <li>Se abrirá la ventana de autorización de Mercado Pago. <strong>Iniciá sesión</strong> con tu cuenta y aceptá los permisos.</li>
+    <li>Al finalizar, volverás a ApuntesYa y verás tu cuenta como <strong>Vinculada</strong>.</li>
+  </ol>
+  <p class="mt-3 text-sm">
+    Si tenés problemas para autorizar, verificá que tu cuenta de MP esté activa y con datos validados.
+  </p>
+  <div class="mt-3">
+    <a class="btn" href="{{ url_for('oauth_start') }}">Iniciar vinculación ahora</a>
+  </div>
+</div>
+{% endblock %}

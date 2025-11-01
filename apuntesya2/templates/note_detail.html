@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  {% if current_user.is_authenticated and current_user.id == note.seller_id and not current_user.mp_access_token %}
+  <div class="card" style="background:#161a22;border-color:#2a3446;margin-bottom:12px;">
+    Para vender este apunte y cobrar directo, conectá tu cuenta de Mercado Pago desde tu <a href='{{ url_for("profile") }}'>perfil</a>.
+  </div>
+  {% endif %}
+  <h2>{{ note.title }}</h2>
+  <p>{{ note.description }}</p>
+  <p class="muted">{{ note.university }} • {{ note.faculty }} • {{ note.career }}</p>
+  {% if note.price_cents and note.price_cents>0 %}
+    <p><strong>Precio:</strong> ${{ '%.2f'|format(note.price_cents/100) }}</p>
+    {% if can_download %}
+      <a class="btn" href="{{ url_for('download_note', note_id=note.id) }}">Descargar PDF</a>
+    {% else %}
+      <a class="btn" href="{{ url_for('buy_note', note_id=note.id) }}">Comprar</a>
+      <a class="btn secondary" href="{{ url_for('mp_return', note_id=note.id) }}">Verificar pago</a>
+    {% endif %}
+  {% else %}
+    <a class="btn" href="{{ url_for('download_note', note_id=note.id) }}">Descargar gratis</a>
+  {% endif %}
+</div>
+{% endblock %}

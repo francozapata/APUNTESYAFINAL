@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+  <style>
+    .nav-profile-pic {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #fff;
+      box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+    }
+  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>ApuntesYa</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+  <style>
+    .nav-profile-pic {
+      display: block;
+      /* Debe ser un elemento de bloque para usar margin: auto */
+      width: fit-content;
+      /* O un ancho fijo (e.g., width: 150px) */
+      margin: 0 auto;
+      /* El truco del centrado horizontal */
+
+      /* Mantienes tus estilos originales para el contenido: */
+      display: inline-flex;
+      /* Esto se aplica al contenido interno, pero se ignora por el display:block */
+      align-items: center;
+      gap: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="nav">
+    <div class="brand">
+      <a href="{{ url_for('index') }}" class="brand-logo-link">
+        <img src="{{ url_for('static', filename='img/logo.png') }}" alt="ApuntesYa" class="brand-logo-img">
+      </a>
+      <a href="{{ url_for('index') }}" class="brand-logo-link">
+        <img src="{{ url_for('static', filename='img/logo1.png') }}" alt="ApuntesYa" class="brand-logo1-img">
+      </a>
+    </div>
+    <div class="nav-actions">
+      <a href="{{ url_for('index') }}" class="btn ghost">Inicio</a>
+      {% if current_user.is_authenticated %}
+      <a href="{{ url_for('upload_note') }}" class="btn">Subir apunte</a>
+      <a href="{{ url_for('profile') }}" class="btn secondary">Perfil</a>
+      {% if current_user.is_authenticated and current_user.is_admin %}
+      <a href="{{ url_for('admin.dashboard') }}" class="btn ghost">Admin</a>
+      <a href="/admin/files" class="btn ghost">Archivos</a>
+      <a href="{{ url_for('admin.users_list') }}" class="btn ghost">Usuarios</a>
+      {% endif %}
+      <a href="{{ url_for('logout') }}" class="btn ghost">Salir</a>
+      {% else %}
+      <a href="{{ url_for('login') }}" class="btn ghost">Ingresar</a>
+      <a href="{{ url_for('register') }}" class="btn">Registrarse</a>
+      {% endif %}
+      {% if current_user.is_authenticated %}
+      <a href="{{ url_for('profile') }}" style="display:inline-flex;align-items:center;gap:8px">
+        <img
+          src="{% if (current_user.imagen_de_perfil or current_user.profile_image) %}{{ url_for('static', filename='uploads/profile_images/' ~ (current_user.imagen_de_perfil or current_user.profile_image)) }}{% else %}{{ url_for('static', filename='img/default_profile.png') }}{% endif %}"
+          class="nav-profile-pic" alt="Foto de perfil">
+      </a>
+      {% endif %}
+
+    </div>
+  </div>
+  <div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div class="card">{{ message }}</div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+  <div class="footer">
+    <div class="footer">
+      Hecho con ♥ — Comisión plataforma: {{ config.get('PLATFORM_FEE_PERCENT', 5.0) }}%
+      <a class="btn ghost" href="/terms">Términos y condiciones</a>
+    </div>
+  </div>
+
+  <!-- Contact Widget: button, overlay, and panel -->
+  <button id="contact-widget-button" aria-expanded="false" aria-controls="contact-widget-panel"
+    aria-label="Abrir contacto" title="Contactar ApuntesYa"
+    class="bg-blue-600 text-white text-lg flex items-center justify-center shadow-lg">
+    💬
+  </button>
+
+  <div id="contact-widget-overlay" class="hidden"></div>
+
+  <div id="contact-widget-panel" class="hidden">
+    <div class="contact-header">
+      <div>
+        <div class="contact-title">¿Necesitás ayuda?</div>
+        <div class="contact-sub">Escribinos por WhatsApp o correo</div>
+      </div>
+      <button id="contact-widget-close" aria-label="Cerrar" title="Cerrar"
+        style="border:none;background:transparent;font-size:20px;line-height:1;cursor:pointer;">×</button>
+    </div>
+
+    <div class="contact-row">
+      {% if CONTACT_WHATSAPP %}
+      {% set wa_digits = CONTACT_WHATSAPP|replace('+','')|replace(' ','') %}
+      <a class="contact-chip" target="_blank" rel="noopener"
+        href="https://wa.me/{{ wa_digits }}?text={{ 'Hola ApuntesYa, necesito ayuda.'|urlencode }}">
+        <span class="ico">📲</span>
+        <span>WhatsApp {{ CONTACT_WHATSAPP }}</span>
+      </a>
+      {% endif %}
+
+      {% for em in CONTACT_EMAILS %}
+      <a class="contact-chip" href="mailto:{{ em }}?subject={{ 'Consulta desde ApuntesYa'|urlencode }}">
+        <span class="ico">✉️</span>
+        <span>{{ em }}</span>
+      </a>
+      {% endfor %}
+
+      {% if SUGGESTIONS_URL %}
+      <a class="contact-chip contact-primary" target="_blank" rel="noopener" href="{{ SUGGESTIONS_URL }}">
+        <span class="ico">📝</span>
+        <span>Enviar sugerencia</span>
+      </a>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/contact_widget.js') }}"></script>
+
+  <script src="{{ url_for('static', filename='js/dynamic_selects.js') }}"></script>
+
+</body>
+
+</html>
