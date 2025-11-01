@@ -5,6 +5,12 @@ from datetime import datetime
 from ..models import User, Note, AdminAction, Base
 from ..app import Session
 from sqlalchemy.orm import joinedload
+from flask_login import login_required, current_user
+from sqlalchemy import select, func, desc
+from apuntesya2.models import User, Note, Purchase
+from ..app import Session, MP_COMMISSION_RATE, APY_COMMISSION_RATE
+
+
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin", template_folder="templates")
 
@@ -162,3 +168,69 @@ def hard_delete_note(note_id):
         s.commit()
     flash("El apunte y archivo fueron eliminados permanentemente.", "success")
     return redirect(url_for("admin.files_index_admin"))
+
+
+@admin_bp.route("/summary")
+@login_required
+def admin_summary():
+    if not getattr(current_user, "is_admin", False):
+        abort(403)
+
+    with Session() as s:
+        total_users = s.execute(select(func.count(User.id))).scalar_one()
+        total_notes = s.execute(select(func.count(Note.id))).scalar_one()
+        total_purchases = s.execute(select(func.count(Purchase.id))).scalar_one()
+        total_approved  = s.execute(select(func.count(Purchase.id)).where(Purchase.status == "approved")).scalar_one()
+        total_pending   = s.execute(select(func.count(Purchase.id)).where(Purchase.status == "pending")).scalar_one()
+        total_rejected  = s.execute(select(func.count(Purchase.id)).where(Purchase.status == "rejected")).scalar_one()
+
+        gross_cents = s.execute(
+            select(func.coalesce(func.sum(Purchase.amount_cents), 0)).where(Purchase.status == "approved")
+        ).scalar_one()
+
+        mp_commission_cents  = int(round(gross_cents * float(MP_COMMISSION_RATE)))
+        apy_commission_cents = int(round(gross_cents * float(APY_COMMISSION_RATE)))
+        net_cents = gross_cents - mp_commission_cents - apy_commission_cents
+
+        top_notes = s.execute(
+            select(
+                Note.id, Note.title,
+                func.count(Purchase.id).label("sold_count"),
+                func.coalesce(func.sum(Purchase.amount_cents), 0).label("gross_cents")
+            )
+            .join(Purchase, Purchase.note_id == Note.id)
+            .where(Purchase.status == "approved")
+            .group_by(Note.id, Note.title)
+            .order_by(desc("sold_count"))
+            .limit(10)
+        ).all()
+
+        reported_notes = []
+        if hasattr(Note, "is_reported"):
+            reported_notes = s.execute(
+                select(Note.id, Note.title).where(Note.is_reported == True).order_by(Note.id.desc()).limit(20)
+            ).all()
+
+        last_purchases = s.execute(
+            select(Purchase.id, Purchase.status, Purchase.amount_cents, Purchase.created_at, Note.title)
+            .join(Note, Note.id == Purchase.note_id)
+            .order_by(Purchase.created_at.desc())
+            .limit(15)
+        ).all()
+
+    return render_template(
+        "admin_summary.html",
+        total_users=total_users,
+        total_notes=total_notes,
+        total_purchases=total_purchases,
+        total_approved=total_approved,
+        total_pending=total_pending,
+        total_rejected=total_rejected,
+        gross_cents=gross_cents,
+        mp_commission_cents=mp_commission_cents,
+        apy_commission_cents=apy_commission_cents,
+        net_cents=net_cents,
+        top_notes=top_notes,
+        reported_notes=reported_notes,
+        last_purchases=last_purchases,
+    )
