@@ -200,17 +200,17 @@ def admin_summary():
 
         # Top 10 apuntes (por ventas)
         top_notes = s.execute(
-            select(
-                Note.id, Note.title,
-                func.count(Purchase.id).label("sold_count"),
-                func.coalesce(func.sum(Purchase.amount_cents), 0).label("gross_cents")
-            )
-            .join(Purchase, Purchase.note_id == Note.id)
-            .where(Purchase.status == "approved")
-            .group_by(Note.id, Note.title)
-            .order_by(func.desc("sold_count"))
-            .limit(10)
-        ).all()
+    select(
+        Note.id, Note.title,
+        func.count(Purchase.id).label("sold_count"),
+        func.coalesce(func.sum(Purchase.amount_cents), 0).label("gross_cents")
+    )
+    .join(Purchase, Purchase.note_id == Note.id)
+    .where(Purchase.status == "approved")
+    .group_by(Note.id, Note.title)
+    .order_by(func.count(Purchase.id).desc())   # <- FIX
+    .limit(10)
+).all()
 
         # Reportados (si existe columna)
         reported_notes = []
