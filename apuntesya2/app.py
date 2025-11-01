@@ -9,6 +9,7 @@ from apuntesya2.models import Review
 
 
 
+
 from dotenv import load_dotenv
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
@@ -27,6 +28,7 @@ from apuntesya2.models import Base, User, Note, Purchase, University, Faculty, C
 
 # helpers MP
 from apuntesya2 import mp
+from apuntesya2.models import Base, User, Note, Purchase, University, Faculty, Career, Review
 
 load_dotenv()
 
@@ -502,56 +504,64 @@ def note_detail(note_id):
                 ).scalar_one_or_none()
                 can_download = p is not None
 
-        # ---- Reseñas ----
-        avg_rating = s.execute(
-            select(func.avg(Review.rating)).where(Review.note_id == note_id)
-        ).scalar()
-        reviews = s.execute(
+        # Reseñas + promedio
+        rows = s.execute(
             select(Review, User.name)
             .join(User, User.id == Review.buyer_id)
-            .where(Review.note_id == note_id)
+            .where(Review.note_id == note.id)
             .order_by(Review.created_at.desc())
         ).all()
+        reviews = rows  # lista de tuplas (Review, nombre)
 
+        if reviews:
+            avg_rating = round(sum(r.rating for r, _ in reviews) / len(reviews), 2)
+        else:
+            avg_rating = None
+
+        # ¿Puede calificar?
         can_review = False
         already_reviewed = False
         if current_user.is_authenticated and current_user.id != note.seller_id:
-            bought = user_bought_note(s, current_user.id, note_id)
-            if bought:
-                exists = s.execute(
-                    select(Review.id).where(
-                        Review.note_id == note_id,
+            # Si es pago: requiere compra aprobada; si es gratis: alcanza con estar logueado
+            if note.price_cents > 0:
+                has_purchase = s.execute(
+                    select(Purchase).where(
+                        Purchase.buyer_id == current_user.id,
+                        Purchase.note_id == note.id,
+                        Purchase.status == 'approved'
+                    )
+                ).scalar_one_or_none() is not None
+            else:
+                has_purchase = True  # gratis: permitimos reseñar
+
+            if has_purchase:
+                already_reviewed = s.execute(
+                    select(Review).where(
+                        Review.note_id == note.id,
                         Review.buyer_id == current_user.id
                     )
-                ).first()
-                already_reviewed = exists is not None
+                ).scalar_one_or_none() is not None
                 can_review = not already_reviewed
 
     return render_template(
         "note_detail.html",
         note=note,
         can_download=can_download,
-        avg_rating=(round(float(avg_rating), 2) if avg_rating else None),
         reviews=reviews,
+        avg_rating=avg_rating,
         can_review=can_review,
         already_reviewed=already_reviewed
     )
 
+
 @app.post("/note/<int:note_id>/review")
 @login_required
 def submit_review(note_id):
-    rating_raw = (request.form.get("rating") or "").strip()
+    rating = int(request.form.get("rating", "0") or 0)
     comment = (request.form.get("comment") or "").strip()
 
-    # Validación básica
-    try:
-        rating = int(rating_raw)
-    except Exception:
-        flash("Seleccioná una puntuación válida (1 a 5).", "danger")
-        return redirect(url_for("note_detail", note_id=note_id))
-
     if rating < 1 or rating > 5:
-        flash("La puntuación debe ser entre 1 y 5.", "danger")
+        flash("La puntuación debe estar entre 1 y 5.")
         return redirect(url_for("note_detail", note_id=note_id))
 
     with Session() as s:
@@ -559,38 +569,45 @@ def submit_review(note_id):
         if not note or not note.is_active:
             abort(404)
 
-        # No reseñas del propio vendedor
+        # No puede reseñar su propio apunte
         if note.seller_id == current_user.id:
-            flash("No podés reseñar tu propio apunte.", "warning")
+            flash("No podés calificar tu propio apunte.")
             return redirect(url_for("note_detail", note_id=note_id))
 
-        # Sólo compradores aprobados
-        if not user_bought_note(s, current_user.id, note_id):
-            flash("Sólo quienes compraron el apunte pueden reseñarlo.", "warning")
+        # Elegibilidad (mismo criterio que en note_detail)
+        if note.price_cents > 0:
+            has_purchase = s.execute(
+                select(Purchase).where(
+                    Purchase.buyer_id == current_user.id,
+                    Purchase.note_id == note.id,
+                    Purchase.status == 'approved'
+                )
+            ).scalar_one_or_none() is not None
+        else:
+            has_purchase = True
+
+        if not has_purchase:
+            flash("Necesitás haber comprado este apunte para calificarlo.")
             return redirect(url_for("note_detail", note_id=note_id))
 
-        # Una reseña por comprador
+        # Evitar duplicado
         exists = s.execute(
-            select(Review.id).where(
-                Review.note_id == note_id,
+            select(Review).where(
+                Review.note_id == note.id,
                 Review.buyer_id == current_user.id
             )
-        ).first()
+        ).scalar_one_or_none()
         if exists:
-            flash("Ya enviaste una reseña para este apunte.", "info")
+            flash("Ya enviaste una reseña para este apunte.")
             return redirect(url_for("note_detail", note_id=note_id))
 
-        r = Review(
-            note_id=note_id,
-            buyer_id=current_user.id,
-            rating=rating,
-            comment=comment if comment else None
-        )
+        r = Review(note_id=note.id, buyer_id=current_user.id, rating=rating, comment=comment)
         s.add(r)
         s.commit()
 
-    flash("¡Gracias por tu reseña!", "success")
+    flash("¡Gracias por tu reseña!")
     return redirect(url_for("note_detail", note_id=note_id))
+
 
 
 @app.route("/download/<int:note_id>")
