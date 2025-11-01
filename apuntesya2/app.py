@@ -175,6 +175,53 @@ def ensure_dirs():
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 
+@app.route("/webhooks/mercadopago", methods=["POST"])
+def mp_webhook():
+    """Webhook idempotente de Mercado Pago con secret opcional."""
+    try:
+        configured_secret = app.config.get("MP_WEBHOOK_SECRET")
+        incoming_secret = request.args.get("secret")
+        if configured_secret and configured_secret != incoming_secret:
+            return {"ok": False, "error": "unauthorized"}, 401
+
+        payload = request.get_json(silent=True) or {}
+        topic = payload.get("type") or payload.get("topic")
+        action = payload.get("action") or (payload.get("data", {}) or {}).get("action")
+        provider_id = str(
+            payload.get("id")
+            or (payload.get("data") or {}).get("id")
+            or request.headers.get("X-Idempotency-Key")
+            or ""
+        ).strip()
+        if not provider_id:
+            provider_id = "no-id-" + str(abs(hash(request.data)))
+
+        with Session(engine) as sx:
+            exists = sx.execute(
+                text("SELECT 1 FROM webhook_events WHERE provider_id = :pid"),
+                {"pid": provider_id}
+            ).first()
+            if exists:
+                return {"ok": True, "duplicate": True}, 200
+
+            evt = WebhookEvent(
+                provider="mercadopago",
+                provider_id=provider_id,
+                topic=topic,
+                action=action,
+                payload=payload
+            )
+            sx.add(evt)
+            sx.commit()
+
+        return {"ok": True}, 200
+    except Exception as e:
+        try:
+            app.logger.exception("mp_webhook error")
+        except Exception:
+            pass
+        return {"ok": False, "error": str(e)}, 200
+
 def _register_webhook_route_once(app):
     try:
         # Evita doble registro por importaciones múltiples
@@ -191,7 +238,7 @@ def _register_webhook_route_once(app):
             app.logger.warning("could not register webhook route: %s", e)
         except Exception:
             pass
-
+        
 _register_webhook_route_once(app)
 # -----------------------------------------------------------------------------
 # Health
@@ -974,48 +1021,3 @@ def help_commissions():
     return render_template("help/commissions.html")
 
 
-def mp_webhook():
-    """Webhook idempotente de Mercado Pago con secret opcional."""
-    try:
-        configured_secret = app.config.get("MP_WEBHOOK_SECRET")
-        incoming_secret = request.args.get("secret")
-        if configured_secret and configured_secret != incoming_secret:
-            return {"ok": False, "error": "unauthorized"}, 401
-
-        payload = request.get_json(silent=True) or {}
-        topic = payload.get("type") or payload.get("topic")
-        action = payload.get("action") or (payload.get("data", {}) or {}).get("action")
-        provider_id = str(
-            payload.get("id")
-            or (payload.get("data") or {}).get("id")
-            or request.headers.get("X-Idempotency-Key")
-            or ""
-        ).strip()
-        if not provider_id:
-            provider_id = "no-id-" + str(abs(hash(request.data)))
-
-        with Session(engine) as sx:
-            exists = sx.execute(
-                text("SELECT 1 FROM webhook_events WHERE provider_id = :pid"),
-                {"pid": provider_id}
-            ).first()
-            if exists:
-                return {"ok": True, "duplicate": True}, 200
-
-            evt = WebhookEvent(
-                provider="mercadopago",
-                provider_id=provider_id,
-                topic=topic,
-                action=action,
-                payload=payload
-            )
-            sx.add(evt)
-            sx.commit()
-
-        return {"ok": True}, 200
-    except Exception as e:
-        try:
-            app.logger.exception("mp_webhook error")
-        except Exception:
-            pass
-        return {"ok": False, "error": str(e)}, 200
