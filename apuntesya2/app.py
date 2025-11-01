@@ -3,6 +3,11 @@ import secrets
 import math
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
+from sqlalchemy import select, func, and_
+from apuntesya2.models import Review
+
+
+
 
 from dotenv import load_dotenv
 from flask import (
@@ -35,6 +40,15 @@ try:
     MP_FEE_IMMEDIATE_TOTAL_PCT = float(app.config.get("MP_FEE_IMMEDIATE_TOTAL_PCT", 7.61))
 except Exception:
     MP_FEE_IMMEDIATE_TOTAL_PCT = 7.61
+
+def user_bought_note(s, buyer_id: int, note_id: int) -> bool:
+    q = select(Purchase.id).where(
+        Purchase.buyer_id == buyer_id,
+        Purchase.note_id == note_id,
+        Purchase.status == "approved"
+    )
+    return s.execute(q).first() is not None
+
 
 @app.context_processor
 def fees_ctx():
@@ -473,6 +487,7 @@ def note_detail(note_id):
         if not note or not note.is_active:
             abort(404)
 
+        # ¿Puede descargar?
         can_download = False
         if current_user.is_authenticated:
             if note.price_cents == 0 or note.seller_id == current_user.id:
@@ -486,7 +501,97 @@ def note_detail(note_id):
                     )
                 ).scalar_one_or_none()
                 can_download = p is not None
-    return render_template("note_detail.html", note=note, can_download=can_download)
+
+        # ---- Reseñas ----
+        avg_rating = s.execute(
+            select(func.avg(Review.rating)).where(Review.note_id == note_id)
+        ).scalar()
+        reviews = s.execute(
+            select(Review, User.name)
+            .join(User, User.id == Review.buyer_id)
+            .where(Review.note_id == note_id)
+            .order_by(Review.created_at.desc())
+        ).all()
+
+        can_review = False
+        already_reviewed = False
+        if current_user.is_authenticated and current_user.id != note.seller_id:
+            bought = user_bought_note(s, current_user.id, note_id)
+            if bought:
+                exists = s.execute(
+                    select(Review.id).where(
+                        Review.note_id == note_id,
+                        Review.buyer_id == current_user.id
+                    )
+                ).first()
+                already_reviewed = exists is not None
+                can_review = not already_reviewed
+
+    return render_template(
+        "note_detail.html",
+        note=note,
+        can_download=can_download,
+        avg_rating=(round(float(avg_rating), 2) if avg_rating else None),
+        reviews=reviews,
+        can_review=can_review,
+        already_reviewed=already_reviewed
+    )
+
+@app.post("/note/<int:note_id>/review")
+@login_required
+def submit_review(note_id):
+    rating_raw = (request.form.get("rating") or "").strip()
+    comment = (request.form.get("comment") or "").strip()
+
+    # Validación básica
+    try:
+        rating = int(rating_raw)
+    except Exception:
+        flash("Seleccioná una puntuación válida (1 a 5).", "danger")
+        return redirect(url_for("note_detail", note_id=note_id))
+
+    if rating < 1 or rating > 5:
+        flash("La puntuación debe ser entre 1 y 5.", "danger")
+        return redirect(url_for("note_detail", note_id=note_id))
+
+    with Session() as s:
+        note = s.get(Note, note_id)
+        if not note or not note.is_active:
+            abort(404)
+
+        # No reseñas del propio vendedor
+        if note.seller_id == current_user.id:
+            flash("No podés reseñar tu propio apunte.", "warning")
+            return redirect(url_for("note_detail", note_id=note_id))
+
+        # Sólo compradores aprobados
+        if not user_bought_note(s, current_user.id, note_id):
+            flash("Sólo quienes compraron el apunte pueden reseñarlo.", "warning")
+            return redirect(url_for("note_detail", note_id=note_id))
+
+        # Una reseña por comprador
+        exists = s.execute(
+            select(Review.id).where(
+                Review.note_id == note_id,
+                Review.buyer_id == current_user.id
+            )
+        ).first()
+        if exists:
+            flash("Ya enviaste una reseña para este apunte.", "info")
+            return redirect(url_for("note_detail", note_id=note_id))
+
+        r = Review(
+            note_id=note_id,
+            buyer_id=current_user.id,
+            rating=rating,
+            comment=comment if comment else None
+        )
+        s.add(r)
+        s.commit()
+
+    flash("¡Gracias por tu reseña!", "success")
+    return redirect(url_for("note_detail", note_id=note_id))
+
 
 @app.route("/download/<int:note_id>")
 @login_required

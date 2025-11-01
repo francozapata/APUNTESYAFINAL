@@ -4,6 +4,8 @@ from datetime import datetime
 from flask_login import UserMixin
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
 from sqlalchemy import Integer, String, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy import UniqueConstraint, CheckConstraint, Text
+
 
 Base = declarative_base()
 
@@ -102,3 +104,19 @@ class WebhookEvent(Base):
     action = Column(String(64), nullable=True)
     payload = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class Review(Base):
+    __tablename__ = "reviews"
+    __table_args__ = (
+        UniqueConstraint("buyer_id", "note_id", name="uq_review_buyer_note"),
+        CheckConstraint("rating BETWEEN 1 AND 5", name="ck_review_rating_range"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    note_id: Mapped[int] = mapped_column(ForeignKey("notes.id"), index=True, nullable=False)
+    buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)   # 1..5
+    comment: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    
