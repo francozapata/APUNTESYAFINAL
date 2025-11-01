@@ -1,95 +1,96 @@
-{% extends "base.html" %}
+{% extends "admin/dashboard.html" %}
 {% block content %}
-<h2>Resumen (Admin)</h2>
+<h1>📊 Panel de Sumario General</h1>
 
-<div class="card" style="margin-bottom:16px;">
-    <h3>Totales</h3>
-    <ul>
-        <li><strong>Usuarios:</strong> {{ total_users }}</li>
-        <li><strong>Apuntes:</strong> {{ total_notes }}</li>
-        <li><strong>Compras (todas):</strong> {{ total_purchases }}</li>
-        <li><strong>Aprobadas:</strong> {{ total_approved }} · <strong>Pendientes:</strong> {{ total_pending }} ·
-            <strong>Rechazadas:</strong> {{ total_rejected }}
-        </li>
-    </ul>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-top:16px;">
+    <div class="card">
+        <h3>Usuarios</h3>
+        <p>{{ total_users }}</p>
+    </div>
+    <div class="card">
+        <h3>Apuntes</h3>
+        <p>{{ total_notes }}</p>
+    </div>
+    <div class="card">
+        <h3>Compras totales</h3>
+        <p>{{ total_purchases }}</p>
+    </div>
+    <div class="card">
+        <h3>Pagos aprobados</h3>
+        <p>{{ total_approved }}</p>
+    </div>
+    <div class="card">
+        <h3>Pagos pendientes</h3>
+        <p>{{ total_pending }}</p>
+    </div>
+    <div class="card">
+        <h3>Pagos rechazados</h3>
+        <p>{{ total_rejected }}</p>
+    </div>
 </div>
 
-<div class="card" style="margin-bottom:16px;">
-    <h3>Ingresos</h3>
-    <p>
-        <strong>Bruto:</strong> ${{ '%.2f'|format(gross_cents/100) }}<br>
-        <strong>Comisión MP (aprox):</strong> ${{ '%.2f'|format(mp_commission_cents/100) }}<br>
-        <strong>Comisión Plataforma:</strong> ${{ '%.2f'|format(apy_commission_cents/100) }}<br>
-        <strong>Neto:</strong> ${{ '%.2f'|format(net_cents/100) }}
-    </p>
-</div>
+<h3 style="margin-top:20px;">💰 Totales</h3>
+<ul>
+    <li>Bruto total: ${{ "%.2f"|format((gross_cents or 0)/100) }}</li>
+    <li>Comisión Mercado Pago: ${{ "%.2f"|format((mp_commission_cents or 0)/100) }}</li>
+    <li>Comisión ApuntesYa: ${{ "%.2f"|format((apy_commission_cents or 0)/100) }}</li>
+    <li><strong>Ganancia neta: ${{ "%.2f"|format((net_cents or 0)/100) }}</strong></li>
+</ul>
 
-<div class="card" style="margin-bottom:16px;">
-    <h3>Top apuntes por ventas</h3>
-    {% if top_notes %}
-    <table style="width:100%;">
-        <thead>
-            <tr>
-                <th style="text-align:left;">Apunte</th>
-                <th>Ventas</th>
-                <th>Monto</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for nid, title, sold, gross in top_notes %}
-            <tr>
-                <td>#{{ nid }} — {{ title }}</td>
-                <td style="text-align:center;">{{ sold }}</td>
-                <td style="text-align:right;">${{ '%.2f'|format(gross/100) }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="muted">Sin datos aún.</p>
-    {% endif %}
-</div>
-
-<div class="card" style="margin-bottom:16px;">
-    <h3>Reportes</h3>
-    {% if reported_notes and reported_notes|length > 0 %}
-    <ul>
-        {% for nid, title in reported_notes %}
-        <li>#{{ nid }} — {{ title }}</li>
+<h3 style="margin-top:24px;">🏆 Top 10 apuntes vendidos</h3>
+<table class="table" style="width:100%;border-collapse:collapse;">
+    <thead>
+        <tr>
+            <th>Título</th>
+            <th>Vendidos</th>
+            <th>Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for n in top_notes %}
+        <tr>
+            <td>{{ n.title }}</td>
+            <td style="text-align:center;">{{ n.sold_count }}</td>
+            <td style="text-align:right;">${{ "%.2f"|format((n.gross_cents or 0)/100) }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="3">Sin ventas registradas</td>
+        </tr>
         {% endfor %}
-    </ul>
-    {% else %}
-    <p class="muted">Sin apuntes reportados.</p>
-    {% endif %}
-</div>
+    </tbody>
+</table>
 
-<div class="card">
-    <h3>Últimas compras</h3>
-    {% if last_purchases %}
-    <table style="width:100%;">
-        <thead>
-            <tr>
-                <th style="text-align:left;">Compra</th>
-                <th>Apunte</th>
-                <th>Estado</th>
-                <th>Monto</th>
-                <th>Fecha</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for pid, status, cents, created, title in last_purchases %}
-            <tr>
-                <td>#{{ pid }}</td>
-                <td>{{ title }}</td>
-                <td style="text-transform:capitalize;">{{ status or '-' }}</td>
-                <td style="text-align:right;">${{ '%.2f'|format((cents or 0)/100) }}</td>
-                <td>{{ created.strftime("%Y-%m-%d %H:%M") }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="muted">Sin movimientos.</p>
-    {% endif %}
-</div>
+{% if reported_notes %}
+<h3 style="margin-top:24px;">🚨 Últimos apuntes reportados</h3>
+<ul>
+    {% for r in reported_notes %}
+    <li>{{ r.title }} (ID {{ r.id }})</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<h3 style="margin-top:24px;">🕒 Últimas compras</h3>
+<table class="table" style="width:100%;border-collapse:collapse;">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Estado</th>
+            <th>Monto</th>
+            <th>Fecha</th>
+            <th>Apunte</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in last_purchases %}
+        <tr>
+            <td>{{ p.id }}</td>
+            <td>{{ p.status }}</td>
+            <td>${{ "%.2f"|format((p.amount_cents or 0)/100) }}</td>
+            <td>{{ p.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+            <td>{{ p.title }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 {% endblock %}
