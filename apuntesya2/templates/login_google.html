@@ -4,7 +4,6 @@
     <h1 style="margin-bottom:8px;">Ingresá a ApuntesYa</h1>
     <p style="color:#555;margin-bottom:16px;">Autenticación con Google</p>
 
-    <!-- sin onclick inline -->
     <button id="btnGoogle"
         style="display:flex;align-items:center;gap:10px;padding:10px 16px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" width="20" height="20" />
@@ -16,6 +15,6 @@
     </p>
 </div>
 
-<!-- cache-bust para evitar versión vieja -->
-<script type="module" src="{{ url_for('static', filename='js/firebase_google_auth.js') }}?v=4"></script>
+<!-- Cargar SOLO acá (no lo incluyas en base.html). Cache-bust con v=5 -->
+<script type="module" src="{{ url_for('static', filename='js/firebase_google_auth.js') }}?v=5"></script>
 {% endblock %}
