@@ -13,7 +13,7 @@ from apuntesya2.models import Review
 from dotenv import load_dotenv
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
-    send_from_directory, abort, jsonify
+    send_from_directory, abort, jsonify, session
 )
 from flask_login import (
     LoginManager, login_user, logout_user, current_user, login_required
@@ -27,6 +27,7 @@ from werkzeug.utils import secure_filename
 from apuntesya2.models import Base, User, Note, Purchase, University, Faculty, Career, WebhookEvent
 
 # helpers MP
+from apuntesya2.firebase_auth import verify_id_token, init_firebase_admin
 from apuntesya2 import mp
 from apuntesya2.models import Base, User, Note, Purchase, University, Faculty, Career, Review
 
@@ -97,6 +98,12 @@ engine = create_engine(DB_URL, **engine_kwargs)
 # -----------------------------------------------------------------------------
 # Crear tablas
 Base.metadata.create_all(engine)
+
+# Inicializar Firebase Admin (si hay credenciales)
+try:
+    init_firebase_admin()
+except Exception:
+    pass
 
 # Sesión global (¡OJO! no importamos Session arriba para no ensombrecer)
 Session = scoped_session(sessionmaker(bind=engine, autoflush=False, expire_on_commit=False))
@@ -264,41 +271,12 @@ def search():
 # -----------------------------------------------------------------------------
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == "POST":
-        name = request.form["name"].strip()
-        email = request.form["email"].strip().lower()
-        password = request.form["password"]
-        university = request.form["university"].strip()
-        faculty = request.form["faculty"].strip()
-        career = request.form["career"].strip()
-        with Session() as s:
-            exists = s.execute(select(User).where(User.email == email)).scalar_one_or_none()
-            if exists:
-                flash("Ese email ya está registrado.")
-                return redirect(url_for("register"))
-            u = User(
-                name=name, email=email, password_hash=generate_password_hash(password),
-                university=university, faculty=faculty, career=career
-            )
-            s.add(u)
-            s.commit()
-            login_user(u)
-            return redirect(url_for("index"))
-    return render_template("register.html")
+    # Registro vía Google únicamente
+    return redirect(url_for("login"))
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route("/login", methods=["GET"])
 def login():
-    if request.method == "POST":
-        email = request.form["email"].strip().lower()
-        password = request.form["password"]
-        with Session() as s:
-            u = s.execute(select(User).where(User.email == email)).scalar_one_or_none()
-            if not u or not check_password_hash(u.password_hash, password):
-                flash("Credenciales inválidas.")
-                return redirect(url_for("login"))
-            login_user(u)
-            return redirect(url_for("index"))
-    return render_template("login.html")
+    return render_template("login_google.html")
 
 @app.route("/logout")
 def logout():
@@ -1108,3 +1086,34 @@ def help_commissions():
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
+
+@app.post("/auth/session_login")
+def auth_session_login():
+    try:
+        data = request.get_json(silent=True) or {}
+        id_token = data.get("id_token", "")
+        if not id_token:
+            return {"ok": False, "error": "missing token"}, 400
+        decoded = verify_id_token(id_token)
+        if not decoded:
+            return {"ok": False, "error": "invalid token"}, 401
+        email = (decoded.get("email") or "").lower()
+        name = decoded.get("name") or email.split("@")[0]
+        if not email:
+            return {"ok": False, "error": "email missing in token"}, 400
+
+        with Session() as s:
+            u = s.execute(select(User).where(User.email == email)).scalar_one_or_none()
+            if not u:
+                # Crear usuario mínimo
+                u = User(
+                    name=name,
+                    email=email,
+                    password_hash=generate_password_hash(secrets.token_urlsafe(12))
+                )
+                s.add(u); s.commit()
+            # Iniciar sesión flask-login
+            login_user(u)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 500

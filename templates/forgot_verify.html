@@ -1,0 +1,11 @@
+<h2>Ingresá el código y tu nueva contraseña</h2>
+<form method="post" action="/forgot/verify">
+  <input type="hidden" name="phone" value="{{ phone }}">
+  <label>Código SMS</label>
+  <input name="code" maxlength="6" pattern="[0-9]{6}" required>
+  <label>Nueva contraseña</label>
+  <input type="password" name="new_password" minlength="8" required>
+  <label>Confirmar contraseña</label>
+  <input type="password" name="confirm_password" minlength="8" required>
+  <button type="submit">Actualizar contraseña</button>
+</form>
