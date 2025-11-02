@@ -5,14 +5,25 @@ const firebaseConfig = {
     projectId: "TU_PROJECT_ID",
     appId: "TU_APP_ID"
 };
-
 // 2) SDK Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+import {
+    getAuth, signInWithPopup, GoogleAuthProvider, signInWithRedirect,
+    getRedirectResult, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
+
+// Si volvemos de redirect, terminamos el login
+getRedirectResult(auth).then(async (result) => {
+    if (result && result.user) {
+        const idToken = await result.user.getIdToken();
+        await backendSessionLogin(idToken);
+        window.location.href = "/";
+    }
+}).catch((e) => console.error("Redirect error:", e));
 
 async function backendSessionLogin(idToken) {
     const res = await fetch("/auth/session_login", {
@@ -20,7 +31,10 @@ async function backendSessionLogin(idToken) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id_token: idToken })
     });
-    if (!res.ok) throw new Error("No se pudo crear la sesión en el servidor");
+    if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error("Servidor rechazó el token: " + txt);
+    }
     return res.json();
 }
 
@@ -31,8 +45,17 @@ window.googleSignIn = async function () {
         await backendSessionLogin(idToken);
         window.location.href = "/";
     } catch (e) {
-        console.error(e);
-        alert("Error al iniciar sesión con Google.");
+        console.error("Popup error:", e);
+        // Fallback si el popup se bloquea o se cierra
+        if (e && (e.code === "auth/popup-blocked" || e.code === "auth/popup-closed-by-user")) {
+            try {
+                await signInWithRedirect(auth, provider);
+                return;
+            } catch (e2) {
+                console.error("Redirect error:", e2);
+            }
+        }
+        alert("Error al iniciar sesión con Google.\n" + (e && e.code ? e.code : ""));
     }
 };
 
