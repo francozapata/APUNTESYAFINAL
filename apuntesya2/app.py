@@ -13,7 +13,7 @@ from apuntesya2.models import Review
 from dotenv import load_dotenv
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
-    send_from_directory, abort, jsonify
+    send_from_directory, abort, jsonify, session
 )
 from flask_login import (
     LoginManager, login_user, logout_user, current_user, login_required
@@ -27,6 +27,8 @@ from werkzeug.utils import secure_filename
 from apuntesya2.models import Base, User, Note, Purchase, University, Faculty, Career, WebhookEvent
 
 # helpers MP
+from apuntesya2.sms import send_sms
+from apuntesya2.otp import create_otp, verify_otp
 from apuntesya2 import mp
 from apuntesya2.models import Base, User, Note, Purchase, University, Faculty, Career, Review
 
@@ -97,6 +99,40 @@ engine = create_engine(DB_URL, **engine_kwargs)
 # -----------------------------------------------------------------------------
 # Crear tablas
 Base.metadata.create_all(engine)
+
+def _auto_migrate_phone_and_otps():
+    try:
+        with engine.begin() as cx:
+            cols = cx.exec_driver_sql("PRAGMA table_info(users);").fetchall()
+            names = {c[1] for c in cols}
+            if "phone" not in names:
+                cx.exec_driver_sql("ALTER TABLE users ADD COLUMN phone TEXT;")
+                try:
+                    cx.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone ON users(phone);")
+                except Exception:
+                    pass
+            if "phone_verified" not in names:
+                cx.exec_driver_sql("ALTER TABLE users ADD COLUMN phone_verified INTEGER DEFAULT 0;")
+            if "phone_verified_at" not in names:
+                cx.exec_driver_sql("ALTER TABLE users ADD COLUMN phone_verified_at DATETIME;")
+            cx.exec_driver_sql("""
+CREATE TABLE IF NOT EXISTS otps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  channel TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  expires_at DATETIME NOT NULL,
+  attempts INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+"""
+)
+            cx.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_otps_user_channel ON otps(user_id, channel);")
+    except Exception as e:
+        print("[ApuntesYa] Auto-migración phone/otps warning:", e)
+
+_auto_migrate_phone_and_otps()
+
 
 # Sesión global (¡OJO! no importamos Session arriba para no ensombrecer)
 Session = scoped_session(sessionmaker(bind=engine, autoflush=False, expire_on_commit=False))
@@ -265,40 +301,50 @@ def search():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        name = request.form["name"].strip()
-        email = request.form["email"].strip().lower()
-        password = request.form["password"]
-        university = request.form["university"].strip()
-        faculty = request.form["faculty"].strip()
-        career = request.form["career"].strip()
+        phone_raw = request.form.get("phone","").strip()
+        phone = to_e164(phone_raw)
+        if not phone or len(phone) < 8:
+            flash("Ingresá un número válido en formato internacional (ej. +549351...)", "danger")
+            return redirect(url_for("register"))
         with Session() as s:
-            exists = s.execute(select(User).where(User.email == email)).scalar_one_or_none()
+            exists = s.execute(select(User).where(User.phone == phone)).scalar_one_or_none()
             if exists:
-                flash("Ese email ya está registrado.")
-                return redirect(url_for("register"))
+                flash("Ese número ya está registrado. Iniciá sesión o recuperá tu contraseña.", "warning")
+                return redirect(url_for("login"))
+            import secrets
+            random_pw = secrets.token_urlsafe(12)
             u = User(
-                name=name, email=email, password_hash=generate_password_hash(password),
-                university=university, faculty=faculty, career=career
+                name = request.form.get("name","").strip() or phone,
+                phone = phone,
+                phone_verified = False,
+                password_hash = generate_password_hash(random_pw)
             )
-            s.add(u)
-            s.commit()
-            login_user(u)
-            return redirect(url_for("index"))
-    return render_template("register.html")
+            s.add(u); s.commit()
+            session["PENDING_USER_ID"] = u.id
+        code = create_otp(Session, u.id, channel="sms")
+        send_sms(phone, f"Tu código ApuntesYa es: {code}. Vence en 10 minutos.")
+        flash("Te enviamos un código por SMS. Ingresalo para verificar tu número.", "info")
+        return redirect(url_for("verify_phone_page"))
+    return render_template("register_phone.html")
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        email = request.form["email"].strip().lower()
-        password = request.form["password"]
+        phone = to_e164(request.form.get("phone",""))
+        password = request.form.get("password","")
         with Session() as s:
-            u = s.execute(select(User).where(User.email == email)).scalar_one_or_none()
+            u = s.execute(select(User).where(User.phone == phone)).scalar_one_or_none()
             if not u or not check_password_hash(u.password_hash, password):
-                flash("Credenciales inválidas.")
+                flash("Credenciales inválidas.", "danger")
                 return redirect(url_for("login"))
+            if hasattr(u, "phone_verified") and not (u.phone_verified or str(u.phone_verified) == "1"):
+                code = create_otp(Session, u.id, "sms")
+                send_sms(u.phone, f"Tu código ApuntesYa es: {code}. Vence en 10 minutos.")
+                flash("Necesitás verificar tu teléfono. Te reenviamos el código por SMS.", "warning")
+                return redirect(url_for("verify_phone_page"))
             login_user(u)
             return redirect(url_for("index"))
-    return render_template("login.html")
+    return render_template("login_phone.html")
 
 @app.route("/logout")
 def logout():
@@ -1108,3 +1154,126 @@ def help_commissions():
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
+
+
+def to_e164(phone_raw: str) -> str:
+    p = ''.join(ch for ch in (phone_raw or '') if ch.isdigit() or ch == '+')
+    if not p.startswith('+'):
+        p = '+' + p
+    return p
+
+@app.get("/verify_phone")
+def verify_phone_page():
+    if not session.get("PENDING_USER_ID"):
+        flash("Iniciá el registro nuevamente.", "warning")
+        return redirect(url_for("register"))
+    return render_template("verify_phone.html")
+
+@app.post("/verify_phone")
+def verify_phone_submit():
+    uid = session.get("PENDING_USER_ID")
+    code = (request.form.get("code") or "").strip()
+    if not uid:
+        flash("Sesión de registro expirada.", "danger"); return redirect(url_for("register"))
+    if not code or len(code) != 6:
+        flash("Código inválido.", "danger"); return redirect(url_for("verify_phone_page"))
+    if not verify_otp(Session, uid, "sms", code):
+        flash("Código incorrecto o vencido.", "danger"); return redirect(url_for("verify_phone_page"))
+    from datetime import datetime as _dt
+    with Session() as s:
+        u = s.get(User, uid)
+        u.phone_verified = True
+        u.phone_verified_at = _dt.utcnow()
+        import secrets
+        new_pw = secrets.token_urlsafe(12)
+        u.password_hash = generate_password_hash(new_pw)
+        s.commit()
+        login_user(u)
+    session.pop("PENDING_USER_ID", None)
+    return render_template("show_password.html", password=new_pw)
+
+@app.get("/forgot")
+def forgot_page():
+    return render_template("forgot.html")
+
+@app.post("/forgot")
+def forgot_send_code():
+    phone = to_e164(request.form.get("phone",""))
+    with Session() as s:
+        u = s.execute(select(User).where(User.phone == phone)).scalar_one_or_none()
+        if u:
+            code = create_otp(Session, u.id, "sms")
+            send_sms(phone, f"Tu código ApuntesYa es: {code}. Vence en 10 minutos.")
+    flash("Si el número existe, te enviamos un código por SMS.", "info")
+    return redirect(url_for("forgot_verify_page", phone=phone))
+
+@app.get("/forgot/verify")
+def forgot_verify_page():
+    phone = request.args.get("phone","")
+    return render_template("forgot_verify.html", phone=phone)
+
+@app.post("/forgot/verify")
+def forgot_verify_submit():
+    phone = to_e164(request.form.get("phone",""))
+    code  = (request.form.get("code") or "").strip()
+    new_pw = request.form.get("new_password","")
+    confirm = request.form.get("confirm_password","")
+    if new_pw != confirm or len(new_pw) < 8:
+        flash("La contraseña no cumple los requisitos.", "danger")
+        return redirect(url_for("forgot_verify_page", phone=phone))
+    with Session() as s:
+        u = s.execute(select(User).where(User.phone == phone)).scalar_one_or_none()
+        if not u:
+            flash("Número no encontrado.", "danger"); return redirect(url_for("forgot_page"))
+    if not verify_otp(Session, u.id, "sms", code):
+        flash("Código inválido o vencido.", "danger")
+        return redirect(url_for("forgot_verify_page", phone=phone))
+    with Session() as s:
+        u2 = s.get(User, u.id)
+        u2.password_hash = generate_password_hash(new_pw)
+        s.commit()
+    flash("¡Contraseña actualizada!", "success")
+    return redirect(url_for("login"))
+
+@app.get("/profile/change_phone")
+@login_required
+def profile_change_phone():
+    return render_template("profile_change_phone.html")
+
+@app.post("/profile/change_phone")
+@login_required
+def profile_change_phone_send():
+    new_raw = request.form.get("new_phone","")
+    new_phone = to_e164(new_raw)
+    if not new_phone or len(new_phone) < 8:
+        flash("Ingresá un número válido.", "danger"); return redirect(url_for("profile_change_phone"))
+    channel = f"sms_change:{new_phone}"
+    code = create_otp(Session, current_user.id, channel=channel)
+    send_sms(new_phone, f"Tu código de confirmación ApuntesYa es: {code}. Vence en 10 minutos.")
+    flash("Te enviamos un código al nuevo número. Ingresalo para confirmar el cambio.", "info")
+    return redirect(url_for("profile_change_phone_verify", phone=new_phone))
+
+@app.get("/profile/change_phone/verify")
+@login_required
+def profile_change_phone_verify():
+    phone = request.args.get("phone","")
+    return render_template("profile_change_phone_verify.html", phone=phone)
+
+@app.post("/profile/change_phone/verify")
+@login_required
+def profile_change_phone_verify_submit():
+    phone = to_e164(request.form.get("phone",""))
+    code  = (request.form.get("code") or "").strip()
+    channel = f"sms_change:{phone}"
+    if not verify_otp(Session, current_user.id, channel, code):
+        flash("Código inválido o vencido.", "danger")
+        return redirect(url_for("profile_change_phone_verify", phone=phone))
+    from datetime import datetime as _dt
+    with Session() as s:
+        u = s.get(User, current_user.id)
+        u.phone = phone
+        u.phone_verified = True
+        u.phone_verified_at = _dt.utcnow()
+        s.commit()
+    flash("¡Número actualizado!", "success")
+    return redirect(url_for("profile"))
