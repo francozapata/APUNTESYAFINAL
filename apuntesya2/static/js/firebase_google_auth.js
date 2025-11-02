@@ -1,9 +1,14 @@
 // 1) Pegá tu configuración real de Firebase acá:
 const firebaseConfig = {
-    apiKey: "TU_API_KEY",
-    authDomain: "TU_PROJECT_ID.firebaseapp.com",
-    projectId: "TU_PROJECT_ID",
-    appId: "TU_APP_ID"
+    apiKey: "AIzaSyCHc6uy6uc1Jr6bzHQYGUZi2uZvTX0S9fE",
+    authDomain: "apuntesya-d7d72.firebaseapp.com",
+    projectId: "apuntesya-d7d72",
+    storageBucket: "apuntesya-d7d72.firebasestorage.app",
+    messagingSenderId: "332327927567",
+    appId: "1:332327927567:web:22ecbb47817c2b7c71487a",
+    measurementId: "G-9MBP39X788"
+};
+
 };
 // 2) SDK Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
