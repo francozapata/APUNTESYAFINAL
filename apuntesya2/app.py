@@ -30,7 +30,7 @@ from apuntesya2.models import Base, User, Note, Purchase, University, Faculty, C
 load_dotenv()
 
 # -----------------------------------------------------------------------------
-// App
+## App
 # -----------------------------------------------------------------------------
 app = Flask(__name__, instance_relative_config=True)
 
