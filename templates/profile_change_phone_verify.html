@@ -1,0 +1,7 @@
+<h2>Confirmar cambio de número</h2>
+<form method="post" action="/profile/change_phone/verify">
+  <input type="hidden" name="phone" value="{{ phone }}">
+  <p>Verificaremos <strong>{{ phone }}</strong>. Ingresá el código recibido por SMS.</p>
+  <input name="code" maxlength="6" pattern="[0-9]{6}" required>
+  <button type="submit">Confirmar</button>
+</form>
