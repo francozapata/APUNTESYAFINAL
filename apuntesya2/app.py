@@ -224,6 +224,34 @@ def note_detail(note_id):
             abort(404)
     return render_template("note_detail.html", note=note)
 
+
+
+# --- API académica (dropdowns) ---
+@app.get("/api/academics/universities")
+def api_list_universities():
+    with Session() as s:
+        rows = s.execute(select(University).order_by(University.name)).scalars().all()
+        return jsonify([{"id": u.id, "name": u.name} for u in rows])
+
+@app.get("/api/academics/faculties")
+def api_list_faculties():
+    uid = request.args.get("university_id", type=int)
+    with Session() as s:
+        q = select(Faculty)
+        if uid:
+            q = q.where(Faculty.university_id == uid)
+        rows = s.execute(q.order_by(Faculty.name)).scalars().all()
+        return jsonify([{"id": f.id, "name": f.name, "university_id": f.university_id} for f in rows])
+
+@app.get("/api/academics/careers")
+def api_list_careers():
+    fid = request.args.get("faculty_id", type=int)
+    with Session() as s:
+        q = select(Career)
+        if fid:
+            q = q.where(Career.faculty_id == fid)
+        rows = s.execute(q.order_by(Career.name)).scalars().all()
+        return jsonify([{"id": c.id, "name": c.name, "faculty_id": c.faculty_id} for c in rows])
 # ---------------------------------------------------------------------
 # Healthcheck
 # ---------------------------------------------------------------------
