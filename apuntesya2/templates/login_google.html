@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Iniciar sesión</title>
+</head>
+
+<body>
+    <h2>Ingresá a ApuntesYa</h2>
+    <p>Autenticación con Google</p>
+
+    <button onclick="googleSignIn()">Continuar con Google</button>
+
+    <!-- Carga del JS con Firebase -->
+    <script type="module" src="{{ url_for('static', filename='js/firebase_google_auth.js') }}"></script>
+</body>
+
+</html>
