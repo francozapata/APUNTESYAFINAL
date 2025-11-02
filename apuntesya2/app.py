@@ -1,14 +1,11 @@
 import os
+import os
 import secrets
 import math
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from sqlalchemy import select, func, and_
 from apuntesya2.models import Review
-
-
-
-
 
 from dotenv import load_dotenv
 from flask import (
@@ -33,7 +30,7 @@ from apuntesya2.models import Base, User, Note, Purchase, University, Faculty, C
 load_dotenv()
 
 # -----------------------------------------------------------------------------
-# App
+// App
 # -----------------------------------------------------------------------------
 app = Flask(__name__, instance_relative_config=True)
 
@@ -63,6 +60,16 @@ def fees_ctx():
 
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", secrets.token_hex(16))
 app.config["ENV"] = os.getenv("FLASK_ENV", "production")
+
+# -----------------------------------------------------------------------------
+# Helpers de config
+# -----------------------------------------------------------------------------
+def _as_bool(val, default=False):
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return default
+    return str(val).strip().lower() in ("1", "true", "t", "yes", "y", "on")
 
 # -----------------------------------------------------------------------------
 # Paths (Render usa /tmp; local usa ./data)
@@ -116,13 +123,15 @@ def load_user(user_id):
 app.config["MP_PUBLIC_KEY"] = os.getenv("MP_PUBLIC_KEY", "")
 app.config["MP_ACCESS_TOKEN"] = os.getenv("MP_ACCESS_TOKEN", "")
 app.config["MP_WEBHOOK_SECRET"] = os.getenv("MP_WEBHOOK_SECRET", "")
-app.config["BASE_URL"] = os.getenv("BASE_URL", "")
+
+# BASE_URL para construir enlaces externos (emails, callbacks)
+app.config["BASE_URL"] = os.getenv("BASE_URL", "").rstrip("/")
 
 # Comisiones
 app.config["PLATFORM_FEE_PERCENT"] = float(os.getenv("MP_PLATFORM_FEE_PERCENT", "5.0"))
 app.config["MP_COMMISSION_RATE"] = float(os.getenv("MP_COMMISSION_RATE", "0.0774"))
 app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.05"))
-app.config["IIBB_ENABLED"] = os.getenv("IIBB_ENABLED", "false").lower() in ("1", "true", "yes")
+app.config["IIBB_ENABLED"] = _as_bool(os.getenv("IIBB_ENABLED", "false"))
 app.config["IIBB_RATE"] = float(os.getenv("IIBB_RATE", "0.0"))
 
 MP_COMMISSION_RATE = app.config["MP_COMMISSION_RATE"]
@@ -135,9 +144,18 @@ app.config["MP_ACCESS_TOKEN_PLATFORM"] = os.getenv("MP_ACCESS_TOKEN", "")
 app.config["MP_OAUTH_REDIRECT_URL"] = os.getenv("MP_OAUTH_REDIRECT_URL")
 
 # Password reset (si tu blueprint existe)
-app.config.setdefault("SECURITY_PASSWORD_SALT", os.getenv("SECURITY_PASSWORD_SALT", "pw-reset"))
-app.config.setdefault("PASSWORD_RESET_EXPIRATION", int(os.getenv("PASSWORD_RESET_EXPIRATION", "3600")))
-app.config.setdefault("ENABLE_SMTP", os.getenv("ENABLE_SMTP", "false"))
+app.config["SECURITY_PASSWORD_SALT"] = os.getenv("SECURITY_PASSWORD_SALT", "pw-reset")
+app.config["PASSWORD_RESET_EXPIRATION"] = int(os.getenv("PASSWORD_RESET_EXPIRATION", "3600"))
+
+# SMTP config (SIEMPRE directo desde ENV)
+app.config["ENABLE_SMTP"] = _as_bool(os.getenv("ENABLE_SMTP", "false"))
+app.config["MAIL_SERVER"] = os.getenv("MAIL_SERVER", "").strip()
+app.config["MAIL_PORT"] = int(os.getenv("MAIL_PORT", "587"))
+app.config["MAIL_USE_TLS"] = _as_bool(os.getenv("MAIL_USE_TLS", "true"))
+app.config["MAIL_USE_SSL"] = _as_bool(os.getenv("MAIL_USE_SSL", "false"))
+app.config["MAIL_USERNAME"] = os.getenv("MAIL_USERNAME", "").strip()
+app.config["MAIL_PASSWORD"] = os.getenv("MAIL_PASSWORD", "").strip()
+app.config["MAIL_DEFAULT_SENDER"] = os.getenv("MAIL_DEFAULT_SENDER", "").strip()
 
 # Contacto
 app.config["CONTACT_EMAILS"] = os.getenv("CONTACT_EMAILS", "soporte.apuntesya@gmail.com")
@@ -145,6 +163,45 @@ app.config["CONTACT_WHATSAPP"] = os.getenv("CONTACT_WHATSAPP", "+543510000000")
 app.config["SUGGESTIONS_URL"] = os.getenv("SUGGESTIONS_URL",
     "https://docs.google.com/forms/d/e/1FAIpQLScDEukn0sLtjOoWgmvTNaF_qG0iDHue9EOqCYxz_z6bGxzErg/viewform?usp=header"
 )
+
+# -----------------------------------------------------------------------------
+# Debug de SMTP al iniciar (imprime en logs de Render)
+# -----------------------------------------------------------------------------
+def _debug_log_smtp_config(app):
+    def mask(v):
+        if not v:
+            return "<empty>"
+        s = str(v)
+        return s[:2] + "…" + s[-2:] if len(s) > 6 else "***"
+    cfg = app.config
+    print("[SMTP DEBUG] ENABLE_SMTP =", cfg.get("ENABLE_SMTP"))
+    print("[SMTP DEBUG] MAIL_SERVER =", cfg.get("MAIL_SERVER"))
+    print("[SMTP DEBUG] MAIL_PORT   =", cfg.get("MAIL_PORT"))
+    print("[SMTP DEBUG] MAIL_USE_TLS=", cfg.get("MAIL_USE_TLS"))
+    print("[SMTP DEBUG] MAIL_USE_SSL=", cfg.get("MAIL_USE_SSL"))
+    print("[SMTP DEBUG] MAIL_USERNAME =", cfg.get("MAIL_USERNAME"))
+    print("[SMTP DEBUG] MAIL_PASSWORD =", mask(cfg.get("MAIL_PASSWORD")))
+    print("[SMTP DEBUG] MAIL_DEFAULT_SENDER =", cfg.get("MAIL_DEFAULT_SENDER"))
+    print("[SMTP DEBUG] BASE_URL =", cfg.get("BASE_URL"))
+
+_debug_log_smtp_config(app)
+
+@app.route("/__debug/smtp")
+def __debug_smtp():
+    from flask import jsonify
+    cfg = app.config
+    def has(v): return bool(v and str(v).strip())
+    return jsonify({
+        "ENABLE_SMTP": cfg.get("ENABLE_SMTP"),
+        "MAIL_SERVER": cfg.get("MAIL_SERVER"),
+        "MAIL_PORT": cfg.get("MAIL_PORT"),
+        "MAIL_USE_TLS": cfg.get("MAIL_USE_TLS"),
+        "MAIL_USE_SSL": cfg.get("MAIL_USE_SSL"),
+        "MAIL_USERNAME": cfg.get("MAIL_USERNAME"),
+        "MAIL_PASSWORD_present": has(cfg.get("MAIL_PASSWORD")),
+        "MAIL_DEFAULT_SENDER": cfg.get("MAIL_DEFAULT_SENDER"),
+        "BASE_URL": cfg.get("BASE_URL"),
+    })
 
 @app.context_processor
 def inject_contacts():
@@ -553,7 +610,6 @@ def note_detail(note_id):
         already_reviewed=already_reviewed
     )
 
-
 @app.post("/note/<int:note_id>/review")
 @login_required
 def submit_review(note_id):
@@ -607,8 +663,6 @@ def submit_review(note_id):
 
     flash("¡Gracias por tu reseña!")
     return redirect(url_for("note_detail", note_id=note_id))
-
-
 
 @app.route("/download/<int:note_id>")
 @login_required
@@ -926,8 +980,6 @@ app.add_url_rule("/mp/webhook",            view_func=mp_webhook, methods=["POST"
 @app.route("/terms")
 def terms():
     return render_template("terms.html")
-
-# ---------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 # Reportar apunte
