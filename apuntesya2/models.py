@@ -11,6 +11,9 @@ Base = declarative_base()
 
 class User(Base, UserMixin):
     __tablename__ = "users"
+    phone = Column(String, unique=True, index=True)
+    phone_verified = Column(Boolean, default=False)
+    phone_verified_at = Column(DateTime)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
@@ -114,3 +117,14 @@ class Review(Base):
     rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1..5
     comment: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class Otp(Base):
+    __tablename__ = 'otps'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    channel = Column(String, nullable=False)
+    code_hash = Column(String, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    attempts = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
