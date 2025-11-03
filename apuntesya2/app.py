@@ -2,6 +2,10 @@ import os
 import secrets
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
+from flask import session
+from firebase_admin import auth as fb_auth, credentials, initialize_app as fb_init
+import os, secrets
+
 
 from dotenv import load_dotenv
 from flask import (
@@ -33,6 +37,33 @@ load_dotenv()
 app = Flask(__name__, instance_relative_config=True)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", secrets.token_hex(16))
 app.config["ENV"] = os.getenv("FLASK_ENV", "production")
+
+# Firebase Admin (usar SERVICE_ACCOUNT_JSON o cred predeterminada)
+if not getattr(app, "_fb_admin_inited", False):
+    cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+    if cred_path and os.path.exists(cred_path):
+        fb_init(credentials.Certificate(cred_path))
+    else:
+        # Para Render: cred predeterminada si la cuenta de servicio está en env
+        try:
+            fb_init()
+        except Exception:
+            pass
+    app._fb_admin_inited = True
+ 
+
+# Firebase Admin (usar SERVICE_ACCOUNT_JSON o cred predeterminada)
+if not getattr(app, "_fb_admin_inited", False):
+    cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+    if cred_path and os.path.exists(cred_path):
+        fb_init(credentials.Certificate(cred_path))
+    else:
+        # Para Render: cred predeterminada si la cuenta de servicio está en env
+        try:
+            fb_init()
+        except Exception:
+            pass
+    app._fb_admin_inited = True
 
 # ---------------------------------------------------------------------
 # Archivos
@@ -134,34 +165,89 @@ def register():
 def auth_session_login():
     try:
         data = request.get_json(silent=True) or {}
-        id_token = data.get("id_token", "")
+        id_token = (data.get("id_token") or "").strip()
         if not id_token:
-            return {"ok": False, "error": "missing token"}, 400
+            return {"ok": False, "error": "missing id_token"}, 400
 
-        decoded = verify_id_token(id_token)
-        if not decoded:
-            return {"ok": False, "error": "invalid token"}, 401
+        info = verify_firebase_id_token(id_token)
+        email = (info.get("email") or "").lower().strip()
+        name  = (info.get("name") or "").strip()
 
-        email = (decoded.get("email") or "").lower()
-        name = decoded.get("name") or email.split("@")[0]
         if not email:
-            return {"ok": False, "error": "email missing in token"}, 400
+            return {"ok": False, "error": "google_without_email"}, 400
 
         with Session() as s:
             u = s.execute(select(User).where(User.email == email)).scalar_one_or_none()
-            if not u:
-                u = User(
-                    name=name,
-                    email=email,
-                    password_hash=generate_password_hash(secrets.token_urlsafe(12))
-                )
-                s.add(u)
-                s.commit()
+            if u:
+                # Usuario existente -> loguear y a inicio
+                login_user(u)
+                return {"ok": True, "next": url_for("index")}, 200
 
-            login_user(u)
-        return {"ok": True}
+        # No existe -> guardar datos básicos en la sesión y pedir perfil
+        session["pending_google"] = {
+            "email": email,
+            "name": name,
+            "uid": info.get("uid"),
+            "picture": info.get("picture")
+        }
+        return {"ok": True, "next": url_for("complete_profile")}, 200
+
     except Exception as e:
+        # Log interno y devolver 500 con texto legible
+        app.logger.exception("session_login error")
         return {"ok": False, "error": str(e)}, 500
+
+@app.get("/complete_profile")
+def complete_profile():
+    if "pending_google" not in session:
+        return redirect(url_for("login"))
+    data = session["pending_google"]
+    # Podés pasar el nombre para saludar
+    return render_template("complete_profile.html", name=data.get("name"))
+
+@app.post("/complete_profile")
+def complete_profile_post():
+    if "pending_google" not in session:
+        return redirect(url_for("login"))
+
+    university = (request.form.get("university") or "").strip()
+    faculty    = (request.form.get("faculty") or "").strip()
+    career     = (request.form.get("career") or "").strip()
+
+    if not (university and faculty and career):
+        flash("Completá Universidad, Facultad y Carrera.")
+        return redirect(url_for("complete_profile"))
+
+    data = session["pending_google"]
+    email = data.get("email")
+    name  = data.get("name")
+
+    with Session() as s:
+        exists = s.execute(select(User).where(User.email == email)).scalar_one_or_none()
+        if exists:
+            # Raro: si llegó acá y ya existe, solo logueamos
+            login_user(exists)
+            session.pop("pending_google", None)
+            return redirect(url_for("index"))
+
+        # Crear usuario completo (password opcional/random)
+        u = User(
+            name=name,
+            email=email,
+            password_hash=generate_password_hash(secrets.token_urlsafe(16)),  # placeholder
+            university=university,
+            faculty=faculty,
+            career=career,
+            is_active=True,
+        )
+        s.add(u)
+        s.commit()
+
+        login_user(u)
+        session.pop("pending_google", None)
+
+    return redirect(url_for("index"))
+
 
 @app.route("/logout")
 def logout():
