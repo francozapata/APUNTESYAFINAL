@@ -20,7 +20,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 # Firebase Admin
-import json
 import firebase_admin
 from firebase_admin import credentials, auth as fb_auth
 
@@ -38,6 +37,28 @@ load_dotenv()
 # App
 # -----------------------------------------------------------------------------
 app = Flask(__name__, instance_relative_config=True)
+
+# --- SECRET KEY robusto: usa ENV si existe; si no, persiste uno en disco ---
+def _load_or_create_secret_key(path: str) -> str:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return f.read().strip()
+    key = secrets.token_hex(32)
+    with open(path, "w") as f:
+        f.write(key)
+    return key
+
+# Usa ENV si está; si no, archivo compartido (funciona en Render con múltiples workers)
+SECRET_KEY_ENV = os.getenv("SECRET_KEY")
+SECRET_KEY_FILE = os.path.join("/tmp", "data", "flask_secret_key")  # mismo BASE_DATA que usás
+app.config["SECRET_KEY"] = SECRET_KEY_ENV or _load_or_create_secret_key(SECRET_KEY_FILE)
+
+# Cookies seguras (estás en HTTPS)
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+app.config["ENV"] = os.getenv("FLASK_ENV", "production")
 
 # --- MP immediate fee estimate available in templates ---
 try:
@@ -62,44 +83,21 @@ def fees_ctx():
             return 0.0
     return dict(MP_FEE_IMMEDIATE_TOTAL_PCT=MP_FEE_IMMEDIATE_TOTAL_PCT, mp_fee_estimate=mp_fee_estimate)
 
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", secrets.token_hex(16))
-app.config["ENV"] = os.getenv("FLASK_ENV", "production")
+
 
 # -----------------------------------------------------------------------------
-# Firebase Admin (evitar doble init, soporta JSON directo o project_id)
+# Firebase Admin (evitar doble init)
 # -----------------------------------------------------------------------------
-def _init_firebase_admin():
-    """Inicializa Firebase Admin, evitando doble inicialización."""
-    if firebase_admin._apps:
-        return
-
-    sa_json = os.getenv("FIREBASE_SERVICE_ACCOUNT", "").strip()
-    project_id = os.getenv("FIREBASE_PROJECT_ID", "").strip()
-
+if not firebase_admin._apps:
     try:
-        if sa_json:
-            try:
-                data = json.loads(sa_json)
-            except json.JSONDecodeError:
-                # Si vino codificado en base64 o con escapes
-                import base64
-                data = json.loads(base64.b64decode(sa_json).decode("utf-8"))
-            cred = credentials.Certificate(data)
-            opts = {}
-            if project_id:
-                opts["projectId"] = project_id
-            firebase_admin.initialize_app(cred, opts or None)
-            print("[Firebase] Admin SDK inicializado con Service Account.")
-        elif project_id:
-            firebase_admin.initialize_app(options={"projectId": project_id})
-            print("[Firebase] Admin SDK inicializado con projectId.")
+        cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+        if cred_path and os.path.exists(cred_path):
+            firebase_admin.initialize_app(credentials.Certificate(cred_path))
         else:
-            raise ValueError("Falta FIREBASE_SERVICE_ACCOUNT o FIREBASE_PROJECT_ID.")
+            firebase_admin.initialize_app()
+        print("[Firebase] Admin SDK inicializado.")
     except Exception as e:
-        print("[Firebase] ERROR inicializando Admin SDK:", e)
-
-# Llamar al inicializador
-_init_firebase_admin()
+        print("[Firebase] WARNING:", e)
 
 def verify_firebase_id_token(id_token: str):
     """
@@ -970,7 +968,7 @@ def mp_webhook():
             or ""
         ).strip()
         if not provider_id:
-            provider_id = "no-id-" + str(abs(hash(request.data)))  # best-effort
+            provider_id = "no-id-" + str(abs(hash(request.data)))
 
         with Session() as sx:
             exists = sx.execute(
