@@ -29,19 +29,20 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-// Back-end session (envía el ID token a Flask)
 async function backendSessionLogin(idToken) {
     const res = await fetch("/auth/session_login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id_token: idToken })
     });
-    if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error("Servidor rechazó el token: " + txt);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+        throw new Error(data?.error || "Servidor rechazó el token");
     }
-    return res.json();
+    // 👇 redirigir según indique el backend
+    window.location.href = data.next || "/";
 }
+
 
 // Login con popup (fallback a redirect si se bloquea/cierra)
 async function doGoogleSignIn() {
