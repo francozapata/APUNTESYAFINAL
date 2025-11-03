@@ -59,7 +59,62 @@ app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 app.config["ENV"] = os.getenv("FLASK_ENV", "production")
+import json
+import base64
 
+def _init_firebase_admin():
+    if firebase_admin._apps:
+        return
+
+    fb_opts = {}
+    project_id = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    if project_id:
+        fb_opts["projectId"] = project_id.strip()
+
+    cred = None
+
+    # 1) Credencial como base64 en ENV
+    b64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "").strip()
+    if b64:
+        try:
+            raw = base64.b64decode(b64).decode("utf-8")
+            data = json.loads(raw)
+            cred = credentials.Certificate(data)
+        except Exception as e:
+            print("[Firebase] WARNING: no pude decodificar FIREBASE_SERVICE_ACCOUNT_B64:", e)
+
+    # 2) Ruta a JSON en disco
+    if not cred:
+        cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+        if cred_path and os.path.exists(cred_path):
+            try:
+                cred = credentials.Certificate(cred_path)
+            except Exception as e:
+                print("[Firebase] WARNING: credencial en ruta inválida:", e)
+
+    # 3) Sin credencial: igual inicializamos con projectId (suficiente para verify_id_token)
+    try:
+        if cred:
+            firebase_admin.initialize_app(cred, fb_opts or None)
+        else:
+            firebase_admin.initialize_app(options=fb_opts or None)
+        print("[Firebase] Admin SDK inicializado.", "projectId=", fb_opts.get("projectId"))
+    except Exception as e:
+        print("[Firebase] WARNING al inicializar:", e)
+
+_init_firebase_admin()
+
+def verify_firebase_id_token(id_token: str):
+    """
+    Verifica el ID token de Firebase y devuelve datos básicos del usuario.
+    Lanza excepción si no es válido.
+    """
+    decoded = fb_auth.verify_id_token(id_token)
+    email   = decoded.get("email")
+    name    = decoded.get("name") or decoded.get("firebase", {}).get("sign_in_provider", "Google user")
+    picture = decoded.get("picture")
+    uid     = decoded.get("uid")
+    return {"uid": uid, "email": email, "name": name, "picture": picture}
 # --- MP immediate fee estimate available in templates ---
 try:
     MP_FEE_IMMEDIATE_TOTAL_PCT = float(app.config.get("MP_FEE_IMMEDIATE_TOTAL_PCT", 7.61))
