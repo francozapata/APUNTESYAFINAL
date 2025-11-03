@@ -20,6 +20,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 # Firebase Admin
+import json
 import firebase_admin
 from firebase_admin import credentials, auth as fb_auth
 
@@ -65,18 +66,40 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", secrets.token_hex(16))
 app.config["ENV"] = os.getenv("FLASK_ENV", "production")
 
 # -----------------------------------------------------------------------------
-# Firebase Admin (evitar doble init)
+# Firebase Admin (evitar doble init, soporta JSON directo o project_id)
 # -----------------------------------------------------------------------------
-if not firebase_admin._apps:
+def _init_firebase_admin():
+    """Inicializa Firebase Admin, evitando doble inicialización."""
+    if firebase_admin._apps:
+        return
+
+    sa_json = os.getenv("FIREBASE_SERVICE_ACCOUNT", "").strip()
+    project_id = os.getenv("FIREBASE_PROJECT_ID", "").strip()
+
     try:
-        cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
-        if cred_path and os.path.exists(cred_path):
-            firebase_admin.initialize_app(credentials.Certificate(cred_path))
+        if sa_json:
+            try:
+                data = json.loads(sa_json)
+            except json.JSONDecodeError:
+                # Si vino codificado en base64 o con escapes
+                import base64
+                data = json.loads(base64.b64decode(sa_json).decode("utf-8"))
+            cred = credentials.Certificate(data)
+            opts = {}
+            if project_id:
+                opts["projectId"] = project_id
+            firebase_admin.initialize_app(cred, opts or None)
+            print("[Firebase] Admin SDK inicializado con Service Account.")
+        elif project_id:
+            firebase_admin.initialize_app(options={"projectId": project_id})
+            print("[Firebase] Admin SDK inicializado con projectId.")
         else:
-            firebase_admin.initialize_app()
-        print("[Firebase] Admin SDK inicializado.")
+            raise ValueError("Falta FIREBASE_SERVICE_ACCOUNT o FIREBASE_PROJECT_ID.")
     except Exception as e:
-        print("[Firebase] WARNING:", e)
+        print("[Firebase] ERROR inicializando Admin SDK:", e)
+
+# Llamar al inicializador
+_init_firebase_admin()
 
 def verify_firebase_id_token(id_token: str):
     """
@@ -947,7 +970,7 @@ def mp_webhook():
             or ""
         ).strip()
         if not provider_id:
-            provider_id = "no-id-" + str(abs(hash(request.data)))
+            provider_id = "no-id-" + str(abs(hash(request.data)))  # best-effort
 
         with Session() as sx:
             exists = sx.execute(
