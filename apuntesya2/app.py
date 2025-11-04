@@ -1121,6 +1121,65 @@ def api_list_careers():
         rows = s.execute(q.order_by(Career.name)).scalars().all()
         return jsonify([{"id": c.id, "name": c.name, "faculty_id": c.faculty_id} for c in rows])
 
+# ====== Creación "aprendida" ======
+from sqlalchemy import func  # lo tenés importado arriba
+
+@app.post("/api/academics/universities")
+def api_create_university():
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return {"error": "name required"}, 400
+    with Session() as s:
+        exists = s.execute(
+            select(University).where(func.lower(University.name) == name.lower())
+        ).scalar_one_or_none()
+        if exists:
+            return {"id": exists.id, "name": exists.name}, 200
+        u = University(name=name)
+        s.add(u); s.commit()
+        return {"id": u.id, "name": u.name}, 201
+
+@app.post("/api/academics/faculties")
+def api_create_faculty():
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    uid  = data.get("university_id")
+    if not name or not uid:
+        return {"error": "name and university_id required"}, 400
+    with Session() as s:
+        exists = s.execute(
+            select(Faculty).where(
+                Faculty.university_id == uid,
+                func.lower(Faculty.name) == name.lower()
+            )
+        ).scalar_one_or_none()
+        if exists:
+            return {"id": exists.id, "name": exists.name}, 200
+        f = Faculty(name=name, university_id=uid)
+        s.add(f); s.commit()
+        return {"id": f.id, "name": f.name}, 201
+
+@app.post("/api/academics/careers")
+def api_create_career():
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    fid  = data.get("faculty_id")
+    if not name or not fid:
+        return {"error": "name and faculty_id required"}, 400
+    with Session() as s:
+        exists = s.execute(
+            select(Career).where(
+                Career.faculty_id == fid,
+                func.lower(Career.name) == name.lower()
+            )
+        ).scalar_one_or_none()
+        if exists:
+            return {"name": exists.name}, 200
+        c = Career(name=name, faculty_id=fid)
+        s.add(c); s.commit()
+        return {"name": c.name}, 201
+
 # -----------------------------------------------------------------------------
 # Foto de perfil
 # -----------------------------------------------------------------------------
