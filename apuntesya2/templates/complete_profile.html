@@ -1,201 +1,312 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container" style="max-width:640px;margin:32px auto">
-    <h2 style="margin-bottom:12px;">Completá tu perfil</h2>
-    {% if name %}<p>¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>{% endif %}
+<style>
+    .card {
+        max-width: 720px;
+        margin: 32px auto;
+        padding: 24px;
+        border: 1px solid #eee;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .04);
+    }
+
+    .card h2 {
+        margin: 0 0 8px 0;
+        font-size: 24px;
+    }
+
+    .card p.lead {
+        margin: 0 0 20px 0;
+        color: #666;
+    }
+
+    label {
+        display: block;
+        font-weight: 600;
+        margin: 14px 0 6px;
+    }
+
+    .input,
+    .select {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid #d9d9e3;
+        border-radius: 10px;
+        background: #fff;
+        font-size: 15px;
+    }
+
+    .input:focus,
+    .select:focus {
+        outline: none;
+        border-color: #6ca3ff;
+        box-shadow: 0 0 0 3px rgba(108, 163, 255, .15);
+    }
+
+    .grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 1fr;
+    }
+
+    @media(min-width: 820px) {
+        .grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    .btn {
+        display: inline-block;
+        margin-top: 18px;
+        padding: 10px 18px;
+        border-radius: 10px;
+        border: 0;
+        background: #4478ff;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform .02s ease, box-shadow .2s;
+        box-shadow: 0 6px 16px rgba(68, 120, 255, .2);
+    }
+
+    .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 22px rgba(68, 120, 255, .28);
+    }
+
+    .muted {
+        font-size: 12px;
+        color: #777;
+        margin-top: 10px;
+    }
+</style>
+
+<div class="card">
+    <h2>Completá tu perfil</h2>
+    {% if name %}<p class="lead">¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>{% endif %}
 
     <form method="POST" action="{{ url_for('complete_profile') }}" id="completeProfileForm">
-        <h2>Completá tu perfil</h2>
-        <p>¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>
+        <div class="grid">
+            <div>
+                <label>Universidad</label>
+                <select id="uniSelect" class="select">
+                    <option value="" selected disabled>Elegí tu Universidad</option>
+                    <!-- se llena por JS -->
+                    <option value="__other__">Otra…</option>
+                </select>
+                <input id="uniOther" class="input" type="text" placeholder="Escribí tu Universidad"
+                    style="display:none;margin-top:8px;">
+            </div>
 
-        <!-- Universidad -->
-        <label class="form-label">Universidad</label>
-        <select id="uniSelect" class="form-select">
-            <option value="" selected disabled>Universidad</option>
-            <!-- se llenará por JS -->
-            <option value="__other__">Otra…</option>
-        </select>
-        <input id="uniOther" type="text" class="form-control" placeholder="Escribí tu universidad"
-            style="display:none;margin-top:8px;">
+            <div>
+                <label>Facultad</label>
+                <select id="facSelect" class="select" disabled>
+                    <option value="" selected disabled>Elegí tu Facultad</option>
+                    <option value="__other__">Otra…</option>
+                </select>
+                <input id="facOther" class="input" type="text" placeholder="Escribí tu Facultad"
+                    style="display:none;margin-top:8px;">
+            </div>
 
-        <!-- Facultad -->
-        <label class="form-label" style="margin-top:14px;">Facultad</label>
-        <select id="facSelect" class="form-select" disabled>
-            <option value="" selected disabled>Facultad</option>
-            <!-- se llenará por JS -->
-            <option value="__other__">Otra…</option>
-        </select>
-        <input id="facOther" type="text" class="form-control" placeholder="Escribí tu facultad"
-            style="display:none;margin-top:8px;">
+            <div>
+                <label>Carrera</label>
+                <select id="carSelect" class="select" disabled>
+                    <option value="" selected disabled>Elegí tu Carrera</option>
+                    <option value="__other__">Otra…</option>
+                </select>
+                <input id="carOther" class="input" type="text" placeholder="Escribí tu Carrera"
+                    style="display:none;margin-top:8px;">
+            </div>
+        </div>
 
-        <!-- Carrera -->
-        <label class="form-label" style="margin-top:14px;">Carrera</label>
-        <select id="carSelect" class="form-select" disabled>
-            <option value="" selected disabled>Carrera</option>
-            <!-- se llenará por JS -->
-            <option value="__other__">Otra…</option>
-        </select>
-        <input id="carOther" type="text" class="form-control" placeholder="Escribí tu carrera"
-            style="display:none;margin-top:8px;">
-
-        <!-- Campos reales que envía el form (lo completa el JS antes de enviar) -->
+        <!-- Campos reales que lee el backend -->
         <input type="hidden" name="university" id="university">
         <input type="hidden" name="faculty" id="faculty">
         <input type="hidden" name="career" id="career">
 
-        <button type="submit" class="btn btn-primary" style="margin-top:18px;">Guardar y continuar</button>
+        <button class="btn" type="submit">Guardar y continuar</button>
+        <p class="muted">Podrás editar esta información luego desde tu perfil.</p>
     </form>
-
-    <script>
-        (async function () {
-            const $ = (id) => document.getElementById(id);
-
-            const uniSelect = $('uniSelect');
-            const facSelect = $('facSelect');
-            const carSelect = $('carSelect');
-            const uniOther = $('uniOther');
-            const facOther = $('facOther');
-            const carOther = $('carOther');
-
-            // helpers
-            function setVisible(el, visible) { el.style.display = visible ? '' : 'none'; }
-            function enable(el, on) { el.disabled = !on; }
-            function clearSelect(sel, placeholder) {
-                sel.innerHTML = '';
-                const opt = document.createElement('option');
-                opt.value = ''; opt.disabled = true; opt.selected = true; opt.textContent = placeholder;
-                sel.appendChild(opt);
-            }
-
-            // cargar universidades
-            try {
-                const res = await fetch('/api/academics/universities');
-                const list = await res.json();
-                list.forEach(u => {
-                    const o = document.createElement('option');
-                    o.value = String(u.id);
-                    o.textContent = u.name;
-                    uniSelect.insertBefore(o, uniSelect.querySelector('option[value="__other__"]'));
-                });
-            } catch (e) { console.warn('No pude cargar universidades', e); }
-
-            // al cambiar universidad
-            uniSelect.addEventListener('change', async () => {
-                const v = uniSelect.value;
-
-                // si elige "Otra", habilitar escritura libre y desactivar combos dependientes
-                if (v === '__other__') {
-                    setVisible(uniOther, true);
-                    enable(facSelect, false);
-                    enable(carSelect, false);
-                    setVisible(facOther, true);
-                    setVisible(carOther, true);
-                    return;
-                }
-                setVisible(uniOther, false);
-                setVisible(facOther, false);
-                setVisible(carOther, false);
-
-                // carga de facultades dependiente de universidad
-                clearSelect(facSelect, 'Facultad');
-                clearSelect(carSelect, 'Carrera');
-                enable(facSelect, true);
-                enable(carSelect, false);
-
-                try {
-                    const res = await fetch('/api/academics/faculties?university_id=' + encodeURIComponent(v));
-                    const list = await res.json();
-                    list.forEach(f => {
-                        const o = document.createElement('option');
-                        o.value = String(f.id);
-                        o.textContent = f.name;
-                        facSelect.insertBefore(o, facSelect.querySelector('option[value="__other__"]'));
-                    });
-                } catch (e) { console.warn('No pude cargar facultades', e); }
-            });
-
-            // al cambiar facultad
-            facSelect.addEventListener('change', async () => {
-                const v = facSelect.value;
-
-                if (v === '__other__') {
-                    setVisible(facOther, true);
-                    enable(carSelect, false);
-                    setVisible(carOther, true);
-                    return;
-                }
-                setVisible(facOther, false);
-                setVisible(carOther, false);
-
-                clearSelect(carSelect, 'Carrera');
-                enable(carSelect, true);
-
-                try {
-                    const res = await fetch('/api/academics/careers?faculty_id=' + encodeURIComponent(v));
-                    const list = await res.json();
-                    list.forEach(c => {
-                        const o = document.createElement('option');
-                        o.value = String(c.id);
-                        o.textContent = c.name;
-                        carSelect.insertBefore(o, carSelect.querySelector('option[value="__other__"]'));
-                    });
-                } catch (e) { console.warn('No pude cargar carreras', e); }
-            });
-
-            // al elegir "Otra" en carrera
-            carSelect.addEventListener('change', () => {
-                const v = carSelect.value;
-                setVisible(carOther, v === '__other__');
-            });
-
-            // submit: rellenamos los inputs reales que lee el backend
-            document.getElementById('completeProfileForm').addEventListener('submit', (ev) => {
-                // Universidad
-                if (uniSelect.value === '') {
-                    alert('Primero seleccioná la Universidad.');
-                    ev.preventDefault(); return;
-                }
-                if (uniSelect.value === '__other__') {
-                    if (!uniOther.value.trim()) { alert('Escribí tu Universidad.'); ev.preventDefault(); return; }
-                    $('university').value = uniOther.value.trim();
-                    // en modo "otra", tomamos también libre para facultad/carrera
-                    if (!facOther.value.trim()) { alert('Escribí tu Facultad.'); ev.preventDefault(); return; }
-                    if (!carOther.value.trim()) { alert('Escribí tu Carrera.'); ev.preventDefault(); return; }
-                    $('faculty').value = facOther.value.trim();
-                    $('career').value = carOther.value.trim();
-                    return; // ok
-                }
-
-                // Universidad elegida de la lista → guardamos el texto visible
-                $('university').value = uniSelect.options[uniSelect.selectedIndex].text;
-
-                // Facultad
-                if (facSelect.value === '') { alert('Seleccioná la Facultad.'); ev.preventDefault(); return; }
-                if (facSelect.value === '__other__') {
-                    if (!facOther.value.trim()) { alert('Escribí tu Facultad.'); ev.preventDefault(); return; }
-                    $('faculty').value = facOther.value.trim();
-                } else {
-                    $('faculty').value = facSelect.options[facSelect.selectedIndex].text;
-                }
-
-                // Carrera
-                if (carSelect.value === '') { alert('Seleccioná la Carrera.'); ev.preventDefault(); return; }
-                if (carSelect.value === '__other__') {
-                    if (!carOther.value.trim()) { alert('Escribí tu Carrera.'); ev.preventDefault(); return; }
-                    $('career').value = carOther.value.trim();
-                } else {
-                    $('career').value = carSelect.options[carSelect.selectedIndex].text;
-                }
-            });
-        })();
-    </script>
-
-
-    <p style="margin-top:12px;font-size:12px;color:#666">
-        Podrás editar esta información luego desde tu perfil.
-    </p>
 </div>
 
-<!-- Si tenés selects dinámicos, podés reemplazar inputs por selects y usar tu JS -->
-<script src="{{ url_for('static', filename='js/dynamic_selects.js') }}"></script>
+<script>
+    (function () {
+        const $ = (id) => document.getElementById(id);
+
+        const uniSelect = $('uniSelect');
+        const facSelect = $('facSelect');
+        const carSelect = $('carSelect');
+        const uniOther = $('uniOther');
+        const facOther = $('facOther');
+        const carOther = $('carOther');
+
+        let chosenUniversityId = null;
+        let chosenFacultyId = null;
+
+        function setVisible(el, v) { el.style.display = v ? '' : 'none'; }
+        function enable(el, v) { el.disabled = !v; }
+        function clearSelect(sel, ph) {
+            sel.innerHTML = '';
+            const a = document.createElement('option');
+            a.value = ''; a.disabled = true; a.selected = true; a.textContent = ph;
+            sel.appendChild(a);
+            const b = document.createElement('option');
+            b.value = '__other__'; b.textContent = 'Otra…';
+            sel.appendChild(b);
+        }
+
+        // ====== carga inicial ======
+        fetch('/api/academics/universities')
+            .then(r => r.json()).then(list => {
+                const other = uniSelect.querySelector('option[value="__other__"]');
+                (list || []).forEach(u => {
+                    const o = document.createElement('option');
+                    o.value = String(u.id); o.textContent = u.name;
+                    uniSelect.insertBefore(o, other);
+                });
+            });
+
+        // ====== Universidad ======
+        uniSelect.addEventListener('change', async () => {
+            const v = uniSelect.value;
+
+            if (v === '__other__') {
+                chosenUniversityId = null;
+                setVisible(uniOther, true);
+                // cuando es “otra”, pedimos FAC y CAR libres
+                setVisible(facOther, true); setVisible(carOther, true);
+                enable(facSelect, false); enable(carSelect, false);
+                return;
+            }
+            setVisible(uniOther, false); setVisible(facOther, false); setVisible(carOther, false);
+
+            chosenUniversityId = parseInt(v, 10);
+            clearSelect(facSelect, 'Elegí tu Facultad');
+            clearSelect(carSelect, 'Elegí tu Carrera');
+            enable(facSelect, true); enable(carSelect, false);
+
+            // cargar facultades de esa uni
+            try {
+                const res = await fetch('/api/academics/faculties?university_id=' + encodeURIComponent(v));
+                const list = await res.json();
+                const other = facSelect.querySelector('option[value="__other__"]');
+                (list || []).forEach(f => {
+                    const o = document.createElement('option');
+                    o.value = String(f.id); o.textContent = f.name;
+                    facSelect.insertBefore(o, other);
+                });
+            } catch (_) { }
+        });
+
+        // ====== Facultad ======
+        facSelect.addEventListener('change', async () => {
+            const v = facSelect.value;
+
+            if (v === '__other__') {
+                chosenFacultyId = null;
+                setVisible(facOther, true);
+                setVisible(carOther, true);
+                enable(carSelect, false);
+                return;
+            }
+            setVisible(facOther, false); setVisible(carOther, false);
+
+            chosenFacultyId = parseInt(v, 10);
+            clearSelect(carSelect, 'Elegí tu Carrera');
+            enable(carSelect, true);
+
+            try {
+                const res = await fetch('/api/academics/careers?faculty_id=' + encodeURIComponent(v));
+                const list = await res.json();
+                const other = carSelect.querySelector('option[value="__other__"]');
+                (list || []).forEach(c => {
+                    const o = document.createElement('option');
+                    o.value = String(c.id); o.textContent = c.name;
+                    carSelect.insertBefore(o, other);
+                });
+            } catch (_) { }
+        });
+
+        // ====== Carrera ======
+        carSelect.addEventListener('change', () => {
+            setVisible(carOther, carSelect.value === '__other__');
+        });
+
+        // ====== helpers de creación “aprendida” ======
+        async function createUniversityIfNeeded() {
+            if (uniSelect.value !== '__other__') return { id: chosenUniversityId, name: uniSelect.options[uniSelect.selectedIndex].text };
+            const name = uniOther.value.trim();
+            if (!name) throw new Error('Escribí tu Universidad.');
+            const res = await fetch('/api/academics/universities', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            const u = await res.json();
+            if (!res.ok) throw new Error(u?.error || 'No se pudo crear la Universidad');
+            chosenUniversityId = u.id;
+            return { id: u.id, name: u.name };
+        }
+
+        async function createFacultyIfNeeded(universityId) {
+            if (facSelect.value !== '__other__') return { id: chosenFacultyId, name: facSelect.options[facSelect.selectedIndex].text };
+            const name = facOther.value.trim();
+            if (!name) throw new Error('Escribí tu Facultad.');
+            const res = await fetch('/api/academics/faculties', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, university_id: universityId })
+            });
+            const f = await res.json();
+            if (!res.ok) throw new Error(f?.error || 'No se pudo crear la Facultad');
+            chosenFacultyId = f.id;
+            return { id: f.id, name: f.name };
+        }
+
+        async function createCareerIfNeeded(facultyId) {
+            if (carSelect.value !== '__other__') return { name: carSelect.options[carSelect.selectedIndex].text };
+            const name = carOther.value.trim();
+            if (!name) throw new Error('Escribí tu Carrera.');
+            const res = await fetch('/api/academics/careers', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, faculty_id: facultyId })
+            });
+            const c = await res.json();
+            if (!res.ok) throw new Error(c?.error || 'No se pudo crear la Carrera');
+            return { name: c.name };
+        }
+
+        // ====== Submit ======
+        document.getElementById('completeProfileForm').addEventListener('submit', async (ev) => {
+            ev.preventDefault();
+            try {
+                // 1) asegurar universidad
+                if (!uniSelect.value && !uniOther.value.trim()) {
+                    alert('Seleccioná o escribí tu Universidad.'); return;
+                }
+                const u = await createUniversityIfNeeded();
+
+                // 2) asegurar facultad (si el usuario eligió combo vacío, avisar)
+                if (!facSelect.value && !facOther.value.trim()) {
+                    alert('Seleccioná o escribí tu Facultad.'); return;
+                }
+                const f = await createFacultyIfNeeded(u.id);
+
+                // 3) asegurar carrera
+                if (!carSelect.value && !carOther.value.trim()) {
+                    alert('Seleccioná o escribí tu Carrera.'); return;
+                }
+                const c = await createCareerIfNeeded(f.id);
+
+                // completar hidden con TEXTO (lo que usa tu app.py)
+                $('university').value = u.name;
+                $('faculty').value = f.name;
+                $('career').value = c.name;
+
+                ev.target.submit();
+            } catch (e) {
+                alert(e.message || 'No se pudo guardar. Intentá de nuevo.');
+            }
+        });
+    })();
+</script>
 {% endblock %}
