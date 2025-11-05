@@ -330,13 +330,15 @@ def _promote_admin_once():
 # -----------------------------------------------------------------------------
 # Rutas principales
 # -----------------------------------------------------------------------------
+# app.py
 @app.route("/")
 def index():
     with Session() as s:
         notes = s.execute(
             select(Note).where(Note.is_active == True).order_by(Note.created_at.desc()).limit(30)
         ).scalars().all()
-    return render_template("index.html", notes=notes)
+    return render_template("index.html", notes=notes, include_dynamic_selects=True)
+
 
 @app.route("/search")
 def search():
@@ -417,6 +419,7 @@ def auth_session_login():
     except Exception as e:
         app.logger.exception("session_login error")
         return {"ok": False, "error": str(e)}, 500
+
 
 @app.get("/complete_profile")
 def complete_profile():
