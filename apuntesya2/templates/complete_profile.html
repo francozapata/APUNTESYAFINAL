@@ -174,17 +174,22 @@
             if (v === '__other__') {
                 chosenUniversityId = null;
                 setVisible(uniOther, true);
-                // cuando es “otra”, pedimos FAC y CAR libres
-                setVisible(facOther, true); setVisible(carOther, true);
-                enable(facSelect, false); enable(carSelect, false);
+                // modo manual: pedimos FAC y CAR libres
+                setVisible(facOther, true);
+                setVisible(carOther, true);
+                enable(facSelect, false);
+                enable(carSelect, false);
                 return;
             }
-            setVisible(uniOther, false); setVisible(facOther, false); setVisible(carOther, false);
+            setVisible(uniOther, false);
+            setVisible(facOther, false);
+            setVisible(carOther, false);
 
             chosenUniversityId = parseInt(v, 10);
             clearSelect(facSelect, 'Elegí tu Facultad');
             clearSelect(carSelect, 'Elegí tu Carrera');
-            enable(facSelect, true); enable(carSelect, false);
+            enable(facSelect, true);
+            enable(carSelect, false);
 
             // cargar facultades de esa uni
             try {
@@ -210,7 +215,8 @@
                 enable(carSelect, false);
                 return;
             }
-            setVisible(facOther, false); setVisible(carOther, false);
+            setVisible(facOther, false);
+            setVisible(carOther, false);
 
             chosenFacultyId = parseInt(v, 10);
             clearSelect(carSelect, 'Elegí tu Carrera');
@@ -235,9 +241,12 @@
 
         // ====== helpers de creación “aprendida” ======
         async function createUniversityIfNeeded() {
-            if (uniSelect.value !== '__other__') return { id: chosenUniversityId, name: uniSelect.options[uniSelect.selectedIndex].text };
+            if (uniSelect.value !== '__other__')
+                return { id: chosenUniversityId, name: uniSelect.options[uniSelect.selectedIndex].text };
+
             const name = uniOther.value.trim();
             if (!name) throw new Error('Escribí tu Universidad.');
+
             const res = await fetch('/api/academics/universities', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name })
@@ -249,9 +258,12 @@
         }
 
         async function createFacultyIfNeeded(universityId) {
-            if (facSelect.value !== '__other__') return { id: chosenFacultyId, name: facSelect.options[facSelect.selectedIndex].text };
+            if (facSelect.value !== '__other__')
+                return { id: chosenFacultyId, name: facSelect.options[facSelect.selectedIndex].text };
+
             const name = facOther.value.trim();
             if (!name) throw new Error('Escribí tu Facultad.');
+
             const res = await fetch('/api/academics/faculties', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, university_id: universityId })
@@ -263,9 +275,12 @@
         }
 
         async function createCareerIfNeeded(facultyId) {
-            if (carSelect.value !== '__other__') return { name: carSelect.options[carSelect.selectedIndex].text };
+            if (carSelect.value !== '__other__')
+                return { name: carSelect.options[carSelect.selectedIndex].text };
+
             const name = carOther.value.trim();
             if (!name) throw new Error('Escribí tu Carrera.');
+
             const res = await fetch('/api/academics/careers', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, faculty_id: facultyId })
@@ -274,6 +289,53 @@
             if (!res.ok) throw new Error(c?.error || 'No se pudo crear la Carrera');
             return { name: c.name };
         }
+
+        // ====== NUEVO: crear universidad al salir del input y pasar a modo “select” ======
+        uniOther.addEventListener('blur', async () => {
+            // Solo si está visible y hay texto
+            if (uniSelect.value !== '__other__') return;
+            const typed = uniOther.value.trim();
+            if (!typed) return;
+
+            try {
+                const u = await createUniversityIfNeeded(); // crea u obtiene
+                // Cambiar a modo "lista"
+                setVisible(uniOther, false);
+
+                const otherOpt = uniSelect.querySelector('option[value="__other__"]');
+                // Insertar la nueva opción si no existe aún
+                let opt = Array.from(uniSelect.options).find(o => o.value === String(u.id));
+                if (!opt) {
+                    opt = document.createElement('option');
+                    opt.value = String(u.id);
+                    opt.textContent = u.name;
+                    uniSelect.insertBefore(opt, otherOpt);
+                }
+                uniSelect.value = String(u.id);
+                chosenUniversityId = u.id;
+
+                // cargar facultades y habilitar select
+                clearSelect(facSelect, 'Elegí tu Facultad');
+                enable(facSelect, true);
+                enable(carSelect, false);
+
+                const res = await fetch('/api/academics/faculties?university_id=' + encodeURIComponent(u.id));
+                const list = await res.json();
+                const otherF = facSelect.querySelector('option[value="__other__"]');
+                (list || []).forEach(f => {
+                    const o = document.createElement('option');
+                    o.value = String(f.id); o.textContent = f.name;
+                    facSelect.insertBefore(o, otherF);
+                });
+
+                // volvemos a modo select para fac/carrera
+                setVisible(facOther, false);
+                setVisible(carOther, false);
+            } catch (e) {
+                console.warn('No se pudo crear la universidad al vuelo:', e);
+                // si falla, se mantiene el modo manual
+            }
+        });
 
         // ====== Submit ======
         document.getElementById('completeProfileForm').addEventListener('submit', async (ev) => {
@@ -285,7 +347,7 @@
                 }
                 const u = await createUniversityIfNeeded();
 
-                // 2) asegurar facultad (si el usuario eligió combo vacío, avisar)
+                // 2) asegurar facultad
                 if (!facSelect.value && !facOther.value.trim()) {
                     alert('Seleccioná o escribí tu Facultad.'); return;
                 }
@@ -297,7 +359,7 @@
                 }
                 const c = await createCareerIfNeeded(f.id);
 
-                // completar hidden con TEXTO (lo que usa tu app.py)
+                // completar hidden con TEXTO (lo que usa el backend)
                 $('university').value = u.name;
                 $('faculty').value = f.name;
                 $('career').value = c.name;
