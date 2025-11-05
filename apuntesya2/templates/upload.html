@@ -1,130 +1,22 @@
 {% extends "base.html" %}
 {% block content %}
-<style>
-  .card {
-    max-width: 880px;
-    margin: 32px auto;
-    padding: 24px;
-    border: 1px solid #eee;
-    border-radius: 14px;
-    background: #fff;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, .04);
-  }
-
-  .card h2 {
-    margin: 0 0 8px 0;
-    font-size: 24px;
-  }
-
-  .card h3 {
-    margin: 12px 0 8px;
-    font-size: 18px;
-  }
-
-  label {
-    display: block;
-    font-weight: 600;
-    margin: 14px 0 6px;
-  }
-
-  .input,
-  .select {
-    width: 100%;
-    padding: 12px 14px;
-    border: 1px solid #d9d9e3;
-    border-radius: 10px;
-    background: #fff;
-    font-size: 15px;
-  }
-
-  .input:focus,
-  .select:focus {
-    outline: none;
-    border-color: #6ca3ff;
-    box-shadow: 0 0 0 3px rgba(108, 163, 255, .15);
-  }
-
-  .grid {
-    display: grid;
-    gap: 14px;
-    grid-template-columns: 1fr;
-  }
-
-  @media(min-width: 820px) {
-    .grid {
-      grid-template-columns: repeat(3, 1fr);
-    }
-  }
-
-  .btn {
-    display: inline-block;
-    margin-top: 18px;
-    padding: 10px 18px;
-    border-radius: 10px;
-    border: 0;
-    background: #4478ff;
-    color: #fff;
-    font-weight: 600;
-    cursor: pointer;
-    transition: transform .02s, box-shadow .2s;
-    box-shadow: 0 6px 16px rgba(68, 120, 255, .2);
-  }
-
-  .btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 22px rgba(68, 120, 255, .28);
-  }
-
-  .mt-2 {
-    margin-top: 8px;
-  }
-
-  .mt-3 {
-    margin-top: 12px;
-  }
-
-  .mt-4 {
-    margin-top: 16px;
-  }
-
-  .text-sm {
-    font-size: 13px;
-  }
-
-  .list-disc {
-    list-style: disc;
-  }
-
-  .pl-6 {
-    padding-left: 1.25rem;
-  }
-</style>
-
 <div class="card">
   <h2>Subir apunte (PDF)</h2>
-
-  <form method="post" enctype="multipart/form-data" id="uploadForm">
-    <!-- Título / Descripción -->
-    <label>Título</label>
-    <input class="input" name="title" required>
-
-    <label>Descripción</label>
-    <input class="input" name="description" required>
-
-    <!-- Selects “inteligentes” -->
+  <form method="post" enctype="multipart/form-data">
+    <label>Título</label><input class="input" name="title" required>
+    <label>Descripción</label><input class="input" name="description" required>
     <div class="grid">
-      <!-- Universidad -->
       <div>
         <label>Universidad</label>
         <select id="uniSelect" class="select">
           <option value="" selected disabled>Elegí tu Universidad</option>
+          <!-- se llena por JS -->
           <option value="__other__">Otra…</option>
         </select>
         <input id="uniOther" class="input" type="text" placeholder="Escribí tu Universidad"
           style="display:none;margin-top:8px;">
       </div>
 
-      <!-- Facultad -->
       <div>
         <label>Facultad</label>
         <select id="facSelect" class="select" disabled>
@@ -135,7 +27,6 @@
           style="display:none;margin-top:8px;">
       </div>
 
-      <!-- Carrera -->
       <div>
         <label>Carrera</label>
         <select id="carSelect" class="select" disabled>
@@ -147,20 +38,17 @@
       </div>
     </div>
 
-    <!-- Campos REALES que recibe el backend -->
+    <!-- Campos reales que lee el backend -->
     <input type="hidden" name="university" id="university">
     <input type="hidden" name="faculty" id="faculty">
     <input type="hidden" name="career" id="career">
-
-    <!-- Precio y resumen -->
-    <label class="mt-3">Precio (ARS). Dejar en blanco para gratis</label>
-    <input class="input" name="price" type="number" min="0" step="0.01">
-
+    <label>Precio (ARS). Dejar en blanco para gratis</label><input class="input" name="price" type="number" min="0"
+      step="0.01">
     <div class="card mt-3">
       <h3>Información importante</h3>
       <ul class="list-disc pl-6">
-        <li>La plataforma aplica una <strong>comisión del {{ config.PLATFORM_FEE_PERCENT or config.PLATFORM_FEE_PCT or 5
-            }}%</strong> sobre el precio de venta.</li>
+        <li>La plataforma aplica una <strong>comisión del {{ config.PLATFORM_FEE_PCT or 5 }}%</strong> sobre el precio
+          de venta.</li>
         <li><strong>Mercado Pago</strong> puede aplicar costos y/o retenciones adicionales (aprox. 6,4% según tipo de
           cuenta y medio de pago).</li>
         {% if config.IIBB_ENABLED %}
@@ -173,17 +61,13 @@
         <a href="{{ url_for('help_mp') }}" class="text-blue-600 hover:underline">Ver instructivo de vinculación</a>.
       </p>
     </div>
-
-    <div class="card mt-4" id="resumen-publicacion"
-      data-ay="{{ config.PLATFORM_FEE_PERCENT or config.PLATFORM_FEE_PCT or 5 }}"
+    <!-- Resumen de publicación -->
+    <div class="card mt-4" id="resumen-publicacion" data-ay="{{ config.PLATFORM_FEE_PCT or 5 }}"
       data-mp="{{ MP_FEE_IMMEDIATE_TOTAL_PCT if MP_FEE_IMMEDIATE_TOTAL_PCT is defined else 7.61 }}">
       <h3>Resumen de publicación</h3>
-      <p class="text-sm">
-        Este cálculo es estimativo. Usa comisión de ApuntesYa (<strong>{{ config.PLATFORM_FEE_PERCENT or
-          config.PLATFORM_FEE_PCT or 5 }}%</strong>)
-        y comisión de Mercado Pago para <strong>acreditación inmediata</strong> (≈ <strong>{{ '%.2f' %
-          (MP_FEE_IMMEDIATE_TOTAL_PCT if MP_FEE_IMMEDIATE_TOTAL_PCT is defined else 7.61) }}%</strong>).
-      </p>
+      <p class="text-sm">Este cálculo es estimativo. Usa comisión de ApuntesYa (<strong>{{ config.PLATFORM_FEE_PCT or 5
+          }}%</strong>) y comisión de Mercado Pago para <strong>acreditación inmediata</strong> (≈ <strong>{{ '%.2f' %
+          (MP_FEE_IMMEDIATE_TOTAL_PCT if MP_FEE_IMMEDIATE_TOTAL_PCT is defined else 7.61) }}%</strong>).</p>
       <div class="grid">
         <div><strong>Precio:</strong> $<span id="rp-precio">0.00</span></div>
         <div><strong>Fee AY:</strong> $<span id="rp-ay">0.00</span></div>
@@ -202,250 +86,37 @@
       </label>
     </div>
 
-    <label class="mt-3">Archivo PDF</label>
-    <input class="input" type="file" name="file" accept="application/pdf" required>
+    <script>
+      (function () {
+        function toNum(x) { var n = parseFloat(x); return isNaN(n) ? 0 : n; }
+        var precioInput = document.querySelector('input[name="price"]');
+        var box = document.getElementById('resumen-publicacion');
+        if (!box) return;
+        var ayPct = parseFloat(box.getAttribute('data-ay') || '5');
+        var mpPct = parseFloat(box.getAttribute('data-mp') || '7.61');
 
+        function recalc() {
+          var p = toNum(precioInput && precioInput.value);
+          var feeAY = +(p * (ayPct / 100)).toFixed(2);
+          var feeMP = +(p * (mpPct / 100)).toFixed(2);
+          var neto = +(p - feeAY - feeMP).toFixed(2);
+          var $ = function (id) { return document.getElementById(id) };
+          $('rp-precio').textContent = p.toFixed(2);
+          $('rp-ay').textContent = feeAY.toFixed(2);
+          $('rp-mp').textContent = feeMP.toFixed(2);
+          $('rp-neto').textContent = neto.toFixed(2);
+        }
+        if (precioInput) {
+          precioInput.addEventListener('input', recalc);
+          recalc();
+        }
+      })();
+    </script>
+
+
+    <label>Archivo PDF</label><input class="input" type="file" name="file" accept="application/pdf" required>
     <button class="btn">Subir</button>
   </form>
+
 </div>
-
-<script>
-  (function () {
-    // Prefills desde el usuario (texto), para intentar matchear o dejar como “Otra…”
-    const PREF = {
-      uni: {{ (current_user.university or '')| tojson
-  }},
-  fac: { { (current_user.faculty or '')| tojson } },
-  car: { { (current_user.career or '')| tojson } }
-  };
-
-  const $ = (id) => document.getElementById(id);
-
-  const uniSelect = $('uniSelect');
-  const facSelect = $('facSelect');
-  const carSelect = $('carSelect');
-  const uniOther = $('uniOther');
-  const facOther = $('facOther');
-  const carOther = $('carOther');
-
-  let chosenUniversityId = null;
-  let chosenFacultyId = null;
-
-  function setVisible(el, v) { el.style.display = v ? '' : 'none'; }
-  function enable(el, v) { el.disabled = !v; }
-  function clearSelect(sel, ph) {
-    sel.innerHTML = '';
-    const a = document.createElement('option');
-    a.value = ''; a.disabled = true; a.selected = true; a.textContent = ph; sel.appendChild(a);
-    const b = document.createElement('option');
-    b.value = '__other__'; b.textContent = 'Otra…'; sel.appendChild(b);
-  }
-
-  // ===== Carga inicial universidades =====
-  fetch('/api/academics/universities')
-    .then(r => r.json())
-    .then(list => {
-      const other = uniSelect.querySelector('option[value="__other__"]');
-      (list || []).forEach(u => {
-        const o = document.createElement('option');
-        o.value = String(u.id); o.textContent = u.name;
-        uniSelect.insertBefore(o, other);
-      });
-
-      // Prefill intento por texto
-      if (PREF.uni) {
-        const opt = Array.from(uniSelect.options).find(o => o.text.trim().toLowerCase() === PREF.uni.trim().toLowerCase());
-        if (opt) {
-          uniSelect.value = opt.value;
-          uniSelect.dispatchEvent(new Event('change'));
-        } else {
-          // no existe -> “Otra…”
-          uniSelect.value = '__other__';
-          setVisible(uniOther, true);
-          uniOther.value = PREF.uni;
-          // Cuando es “Otra”, pedimos también libres fac/car
-          setVisible(facOther, true); setVisible(carOther, true);
-          enable(facSelect, false); enable(carSelect, false);
-        }
-      }
-    });
-
-  // ===== Universidad =====
-  uniSelect.addEventListener('change', async () => {
-    const v = uniSelect.value;
-
-    if (v === '__other__') {
-      chosenUniversityId = null;
-      setVisible(uniOther, true);
-      setVisible(facOther, true); setVisible(carOther, true);
-      enable(facSelect, false); enable(carSelect, false);
-      return;
-    }
-    setVisible(uniOther, false); setVisible(facOther, false); setVisible(carOther, false);
-
-    chosenUniversityId = parseInt(v, 10);
-    clearSelect(facSelect, 'Elegí tu Facultad');
-    clearSelect(carSelect, 'Elegí tu Carrera');
-    enable(facSelect, true); enable(carSelect, false);
-
-    try {
-      const res = await fetch('/api/academics/faculties?university_id=' + encodeURIComponent(v));
-      const list = await res.json();
-      const other = facSelect.querySelector('option[value="__other__"]');
-      (list || []).forEach(f => {
-        const o = document.createElement('option');
-        o.value = String(f.id); o.textContent = f.name;
-        facSelect.insertBefore(o, other);
-      });
-
-      // Prefill facultad si tenemos texto guardado
-      if (PREF.fac) {
-        const optF = Array.from(facSelect.options).find(o => o.text.trim().toLowerCase() === PREF.fac.trim().toLowerCase());
-        if (optF) {
-          facSelect.value = optF.value;
-          facSelect.dispatchEvent(new Event('change'));
-        } else {
-          facSelect.value = '__other__';
-          setVisible(facOther, true); facOther.value = PREF.fac;
-          setVisible(carOther, true); enable(carSelect, false);
-        }
-      }
-    } catch (_) { }
-  });
-
-  // ===== Facultad =====
-  facSelect.addEventListener('change', async () => {
-    const v = facSelect.value;
-
-    if (v === '__other__') {
-      chosenFacultyId = null;
-      setVisible(facOther, true);
-      setVisible(carOther, true);
-      enable(carSelect, false);
-      return;
-    }
-    setVisible(facOther, false); setVisible(carOther, false);
-
-    chosenFacultyId = parseInt(v, 10);
-    clearSelect(carSelect, 'Elegí tu Carrera');
-    enable(carSelect, true);
-
-    try {
-      const res = await fetch('/api/academics/careers?faculty_id=' + encodeURIComponent(v));
-      const list = await res.json();
-      const other = carSelect.querySelector('option[value="__other__"]');
-      (list || []).forEach(c => {
-        const o = document.createElement('option');
-        o.value = String(c.id); o.textContent = c.name;
-        carSelect.insertBefore(o, other);
-      });
-
-      // Prefill carrera si tenemos texto guardado
-      if (PREF.car) {
-        const optC = Array.from(carSelect.options).find(o => o.text.trim().toLowerCase() === PREF.car.trim().toLowerCase());
-        if (optC) {
-          carSelect.value = optC.value;
-        } else {
-          carSelect.value = '__other__';
-          setVisible(carOther, true);
-          carOther.value = PREF.car;
-        }
-      }
-    } catch (_) { }
-  });
-
-  // ===== Carrera “Otra” =====
-  carSelect.addEventListener('change', () => {
-    setVisible(carOther, carSelect.value === '__other__');
-  });
-
-  // ===== Creación “aprendida” =====
-  async function createUniversityIfNeeded() {
-    if (uniSelect.value !== '__other__')
-      return { id: chosenUniversityId, name: uniSelect.options[uniSelect.selectedIndex].text };
-    const name = uniOther.value.trim();
-    if (!name) throw new Error('Escribí tu Universidad.');
-    const res = await fetch('/api/academics/universities', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name })
-    });
-    const u = await res.json();
-    if (!res.ok) throw new Error(u?.error || 'No se pudo crear la Universidad');
-    chosenUniversityId = u.id;
-    return { id: u.id, name: u.name };
-  }
-
-  async function createFacultyIfNeeded(universityId) {
-    if (facSelect.value !== '__other__')
-      return { id: chosenFacultyId, name: facSelect.options[facSelect.selectedIndex].text };
-    const name = facOther.value.trim();
-    if (!name) throw new Error('Escribí tu Facultad.');
-    const res = await fetch('/api/academics/faculties', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, university_id: universityId })
-    });
-    const f = await res.json();
-    if (!res.ok) throw new Error(f?.error || 'No se pudo crear la Facultad');
-    chosenFacultyId = f.id;
-    return { id: f.id, name: f.name };
-  }
-
-  async function createCareerIfNeeded(facultyId) {
-    if (carSelect.value !== '__other__')
-      return { name: carSelect.options[carSelect.selectedIndex].text };
-    const name = carOther.value.trim();
-    if (!name) throw new Error('Escribí tu Carrera.');
-    const res = await fetch('/api/academics/careers', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, faculty_id: facultyId })
-    });
-    const c = await res.json();
-    if (!res.ok) throw new Error(c?.error || 'No se pudo crear la Carrera');
-    return { name: c.name };
-  }
-
-  // ===== Resumen precio =====
-  (function () {
-    function toNum(x) { const n = parseFloat(x); return isNaN(n) ? 0 : n; }
-    const precioInput = document.querySelector('input[name="price"]');
-    const box = document.getElementById('resumen-publicacion'); if (!box) return;
-    const ayPct = parseFloat(box.getAttribute('data-ay') || '5');
-    const mpPct = parseFloat(box.getAttribute('data-mp') || '7.61');
-
-    function recalc() {
-      const p = toNum(precioInput && precioInput.value);
-      const feeAY = +(p * (ayPct / 100)).toFixed(2);
-      const feeMP = +(p * (mpPct / 100)).toFixed(2);
-      const neto = +(p - feeAY - feeMP).toFixed(2);
-      document.getElementById('rp-precio').textContent = p.toFixed(2);
-      document.getElementById('rp-ay').textContent = feeAY.toFixed(2);
-      document.getElementById('rp-mp').textContent = feeMP.toFixed(2);
-      document.getElementById('rp-neto').textContent = neto.toFixed(2);
-    }
-    if (precioInput) { precioInput.addEventListener('input', recalc); recalc(); }
-  })();
-
-  // ===== Submit =====
-  document.getElementById('uploadForm').addEventListener('submit', async (ev) => {
-    // Validaciones mínimas
-    if (!uniSelect.value && !uniOther.value.trim()) { ev.preventDefault(); alert('Seleccioná o escribí tu Universidad.'); return; }
-    if (!facSelect.value && !facOther.value.trim()) { ev.preventDefault(); alert('Seleccioná o escribí tu Facultad.'); return; }
-    if (!carSelect.value && !carOther.value.trim()) { ev.preventDefault(); alert('Seleccioná o escribí tu Carrera.'); return; }
-
-    try {
-      // Crear si hace falta y completar los hidden que lee el backend
-      const u = await createUniversityIfNeeded();
-      const f = await createFacultyIfNeeded(u.id);
-      const c = await createCareerIfNeeded(f.id);
-      $('university').value = u.name;
-      $('faculty').value = f.name;
-      $('career').value = c.name;
-      // dejar que siga el submit normal
-    } catch (e) {
-      ev.preventDefault();
-      alert(e.message || 'No se pudo preparar los datos. Intentá de nuevo.');
-    }
-  });
-}) ();
-</script>
 {% endblock %}
