@@ -50,7 +50,7 @@
         grid-template-columns: 1fr;
     }
 
-    @media(min-width: 820px) {
+    @media(min-width:820px) {
         .grid {
             grid-template-columns: repeat(3, 1fr);
         }
@@ -276,7 +276,7 @@
 
         async function createCareerIfNeeded(facultyId) {
             if (carSelect.value !== '__other__')
-                return { name: carSelect.options[carSelect.selectedIndex].text };
+                return { id: null, name: carSelect.options[carSelect.selectedIndex].text };
 
             const name = carOther.value.trim();
             if (!name) throw new Error('Escribí tu Carrera.');
@@ -287,23 +287,21 @@
             });
             const c = await res.json();
             if (!res.ok) throw new Error(c?.error || 'No se pudo crear la Carrera');
-            return { name: c.name };
+            return { id: c.id || null, name: c.name };
         }
 
-        // ====== NUEVO: crear universidad al salir del input y pasar a modo “select” ======
+        // ====== NUEVO #1: crear universidad en blur y pasar a modo select ======
         uniOther.addEventListener('blur', async () => {
-            // Solo si está visible y hay texto
             if (uniSelect.value !== '__other__') return;
             const typed = uniOther.value.trim();
             if (!typed) return;
 
             try {
-                const u = await createUniversityIfNeeded(); // crea u obtiene
-                // Cambiar a modo "lista"
+                const u = await createUniversityIfNeeded();
+                // Cambiar a select
                 setVisible(uniOther, false);
 
                 const otherOpt = uniSelect.querySelector('option[value="__other__"]');
-                // Insertar la nueva opción si no existe aún
                 let opt = Array.from(uniSelect.options).find(o => o.value === String(u.id));
                 if (!opt) {
                     opt = document.createElement('option');
@@ -314,7 +312,7 @@
                 uniSelect.value = String(u.id);
                 chosenUniversityId = u.id;
 
-                // cargar facultades y habilitar select
+                // cargar facultades y habilitar
                 clearSelect(facSelect, 'Elegí tu Facultad');
                 enable(facSelect, true);
                 enable(carSelect, false);
@@ -328,12 +326,78 @@
                     facSelect.insertBefore(o, otherF);
                 });
 
-                // volvemos a modo select para fac/carrera
                 setVisible(facOther, false);
                 setVisible(carOther, false);
             } catch (e) {
                 console.warn('No se pudo crear la universidad al vuelo:', e);
-                // si falla, se mantiene el modo manual
+            }
+        });
+
+        // ====== NUEVO #2: crear facultad en blur, habilitar y poblar carreras ======
+        facOther.addEventListener('blur', async () => {
+            // Solo si estamos en modo "Otra…" de Facultad y hay texto
+            if (facSelect.value !== '__other__') return;
+            const typed = facOther.value.trim();
+            if (!typed) return;
+            if (!chosenUniversityId) return; // necesitamos la universidad
+
+            try {
+                const f = await createFacultyIfNeeded(chosenUniversityId);
+                // Pasar a select con la nueva facultad
+                setVisible(facOther, false);
+
+                const otherOpt = facSelect.querySelector('option[value="__other__"]');
+                let opt = Array.from(facSelect.options).find(o => o.value === String(f.id));
+                if (!opt) {
+                    opt = document.createElement('option');
+                    opt.value = String(f.id);
+                    opt.textContent = f.name;
+                    facSelect.insertBefore(opt, otherOpt);
+                }
+                facSelect.value = String(f.id);
+                chosenFacultyId = f.id;
+
+                // Habilitar y cargar carreras
+                clearSelect(carSelect, 'Elegí tu Carrera');
+                enable(carSelect, true);
+
+                const res = await fetch('/api/academics/careers?faculty_id=' + encodeURIComponent(f.id));
+                const list = await res.json();
+                const otherC = carSelect.querySelector('option[value="__other__"]');
+                (list || []).forEach(c => {
+                    const o = document.createElement('option');
+                    o.value = String(c.id); o.textContent = c.name;
+                    carSelect.insertBefore(o, otherC);
+                });
+
+                setVisible(carOther, false);
+            } catch (e) {
+                console.warn('No se pudo crear la facultad al vuelo:', e);
+            }
+        });
+
+        // ====== NUEVO #3 (opcional): crear carrera en blur y fijarla en el select ======
+        carOther.addEventListener('blur', async () => {
+            if (carSelect.value !== '__other__') return;
+            const typed = carOther.value.trim();
+            if (!typed) return;
+            if (!chosenFacultyId) return;
+
+            try {
+                const c = await createCareerIfNeeded(chosenFacultyId);
+                setVisible(carOther, false);
+
+                const otherOpt = carSelect.querySelector('option[value="__other__"]');
+                let opt = Array.from(carSelect.options).find(o => (o.textContent || '').trim().toLowerCase() === c.name.trim().toLowerCase());
+                if (!opt) {
+                    opt = document.createElement('option');
+                    opt.value = c.id ? String(c.id) : '__new__';
+                    opt.textContent = c.name;
+                    carSelect.insertBefore(opt, otherOpt);
+                }
+                carSelect.value = opt.value;
+            } catch (e) {
+                console.warn('No se pudo crear la carrera al vuelo:', e);
             }
         });
 
@@ -341,25 +405,25 @@
         document.getElementById('completeProfileForm').addEventListener('submit', async (ev) => {
             ev.preventDefault();
             try {
-                // 1) asegurar universidad
+                // 1) Universidad
                 if (!uniSelect.value && !uniOther.value.trim()) {
                     alert('Seleccioná o escribí tu Universidad.'); return;
                 }
                 const u = await createUniversityIfNeeded();
 
-                // 2) asegurar facultad
+                // 2) Facultad
                 if (!facSelect.value && !facOther.value.trim()) {
                     alert('Seleccioná o escribí tu Facultad.'); return;
                 }
                 const f = await createFacultyIfNeeded(u.id);
 
-                // 3) asegurar carrera
+                // 3) Carrera
                 if (!carSelect.value && !carOther.value.trim()) {
                     alert('Seleccioná o escribí tu Carrera.'); return;
                 }
                 const c = await createCareerIfNeeded(f.id);
 
-                // completar hidden con TEXTO (lo que usa el backend)
+                // completar hidden con TEXTO
                 $('university').value = u.name;
                 $('faculty').value = f.name;
                 $('career').value = c.name;
