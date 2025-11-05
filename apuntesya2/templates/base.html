@@ -57,8 +57,7 @@
       {% endif %}
       <a href="{{ url_for('logout') }}" class="btn ghost">Salir</a>
       {% else %}
-      <a href="{{ url_for('login') }}" class="btn ghost">Ingresar</a>
-      <a href="{{ url_for('register') }}" class="btn">Registrarse</a>
+      <a href="{{ url_for('login') }}" class="btn ghost">Ingresar/Registrarse</a>
       {% endif %}
       {% if current_user.is_authenticated %}
       <a href="{{ url_for('profile') }}" style="display:inline-flex;align-items:center;gap:8px">
