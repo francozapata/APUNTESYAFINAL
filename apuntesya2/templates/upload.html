@@ -5,38 +5,36 @@
   <form method="post" enctype="multipart/form-data">
     <label>Título</label><input class="input" name="title" required>
     <label>Descripción</label><input class="input" name="description" required>
-    <div class="grid">
-      <div>
-        <label>Universidad</label>
-        <select id="uniSelect" class="select">
-          <option value="" selected disabled>Elegí tu Universidad</option>
-          <!-- se llena por JS -->
-          <option value="__other__">Otra…</option>
-        </select>
-        <input id="uniOther" class="input" type="text" placeholder="Escribí tu Universidad"
-          style="display:none;margin-top:8px;">
-      </div>
 
-      <div>
-        <label>Facultad</label>
-        <select id="facSelect" class="select" disabled>
-          <option value="" selected disabled>Elegí tu Facultad</option>
-          <option value="__other__">Otra…</option>
-        </select>
-        <input id="facOther" class="input" type="text" placeholder="Escribí tu Facultad"
-          style="display:none;margin-top:8px;">
-      </div>
+    <form method="post" enctype="multipart/form-data" id="uploadForm">
+      <!-- … tus campos título/descr … -->
 
-      <div>
-        <label>Carrera</label>
-        <select id="carSelect" class="select" disabled>
-          <option value="" selected disabled>Elegí tu Carrera</option>
-          <option value="__other__">Otra…</option>
-        </select>
-        <input id="carOther" class="input" type="text" placeholder="Escribí tu Carrera"
-          style="display:none;margin-top:8px;">
-      </div>
-    </div>
+      {% set prefix = 'up' %}
+      {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
+      {% set initial = {'university': current_user.university, 'faculty': current_user.faculty, 'career':
+      current_user.career} %}
+      {% include 'components/academics_selects.html' %}
+
+      <!-- … fees, archivo, botón … -->
+      <button class="btn">Subir</button>
+    </form>
+
+    <script src="{{ url_for('static', filename='js/academics_selects.js') }}"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        initAcademicsSelects({
+          prefix: 'up',
+          formId: 'uploadForm',
+          enableCreate: true,
+          initial: {{ {
+            'university': current_user.university,
+            'faculty': current_user.faculty,
+            'career': current_user.career
+          } | tojson }}
+        });
+      });
+    </script>
+
 
     <!-- Campos reales que lee el backend -->
     <input type="hidden" name="university" id="university">

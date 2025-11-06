@@ -87,47 +87,23 @@
     {% if name %}<p class="lead">¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>{% endif %}
 
     <form method="POST" action="{{ url_for('complete_profile') }}" id="completeProfileForm">
-        <div class="grid">
-            <div>
-                <label>Universidad</label>
-                <select id="uniSelect" class="select">
-                    <option value="" selected disabled>Elegí tu Universidad</option>
-                    <!-- se llena por JS -->
-                    <option value="__other__">Otra…</option>
-                </select>
-                <input id="uniOther" class="input" type="text" placeholder="Escribí tu Universidad"
-                    style="display:none;margin-top:8px;">
-            </div>
-
-            <div>
-                <label>Facultad</label>
-                <select id="facSelect" class="select" disabled>
-                    <option value="" selected disabled>Elegí tu Facultad</option>
-                    <option value="__other__">Otra…</option>
-                </select>
-                <input id="facOther" class="input" type="text" placeholder="Escribí tu Facultad"
-                    style="display:none;margin-top:8px;">
-            </div>
-
-            <div>
-                <label>Carrera</label>
-                <select id="carSelect" class="select" disabled>
-                    <option value="" selected disabled>Elegí tu Carrera</option>
-                    <option value="__other__">Otra…</option>
-                </select>
-                <input id="carOther" class="input" type="text" placeholder="Escribí tu Carrera"
-                    style="display:none;margin-top:8px;">
-            </div>
-        </div>
-
-        <!-- Campos reales que lee el backend -->
-        <input type="hidden" name="university" id="university">
-        <input type="hidden" name="faculty" id="faculty">
-        <input type="hidden" name="career" id="career">
-
+        {% set prefix = 'cp' %}
+        {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
+        {% include 'components/academics_selects.html' %}
         <button class="btn" type="submit">Guardar y continuar</button>
-        <p class="muted">Podrás editar esta información luego desde tu perfil.</p>
     </form>
+
+    <script src="{{ url_for('static', filename='js/academics_selects.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            initAcademicsSelects({
+                prefix: 'cp',
+                formId: 'completeProfileForm',
+                enableCreate: true
+            });
+        });
+    </script>
+
 </div>
 
 <script>

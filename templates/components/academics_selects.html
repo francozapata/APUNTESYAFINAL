@@ -1,0 +1,48 @@
+{# templates/components/academics_selects.html #}
+{# Props:
+- prefix (string único por formulario, ej "cp", "up", "sr")
+- names (dict con los name=... que envía el form)
+- show_labels (bool, default true)
+- initial (dict opcional {university, faculty, career} para precargar texto)
+#}
+{% set prefix = prefix or 'acad' %}
+{% set names = names or {'university':'university','faculty':'faculty','career':'career'} %}
+{% set show_labels = show_labels if show_labels is defined else true %}
+{% set initial = initial or {} %}
+
+<div class="grid" id="{{ prefix }}-acad-wrapper" data-prefix="{{ prefix }}">
+    <div>
+        {% if show_labels %}<label>Universidad</label>{% endif %}
+        <select id="{{ prefix }}-uni" class="select">
+            <option value="" selected disabled>Elegí tu Universidad</option>
+            <option value="__other__">Otra…</option>
+        </select>
+        <input id="{{ prefix }}-uni-other" class="input" type="text" placeholder="Escribí tu Universidad"
+            style="display:none;margin-top:8px;" value="{{ initial.university or '' }}">
+    </div>
+
+    <div>
+        {% if show_labels %}<label>Facultad</label>{% endif %}
+        <select id="{{ prefix }}-fac" class="select" disabled>
+            <option value="" selected disabled>Elegí tu Facultad</option>
+            <option value="__other__">Otra…</option>
+        </select>
+        <input id="{{ prefix }}-fac-other" class="input" type="text" placeholder="Escribí tu Facultad"
+            style="display:none;margin-top:8px;" value="{{ initial.faculty or '' }}">
+    </div>
+
+    <div>
+        {% if show_labels %}<label>Carrera</label>{% endif %}
+        <select id="{{ prefix }}-car" class="select" disabled>
+            <option value="" selected disabled>Elegí tu Carrera</option>
+            <option value="__other__">Otra…</option>
+        </select>
+        <input id="{{ prefix }}-car-other" class="input" type="text" placeholder="Escribí tu Carrera"
+            style="display:none;margin-top:8px;" value="{{ initial.career or '' }}">
+    </div>
+</div>
+
+{# Hidden reales que lee el backend #}
+<input type="hidden" name="{{ names.university }}" id="{{ prefix }}-hidden-university">
+<input type="hidden" name="{{ names.faculty }}" id="{{ prefix }}-hidden-faculty">
+<input type="hidden" name="{{ names.career }}" id="{{ prefix }}-hidden-career">
