@@ -47,27 +47,29 @@
     </div>
     <div class="nav-actions">
       <a href="{{ url_for('index') }}" class="btn ghost">Inicio</a>
+
       {% if current_user.is_authenticated %}
       <a href="{{ url_for('upload_note') }}" class="btn">Subir apunte</a>
       <a href="{{ url_for('profile') }}" class="btn secondary">Perfil</a>
-      {% if current_user.is_authenticated and current_user.is_admin %}
-      <a href="{{ url_for('admin.dashboard') }}" class="btn ghost">Admin</a>
-      <a href="/admin/files" class="btn ghost">Archivos</a>
-      <a href="{{ url_for('admin.users_list') }}" class="btn ghost">Usuarios</a>
+
+      {# 👉 Unificamos en un solo botón cuando es admin #}
+      {% if current_user.is_admin %}
+      <a href="{{ url_for('admin_hub') }}" class="btn ghost">Administrar</a>
       {% endif %}
+
       <a href="{{ url_for('logout') }}" class="btn ghost">Salir</a>
-      {% else %}
-      <a href="{{ url_for('login') }}" class="btn ghost">Ingresar/Registrarse</a>
-      {% endif %}
-      {% if current_user.is_authenticated %}
+
       <a href="{{ url_for('profile') }}" style="display:inline-flex;align-items:center;gap:8px">
         <img
           src="{% if (current_user.imagen_de_perfil or current_user.profile_image) %}{{ url_for('static', filename='uploads/profile_images/' ~ (current_user.imagen_de_perfil or current_user.profile_image)) }}{% else %}{{ url_for('static', filename='img/default_profile.png') }}{% endif %}"
           class="nav-profile-pic" alt="Foto de perfil">
       </a>
+      {% else %}
+      <a href="{{ url_for('login') }}" class="btn ghost">Ingresar</a>
+      <a href="{{ url_for('register') }}" class="btn">Registrarse</a>
       {% endif %}
-
     </div>
+
   </div>
   <div class="container">
     {% with messages = get_flashed_messages(with_categories=true) %}

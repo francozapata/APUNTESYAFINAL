@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:1000px;margin:32px auto">
+    <h2>Administrar AP</h2>
+
+    <div class="tabs" style="display:flex;gap:8px;margin:12px 0">
+        <button id="tabUsers" class="btn">Usuarios</button>
+        <button id="tabFiles" class="btn ghost">Apuntes</button>
+    </div>
+
+    <div id="usersPane">
+        <input id="uQuery" class="input" placeholder="Buscar usuario (nombre/email)" style="margin-bottom:8px">
+        <div id="uList" class="card"></div>
+    </div>
+
+    <div id="filesPane" style="display:none">
+        <input id="fQuery" class="input" placeholder="Buscar por título o autor" style="margin-bottom:8px">
+        <div id="fList" class="card"></div>
+    </div>
+</div>
+<script>
+    (function () {
+        const uPane = document.getElementById('usersPane');
+        const fPane = document.getElementById('filesPane');
+        document.getElementById('tabUsers').onclick = () => { uPane.style.display = ''; fPane.style.display = 'none'; };
+        document.getElementById('tabFiles').onclick = () => { uPane.style.display = 'none'; fPane.style.display = ''; };
+
+        async function loadUsers() {
+            const q = document.getElementById('uQuery').value.trim();
+            const res = await fetch('/admin/api/users?q=' + encodeURIComponent(q), { method: 'POST' });
+            const list = await res.json();
+            const box = document.getElementById('uList');
+            box.innerHTML = list.map(u => `
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">
+        <div><strong>${u.name || '-'}</strong><br><small>${u.email}</small></div>
+        <button data-id="${u.id}" data-block="${u.blocked ? 0 : 1}" class="btn ${u.blocked ? '' : 'ghost'}">
+          ${u.blocked ? 'Desbloquear' : 'Bloquear'}
+        </button>
+      </div>`).join('') || 'Sin resultados';
+            box.querySelectorAll('button').forEach(b => {
+                b.onclick = async () => {
+                    await fetch('/admin/api/users/block', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: Number(b.dataset.id), block: b.dataset.block === '1' })
+                    });
+                    loadUsers();
+                };
+            });
+        }
+        async function loadFiles() {
+            const q = document.getElementById('fQuery').value.trim();
+            const res = await fetch('/admin/api/files?q=' + encodeURIComponent(q), { method: 'POST' });
+            const list = await res.json();
+            const box = document.getElementById('fList');
+            box.innerHTML = list.map(n => `
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">
+        <div><strong>${n.title}</strong><br><small>${n.author}</small> — $${n.price.toFixed(2)}</div>
+        <button data-id="${n.id}" class="btn ghost">Eliminar</button>
+      </div>`).join('') || 'Sin resultados';
+            box.querySelectorAll('button').forEach(b => {
+                b.onclick = async () => {
+                    if (!confirm('¿Eliminar apunte?')) return;
+                    await fetch('/admin/api/files/delete', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ file_id: Number(b.dataset.id) })
+                    });
+                    loadFiles();
+                };
+            });
+        }
+        document.getElementById('uQuery').addEventListener('input', () => loadUsers());
+        document.getElementById('fQuery').addEventListener('input', () => loadFiles());
+        loadUsers(); loadFiles();
+    })();
+</script>
+{% endblock %}
