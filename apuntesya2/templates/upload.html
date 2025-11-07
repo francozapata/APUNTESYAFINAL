@@ -1,120 +1,50 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
+<div class="card" style="max-width:1200px;margin:32px auto">
   <h2>Subir apunte (PDF)</h2>
-  <form method="post" enctype="multipart/form-data">
+  <form method="post" enctype="multipart/form-data" id="uploadForm">
     <label>Título</label><input class="input" name="title" required>
     <label>Descripción</label><input class="input" name="description" required>
 
-    <form method="post" enctype="multipart/form-data" id="uploadForm">
-      <!-- … tus campos título/descr … -->
+    {% set prefix = 'up' %}
+    {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
+    {% include 'components/academics_selects.html' %}
 
-      {% set prefix = 'up' %}
-      {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
-      {% set initial = {'university': current_user.university, 'faculty': current_user.faculty, 'career':
-      current_user.career} %}
-      {% include 'components/academics_selects.html' %}
+    <label style="margin-top:14px">Precio (ARS). Dejar en blanco para gratis</label>
+    <input class="input" name="price" type="number" min="0" step="0.01">
 
-      <!-- … fees, archivo, botón … -->
-      <button class="btn">Subir</button>
-    </form>
-
-    <script src="{{ url_for('static', filename='js/academics_selects.js') }}"></script>
-    <script>
-      document.addEventListener('DOMContentLoaded', () => {
-        initAcademicsSelects({
-          prefix: 'up',
-          formId: 'uploadForm',
-          enableCreate: true,
-          initial: {{ {
-            'university': current_user.university,
-            'faculty': current_user.faculty,
-            'career': current_user.career
-          } | tojson }}
-        });
-      });
-    </script>
-
-
-    <!-- Campos reales que lee el backend -->
-    <input type="hidden" name="university" id="university">
-    <input type="hidden" name="faculty" id="faculty">
-    <input type="hidden" name="career" id="career">
-    <label>Precio (ARS). Dejar en blanco para gratis</label><input class="input" name="price" type="number" min="0"
-      step="0.01">
-    <div class="card mt-3">
+    <div class="card" style="margin-top:16px">
       <h3>Información importante</h3>
       <ul class="list-disc pl-6">
-        <li>La plataforma aplica una <strong>comisión del {{ config.PLATFORM_FEE_PCT or 5 }}%</strong> sobre el precio
-          de venta.</li>
-        <li><strong>Mercado Pago</strong> puede aplicar costos y/o retenciones adicionales (aprox. 6,4% según tipo de
-          cuenta y medio de pago).</li>
+        <li>La plataforma aplica una <strong>comisión del {{ config.PLATFORM_FEE_PCT or 5 }}%</strong>.</li>
+        <li><strong>Mercado Pago</strong> puede aplicar costos y/o retenciones adicionales.</li>
         {% if config.IIBB_ENABLED %}
-        <li>Si tu cuenta está alcanzada por <strong>IIBB</strong>, pueden aplicarse retenciones según tu jurisdicción.
-        </li>
+        <li>Pueden aplicarse retenciones de <strong>IIBB</strong> según jurisdicción.</li>
         {% endif %}
       </ul>
       <p class="mt-2 text-sm">
-        ¿Tenés dudas sobre la vinculación con Mercado Pago?
-        <a href="{{ url_for('help_mp') }}" class="text-blue-600 hover:underline">Ver instructivo de vinculación</a>.
+        ¿Dudas con Mercado Pago?
+        <a href="{{ url_for('help_mp') }}" class="text-blue-600 hover:underline">Ver instructivo</a>.
       </p>
     </div>
-    <!-- Resumen de publicación -->
-    <div class="card mt-4" id="resumen-publicacion" data-ay="{{ config.PLATFORM_FEE_PCT or 5 }}"
-      data-mp="{{ MP_FEE_IMMEDIATE_TOTAL_PCT if MP_FEE_IMMEDIATE_TOTAL_PCT is defined else 7.61 }}">
-      <h3>Resumen de publicación</h3>
-      <p class="text-sm">Este cálculo es estimativo. Usa comisión de ApuntesYa (<strong>{{ config.PLATFORM_FEE_PCT or 5
-          }}%</strong>) y comisión de Mercado Pago para <strong>acreditación inmediata</strong> (≈ <strong>{{ '%.2f' %
-          (MP_FEE_IMMEDIATE_TOTAL_PCT if MP_FEE_IMMEDIATE_TOTAL_PCT is defined else 7.61) }}%</strong>).</p>
-      <div class="grid">
-        <div><strong>Precio:</strong> $<span id="rp-precio">0.00</span></div>
-        <div><strong>Fee AY:</strong> $<span id="rp-ay">0.00</span></div>
-        <div><strong>MP (inmediato):</strong> $<span id="rp-mp">0.00</span></div>
-        <div><strong>Neto estimado:</strong> $<span id="rp-neto">0.00</span></div>
-      </div>
-    </div>
 
-    <div class="mt-3">
-      <label class="inline-flex items-center">
-        <input type="checkbox" name="accept_commissions" required>
-        <span class="ml-2 text-sm">
-          Declaro haber leído y aceptado las comisiones y plazos de acreditación indicados.
-          <a href="{{ url_for('help_commissions') }}" class="text-blue-600 hover:underline">Ver detalle</a>
-        </span>
-      </label>
-    </div>
+    <label style="margin-top:14px">Archivo PDF</label>
+    <input class="input" type="file" name="file" accept="application/pdf" required>
 
-    <script>
-      (function () {
-        function toNum(x) { var n = parseFloat(x); return isNaN(n) ? 0 : n; }
-        var precioInput = document.querySelector('input[name="price"]');
-        var box = document.getElementById('resumen-publicacion');
-        if (!box) return;
-        var ayPct = parseFloat(box.getAttribute('data-ay') || '5');
-        var mpPct = parseFloat(box.getAttribute('data-mp') || '7.61');
-
-        function recalc() {
-          var p = toNum(precioInput && precioInput.value);
-          var feeAY = +(p * (ayPct / 100)).toFixed(2);
-          var feeMP = +(p * (mpPct / 100)).toFixed(2);
-          var neto = +(p - feeAY - feeMP).toFixed(2);
-          var $ = function (id) { return document.getElementById(id) };
-          $('rp-precio').textContent = p.toFixed(2);
-          $('rp-ay').textContent = feeAY.toFixed(2);
-          $('rp-mp').textContent = feeMP.toFixed(2);
-          $('rp-neto').textContent = neto.toFixed(2);
-        }
-        if (precioInput) {
-          precioInput.addEventListener('input', recalc);
-          recalc();
-        }
-      })();
-    </script>
-
-
-    <label>Archivo PDF</label><input class="input" type="file" name="file" accept="application/pdf" required>
-    <button class="btn">Subir</button>
+    <button class="btn" style="margin-top:14px">Subir</button>
   </form>
-
 </div>
+
+<script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=1"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    const api = await window.initAcademicsSelects({ prefix: 'up', enableCreate: true });
+    const form = document.getElementById('uploadForm');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try { await api.resolveHidden(); } catch (err) { alert(err.message); return; }
+      form.submit();
+    });
+  });
+</script>
 {% endblock %}

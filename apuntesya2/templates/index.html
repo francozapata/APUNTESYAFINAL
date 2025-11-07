@@ -1,45 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
+<div class="card" style="max-width:1200px;margin:32px auto">
   <h2>Buscar apuntes</h2>
-  % set prefix = 'sr' %}
-  {% set names = {'university':'u','faculty':'f','career':'c'} %}
+
+  {% set prefix = 'sr' %}
+  {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
   {% include 'components/academics_selects.html' %}
 
-  <script src="{{ url_for('static', filename='js/academics_selects.js') }}"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      initAcademicsSelects({
-        prefix: 'sr',
-        enableCreate: false,  // no se puede agregar nuevas en la búsqueda
-        onChange: (vals) => {
-          // vals = { universityText, facultyText, careerText }
-          console.log('Filtro cambiado:', vals);
-          // acá podés llamar tu función de filtrado, por ejemplo:
-          // refreshResults(vals.universityText, vals.facultyText, vals.careerText);
-        }
-      });
+  <div style="margin-top:16px" id="results">No hay resultados.</div>
+</div>
+
+<script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=1"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    // En buscador NO se crean nuevas entradas
+    await window.initAcademicsSelects({
+      prefix: 'sr',
+      enableCreate: false,
+      onChange: ({ level, value }) => {
+        // TODO: acá hacés tu fetch con los valores seleccionados
+        // y renderizás resultados en #results
+      }
     });
-  </script>
-
-</div>
-
-<div class="grid">
-  {% for n in notes %}
-  <div class="note">
-    <div class="title">{{ n.title }}</div>
-    <div class="muted">{{ n.university }} • {{ n.faculty }} • {{ n.career }}</div>
-    {% if n.price_cents and n.price_cents>0 %}
-    <div class="badge">Pago — ${{ '%.2f'|format(n.price_cents/100) }}</div>
-    {% else %}
-    <div class="badge">Gratis</div>
-    {% endif %}
-    <div style="margin-top:8px">
-      <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn">Ver</a>
-    </div>
-  </div>
-  {% else %}
-  <div class="card">No hay resultados.</div>
-  {% endfor %}
-</div>
+  });
+</script>
 {% endblock %}
