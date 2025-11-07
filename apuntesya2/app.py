@@ -1319,7 +1319,7 @@ def admin_api_files_delete():
 # ------------------------------
 # Admin HUB (pantalla única)
 # ------------------------------
-@app.get("/admin/hub")
+@app.get("/admin/hub", endpoint="admin_hub_ui")
 @login_required
 @admin_required
 def admin_hub():
