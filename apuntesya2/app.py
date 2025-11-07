@@ -310,32 +310,44 @@ def index():
         ).scalars().all()
     return render_template("index.html", notes=notes, include_dynamic_selects=True)
 
-@app.get("/search")
-def search_notes():
-    keyword = (request.args.get("keyword") or "").strip()
-    university = request.args.get("university")
-    faculty = request.args.get("faculty")
-    career = request.args.get("career")
+# --- BÚSQUEDA ---
+@app.get("/search", endpoint="search")
+def search():
+    q  = (request.args.get("q") or "").strip()
+    uni = (request.args.get("university") or "").strip()
+    fac = (request.args.get("faculty") or "").strip()
+    car = (request.args.get("career") or "").strip()
+    t   = (request.args.get("type") or "").strip()
 
-    query = select(Note)
+    with Session() as s:
+        stmt = select(Note).where(Note.is_active == True)
 
-    if keyword:
-        like = f"%{keyword}%"
-        query = query.where(or_(
-            Note.title.ilike(like),
-            Note.description.ilike(like)
-        ))
-    if university:
-        query = query.where(Note.university == university)
-    if faculty:
-        query = query.where(Note.faculty == faculty)
-    if career:
-        query = query.where(Note.career == career)
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(Note.title.ilike(like), Note.description.ilike(like)))
 
-    notes = db.session.scalars(query).all()
-    data = [n.to_dict() for n in notes]  # o el equivalente que uses
+        if uni:
+            stmt = stmt.where(Note.university.ilike(f"%{uni}%"))
+        if fac:
+            stmt = stmt.where(Note.faculty.ilike(f"%{fac}%"))
+        if car:
+            stmt = stmt.where(Note.career.ilike(f"%{car}%"))
 
-    return jsonify({"notes": data})
+        if t == "free":
+            stmt = stmt.where(Note.price_cents == 0)
+        elif t == "paid":
+            stmt = stmt.where(Note.price_cents > 0)
+
+        notes = s.execute(stmt.order_by(Note.created_at.desc()).limit(100)).scalars().all()
+
+    return render_template(
+        "index.html",
+        notes=notes,
+        q=q,
+        filters={"university": uni, "faculty": fac, "career": car, "type": t},
+        include_dynamic_selects=True
+    )
+
 
 
 # -----------------------------------------------------------------------------
