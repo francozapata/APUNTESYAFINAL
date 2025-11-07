@@ -310,42 +310,33 @@ def index():
         ).scalars().all()
     return render_template("index.html", notes=notes, include_dynamic_selects=True)
 
-@app.get("/search", endpoint="search")
-def search_view():
-    q  = (request.args.get("q") or "").strip()
-    uni = (request.args.get("university") or "").strip()
-    fac = (request.args.get("faculty") or "").strip()
-    car = (request.args.get("career") or "").strip()
-    t   = (request.args.get("type") or "").strip()
+@app.get("/search")
+def search_notes():
+    keyword = (request.args.get("keyword") or "").strip()
+    university = request.args.get("university")
+    faculty = request.args.get("faculty")
+    career = request.args.get("career")
 
-    with Session() as s:
-        stmt = select(Note).where(Note.is_active == True)
+    query = select(Note)
 
-        if q:
-            like = f"%{q}%"
-            stmt = stmt.where(or_(Note.title.ilike(like), Note.description.ilike(like)))
+    if keyword:
+        like = f"%{keyword}%"
+        query = query.where(or_(
+            Note.title.ilike(like),
+            Note.description.ilike(like)
+        ))
+    if university:
+        query = query.where(Note.university == university)
+    if faculty:
+        query = query.where(Note.faculty == faculty)
+    if career:
+        query = query.where(Note.career == career)
 
-        if uni:
-            stmt = stmt.where(Note.university.ilike(f"%{uni}%"))
-        if fac:
-            stmt = stmt.where(Note.faculty.ilike(f"%{fac}%"))
-        if car:
-            stmt = stmt.where(Note.career.ilike(f"%{car}%"))
+    notes = db.session.scalars(query).all()
+    data = [n.to_dict() for n in notes]  # o el equivalente que uses
 
-        if t == "free":
-            stmt = stmt.where(Note.price_cents == 0)
-        elif t == "paid":
-            stmt = stmt.where(Note.price_cents > 0)
+    return jsonify({"notes": data})
 
-        notes = s.execute(stmt.order_by(Note.created_at.desc()).limit(100)).scalars().all()
-
-    return render_template(
-        "index.html",
-        notes=notes,
-        q=q,
-        filters={"university": uni, "faculty": fac, "career": car, "type": t},
-        include_dynamic_selects=True
-    )
 
 # -----------------------------------------------------------------------------
 # Auth (sólo Google con Firebase)
@@ -1221,36 +1212,6 @@ def help_commissions():
 def admin_hub():
     return render_template("admin/hub.html")
 
-@app.get("/admin/api/users")
-@login_required
-@admin_required
-def admin_api_users():
-    q = (request.args.get("q") or "").strip()
-    limit = request.args.get("limit", type=int) or 100
-
-    with Session() as s:
-        stmt = select(User).order_by(desc(User.created_at)).limit(limit)
-        if q:
-            like = f"%{q}%"
-            stmt = select(User).where(
-                or_(User.name.ilike(like), User.email.ilike(like))
-            ).order_by(desc(User.created_at)).limit(limit)
-        rows = s.execute(stmt).scalars().all()
-
-        data = []
-        for u in rows:
-            data.append({
-                "id": u.id,
-                "name": u.name,
-                "email": u.email,
-                "created_at": (u.created_at.isoformat() if getattr(u, "created_at", None) else None),
-                "university": getattr(u, "university", "") or "",
-                "faculty": getattr(u, "faculty", "") or "",
-                "career": getattr(u, "career", "") or "",
-                "is_active": getattr(u, "is_active", True),
-                "is_admin": getattr(u, "is_admin", False),
-            })
-        return jsonify({"items": data})
 
 from functools import wraps  # asegúrate de tenerlo arriba
 from sqlalchemy import desc   # ya lo tenías
