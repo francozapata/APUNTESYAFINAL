@@ -48,20 +48,3 @@
   </div>
 </div>
 {% endblock %}
-
-
-<div class="card mt-4">
-  <h3>Cambiar contraseña</h3>
-  <form method="post" action="{{ url_for('change_password') }}">
-    <label>Contraseña actual</label>
-    <input class="input" type="password" name="current_password" required>
-
-    <label>Nueva contraseña (mínimo 8)</label>
-    <input class="input" type="password" name="new_password" minlength="8" required>
-
-    <label>Confirmar nueva contraseña</label>
-    <input class="input" type="password" name="confirm_password" minlength="8" required>
-
-    <button class="btn">Actualizar contraseña</button>
-  </form>
-</div>
