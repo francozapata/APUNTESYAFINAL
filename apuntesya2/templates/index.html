@@ -1,30 +1,77 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="mb-4">
-  <input id="keyword" type="text" class="input full" placeholder="Buscar por título, descripción o materia...">
-</div>
-<div class="card" style="max-width:1200px;margin:32px auto">
+<form id="quick-search" action="{{ url_for('search') }}" method="get" class="search-bar">
+  <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar por título, descripción o materia..." />
+  <button type="submit">Buscar</button>
+</form>
+
+<div class="card mt-3">
   <h2>Buscar apuntes</h2>
 
-  {% set prefix = 'sr' %}
-  {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
-  {% include 'components/academics_selects.html' %}
+  <form id="advanced-search" action="{{ url_for('search') }}" method="get">
+    <input type="hidden" name="q" id="adv-q" value="{{ q or '' }}" />
 
-  <div style="margin-top:16px" id="results">No hay resultados.</div>
+    <div class="field">
+      <label>Universidad</label>
+      <select id="acad-uni"></select>
+    </div>
+
+    <div class="field">
+      <label>Facultad</label>
+      <select id="acad-fac" disabled></select>
+    </div>
+
+    <div class="field">
+      <label>Carrera</label>
+      <select id="acad-car" disabled></select>
+    </div>
+
+    <!-- estos inputs se completan con el texto del select (no ids) -->
+    <input type="hidden" name="university" id="acad-hidden-university" />
+    <input type="hidden" name="faculty" id="acad-hidden-faculty" />
+    <input type="hidden" name="career" id="acad-hidden-career" />
+
+    <div class="actions mt-2">
+      <button type="submit">Aplicar filtros</button>
+      <a href="{{ url_for('index') }}" class="btn ghost">Limpiar</a>
+    </div>
+  </form>
+
+  {% if notes and notes|length > 0 %}
+  <p class="mt-2">{{ notes|length }} resultado(s)</p>
+  {% else %}
+  <p class="muted mt-2">No hay resultados.</p>
+  {% endif %}
 </div>
 
-<script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=1"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', async () => {
-    // En buscador NO se crean nuevas entradas
-    await window.initAcademicsSelects({
-      prefix: 'sr',
-      enableCreate: false,
-      onChange: ({ level, value }) => {
-        // TODO: acá hacés tu fetch con los valores seleccionados
-        // y renderizás resultados en #results
-      }
-    });
+  // Sin creación (solo filtrar), por eso enableCreate: false
+  window.addEventListener('DOMContentLoaded', async () => {
+    try {
+      const api = await window.initAcademicsSelects({
+        prefix: 'acad',
+        enableCreate: false,
+        onChange: ({ level, value }) => {
+          // sincronizamos el texto visible a los hidden
+          const sel = document.getElementById('acad-' + (level === 'university' ? 'uni' : level === 'faculty' ? 'fac' : 'car'));
+          const text = sel && sel.options && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].text : '';
+          if (level === 'university') document.getElementById('acad-hidden-university').value = (value ? text : '');
+          if (level === 'faculty') document.getElementById('acad-hidden-faculty').value = (value ? text : '');
+          if (level === 'career') document.getElementById('acad-hidden-career').value = (value ? text : '');
+        }
+      });
+
+      // sincronizá el texto de selects antes de enviar
+      const advForm = document.getElementById('advanced-search');
+      advForm.addEventListener('submit', async (e) => {
+        // sincronizar el q del input rápido si lo usaron
+        const quickQ = document.querySelector('#quick-search input[name="q"]');
+        document.getElementById('adv-q').value = (quickQ && quickQ.value) ? quickQ.value.trim() : document.getElementById('adv-q').value;
+      });
+    } catch (e) {
+      console.error('init selects error', e);
+    }
   });
 </script>
+
 {% endblock %}
