@@ -53,8 +53,8 @@
       <a href="{{ url_for('profile') }}" class="btn secondary">Perfil</a>
 
       {# 👉 Unificamos en un solo botón cuando es admin #}
-      {% if current_user.is_admin %}
-      <a href="{{ url_for('admin_hub_ui') }}" class="btn ghost">Administrar</a>
+      {% if current_user.is_authenticated and current_user.is_admin %}
+      <a href="{{ url_for('admin_hub') }}" class="btn ghost">Administrar</a>
       {% endif %}
 
       <a href="{{ url_for('logout') }}" class="btn ghost">Salir</a>
