@@ -1,198 +1,201 @@
 // static/js/academics_selects.js
+// Componente único de selects (Universidad/Facultad/Carrera) con "Otra…" y creación.
+// Endpoints esperados:
+//   GET  /api/academics/universities            -> [{id,name}]
+//   GET  /api/academics/faculties?university_id -> [{id,name}]
+//   GET  /api/academics/careers?faculty_id      -> [{id,name}]
+//   POST /api/academics/universities  {name}
+//   POST /api/academics/faculties     {name, university_id}
+//   POST /api/academics/careers       {name, faculty_id}
+
 (function () {
     function $(id) { return document.getElementById(id); }
-    function vis(el, on) { el.style.display = on ? '' : 'none'; }
-    function enable(el, on) { el.disabled = !on; }
-    function opt(sel, ph, includeOther = true) {
+    function setVisible(el, v) { if (el) el.style.display = v ? '' : 'none'; }
+    function enable(el, v) { if (el) el.disabled = !v; }
+    function clearSelect(sel, ph) {
         sel.innerHTML = '';
         const a = document.createElement('option');
         a.value = ''; a.disabled = true; a.selected = true; a.textContent = ph;
         sel.appendChild(a);
-        if (includeOther) {
-            const b = document.createElement('option');
-            b.value = '__other__'; b.textContent = 'Otra…';
-            sel.appendChild(b);
-        }
+        const b = document.createElement('option');
+        b.value = '__other__'; b.textContent = 'Otra…';
+        sel.appendChild(b);
     }
-    async function getJSON(url) { const r = await fetch(url); if (!r.ok) throw 0; return r.json(); }
-    async function postJSON(url, body) {
-        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d.error || 'Error'); return d;
+    async function jfetch(url, opts) {
+        const r = await fetch(url, opts || {});
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+        return data;
+    }
+    async function loadUniversities(sel) {
+        const list = await jfetch('/api/academics/universities');
+        const other = sel.querySelector('option[value="__other__"]');
+        (list || []).forEach(u => {
+            const o = document.createElement('option'); o.value = String(u.id); o.textContent = u.name;
+            sel.insertBefore(o, other);
+        });
+    }
+    async function loadFaculties(sel, universityId) {
+        clearSelect(sel, 'Elegí tu Facultad');
+        const list = await jfetch('/api/academics/faculties?university_id=' + encodeURIComponent(universityId));
+        const other = sel.querySelector('option[value="__other__"]');
+        (list || []).forEach(f => {
+            const o = document.createElement('option'); o.value = String(f.id); o.textContent = f.name;
+            sel.insertBefore(o, other);
+        });
+    }
+    async function loadCareers(sel, facultyId) {
+        clearSelect(sel, 'Elegí tu Carrera');
+        const list = await jfetch('/api/academics/careers?faculty_id=' + encodeURIComponent(facultyId));
+        const other = sel.querySelector('option[value="__other__"]');
+        (list || []).forEach(c => {
+            const o = document.createElement('option'); o.value = String(c.id); o.textContent = c.name;
+            sel.insertBefore(o, other);
+        });
+    }
+    async function createUniversity(name) {
+        return jfetch('/api/academics/universities', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+    }
+    async function createFaculty(name, university_id) {
+        return jfetch('/api/academics/faculties', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, university_id })
+        });
+    }
+    async function createCareer(name, faculty_id) {
+        return jfetch('/api/academics/careers', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, faculty_id })
+        });
     }
 
-    /**
-     * initAcademicsSelects
-     * opts = {
-     *   prefix: 'cp' | 'up' | 'sr',
-     *   formId?: 'formId' (si está => completa hidden y maneja submit),
-     *   initial?: {university, faculty, career},  // para precarga libre
-     *   enableCreate?: boolean (default true). Si false, NO permite "Otra…" (modo búsqueda)
-     *   onChange?: function({universityText, facultyText, careerText}) // útil en búsqueda
-     * }
-     */
-    async function initAcademicsSelects(opts) {
-        const {
-            prefix, formId = null, initial = null, enableCreate = true, onChange = null
-        } = opts;
+    // API pública
+    window.initAcademicsSelects = async function initAcademicsSelects(opts) {
+        const prefix = opts.prefix || 'acad';
+        const enableCreate = !!opts.enableCreate;     // true en perfil/subir; false en buscador
+        const onChange = typeof opts.onChange === 'function' ? opts.onChange : () => { };
 
-        const uni = $(`${prefix}-uni`);
-        const fac = $(`${prefix}-fac`);
-        const car = $(`${prefix}-car`);
-        const uniO = $(`${prefix}-uni-other`);
-        const facO = $(`${prefix}-fac-other`);
-        const carO = $(`${prefix}-car-other`);
-        const hUni = $(`${prefix}-hidden-university`);
-        const hFac = $(`${prefix}-hidden-faculty`);
-        const hCar = $(`${prefix}-hidden-career`);
+        const uniSel = $(prefix + '-uni');
+        const facSel = $(prefix + '-fac');
+        const carSel = $(prefix + '-car');
+        const uniOther = $(prefix + '-uni-other');
+        const facOther = $(prefix + '-fac-other');
+        const carOther = $(prefix + '-car-other');
 
-        let uniId = null, facId = null;
+        const hUni = $(prefix + '-hidden-university');
+        const hFac = $(prefix + '-hidden-faculty');
+        const hCar = $(prefix + '-hidden-career');
 
-        // Si no se permite crear, ocultar inputs libres y quitar "Otra…"
+        let chosenUniId = null;
+        let chosenFacId = null;
+
         if (!enableCreate) {
-            vis(uniO, false); vis(facO, false); vis(carO, false);
-            // Quitar opción "__other__" si existe
-            ['uni', 'fac', 'car'].forEach(k => {
-                const sel = $(`${prefix}-${k}`);
-                const other = sel.querySelector('option[value="__other__"]');
-                if (other) other.remove();
+            // quitar inputs "otra…" y las opciones "Otra…"
+            if (uniOther) uniOther.remove();
+            if (facOther) facOther.remove();
+            if (carOther) carOther.remove();
+            [uniSel, facSel, carSel].forEach(sel => {
+                if (!sel) return;
+                const optOther = sel.querySelector('option[value="__other__"]');
+                if (optOther) optOther.remove();
             });
         }
 
-        // Cargar universidades
-        try {
-            const list = await getJSON('/api/academics/universities');
-            const other = uni.querySelector('option[value="__other__"]');
-            (list || []).forEach(u => {
-                const o = document.createElement('option');
-                o.value = String(u.id); o.textContent = u.name;
-                other ? uni.insertBefore(o, other) : uni.appendChild(o);
-            });
-        } catch (_) { }
+        await loadUniversities(uniSel);
 
-        uni.addEventListener('change', async () => {
-            const v = uni.value;
-            if (enableCreate && v === '__other__') {
-                uniId = null; vis(uniO, true); vis(facO, true); vis(carO, true);
-                enable(fac, false); enable(car, false);
-            } else {
-                vis(uniO, false); if (enableCreate) { vis(facO, false); vis(carO, false); }
-                uniId = v ? parseInt(v, 10) : null;
-                opt(fac, 'Elegí tu Facultad', enableCreate);
-                opt(car, 'Elegí tu Carrera', enableCreate);
-                enable(fac, !!v); enable(car, false);
-                if (v) {
-                    try {
-                        const list = await getJSON('/api/academics/faculties?university_id=' + encodeURIComponent(v));
-                        const other = fac.querySelector('option[value="__other__"]');
-                        (list || []).forEach(f => {
-                            const o = document.createElement('option');
-                            o.value = String(f.id); o.textContent = f.name;
-                            other ? fac.insertBefore(o, other) : fac.appendChild(o);
-                        });
-                    } catch (_) { }
-                }
+        uniSel.addEventListener('change', async () => {
+            const v = uniSel.value;
+            onChange({ level: 'university', value: v });
+
+            if (v === '__other__') {
+                if (!enableCreate) { uniSel.value = ''; return; }
+                setVisible(uniOther, true);
+                setVisible(facOther, true);
+                setVisible(carOther, true);
+                enable(facSel, false); enable(carSel, false);
+                chosenUniId = null;
+                return;
             }
-            fireChange();
+            setVisible(uniOther, false); setVisible(facOther, false); setVisible(carOther, false);
+            chosenUniId = parseInt(v, 10);
+            enable(facSel, true); enable(carSel, false);
+            await loadFaculties(facSel, v);
+            clearSelect(carSel, 'Elegí tu Carrera');
         });
 
-        fac.addEventListener('change', async () => {
-            const v = fac.value;
-            if (enableCreate && v === '__other__') {
-                facId = null; vis(facO, true); vis(carO, true); enable(car, false);
-            } else {
-                vis(facO, false); if (enableCreate) { vis(carO, false); }
-                facId = v ? parseInt(v, 10) : null;
-                opt(car, 'Elegí tu Carrera', enableCreate);
-                enable(car, !!v);
-                if (v) {
-                    try {
-                        const list = await getJSON('/api/academics/careers?faculty_id=' + encodeURIComponent(v));
-                        const other = car.querySelector('option[value="__other__"]');
-                        (list || []).forEach(ca => {
-                            const o = document.createElement('option');
-                            o.value = String(ca.id); o.textContent = ca.name;
-                            other ? car.insertBefore(o, other) : car.appendChild(o);
-                        });
-                    } catch (_) { }
-                }
+        facSel.addEventListener('change', async () => {
+            const v = facSel.value;
+            onChange({ level: 'faculty', value: v });
+
+            if (v === '__other__') {
+                if (!enableCreate) { facSel.value = ''; return; }
+                setVisible(facOther, true);
+                setVisible(carOther, true);
+                enable(carSel, false);
+                chosenFacId = null;
+                return;
             }
-            fireChange();
+            setVisible(facOther, false); setVisible(carOther, false);
+            chosenFacId = parseInt(v, 10);
+            enable(carSel, true);
+            await loadCareers(carSel, v);
         });
 
-        car.addEventListener('change', () => {
-            if (enableCreate) vis(carO, car.value === '__other__');
-            fireChange();
+        carSel.addEventListener('change', () => {
+            const v = carSel.value;
+            onChange({ level: 'career', value: v });
+            setVisible(carOther, v === '__other__' && enableCreate);
         });
 
-        function getTexts() {
-            const uniText = uni.value === '__other__' ? (uniO.value || '').trim()
-                : (uni.value ? uni.options[uni.selectedIndex].text : '');
-            const facText = fac.value === '__other__' ? (facO.value || '').trim()
-                : (fac.value ? fac.options[fac.selectedIndex].text : '');
-            const carText = car.value === '__other__' ? (carO.value || '').trim()
-                : (car.value ? car.options[car.selectedIndex].text : '');
-            return { universityText: uniText, facultyText: facText, careerText: carText };
-        }
-        function fireChange() {
-            const detail = getTexts();
-            if (typeof onChange === 'function') onChange(detail);
-            document.dispatchEvent(new CustomEvent('ay:academics-change', { detail: { prefix, ...detail } }));
-        }
+        async function resolveHidden() {
+            // Universidad
+            let uName = '';
+            if (uniSel.value === '__other__') {
+                const name = (uniOther && uniOther.value.trim()) || '';
+                if (!name) throw new Error('Escribí tu Universidad.');
+                const u = await createUniversity(name);
+                chosenUniId = u.id;
+                uName = u.name;
+            } else if (uniSel.value) {
+                uName = uniSel.options[uniSel.selectedIndex]?.text || '';
+            } else {
+                throw new Error('Seleccioná tu Universidad.');
+            }
+            if (hUni) hUni.value = uName;
 
-        // Submit (si hay formId): crea entidades si hace falta y completa hidden
-        const form = formId ? $(formId.replace('#', '')) : null;
-        if (form) {
-            form.addEventListener('submit', async (ev) => {
-                ev.preventDefault();
-                try {
-                    // Universidad
-                    if (!uni.value && !(enableCreate && uniO.value.trim())) throw new Error('Seleccioná o escribí tu Universidad.');
-                    let U;
-                    if (enableCreate && uni.value === '__other__') {
-                        const name = (uniO.value || '').trim(); if (!name) throw new Error('Escribí tu Universidad.');
-                        U = await postJSON('/api/academics/universities', { name }); uniId = U.id;
-                    } else {
-                        U = { id: uniId, name: (uni.options[uni.selectedIndex]?.text || '') };
-                    }
+            // Facultad
+            let fName = '';
+            if (facSel.value === '__other__') {
+                const name = (facOther && facOther.value.trim()) || '';
+                if (!name) throw new Error('Escribí tu Facultad.');
+                const f = await createFaculty(name, chosenUniId);
+                chosenFacId = f.id;
+                fName = f.name;
+            } else if (facSel.value) {
+                fName = facSel.options[facSel.selectedIndex]?.text || '';
+            } else {
+                throw new Error('Seleccioná tu Facultad.');
+            }
+            if (hFac) hFac.value = fName;
 
-                    // Facultad
-                    if (!fac.value && !(enableCreate && facO.value.trim())) throw new Error('Seleccioná o escribí tu Facultad.');
-                    let F;
-                    if (enableCreate && fac.value === '__other__') {
-                        const name = (facO.value || '').trim(); if (!name) throw new Error('Escribí tu Facultad.');
-                        F = await postJSON('/api/academics/faculties', { name, university_id: uniId });
-                        facId = F.id;
-                    } else {
-                        F = { id: facId, name: (fac.options[fac.selectedIndex]?.text || '') };
-                    }
-
-                    // Carrera
-                    if (!car.value && !(enableCreate && carO.value.trim())) throw new Error('Seleccioná o escribí tu Carrera.');
-                    let C;
-                    if (enableCreate && car.value === '__other__') {
-                        const name = (carO.value || '').trim(); if (!name) throw new Error('Escribí tu Carrera.');
-                        C = await postJSON('/api/academics/careers', { name, faculty_id: facId });
-                    } else {
-                        C = { name: (car.options[car.selectedIndex]?.text || '') };
-                    }
-
-                    if (hUni) hUni.value = U.name;
-                    if (hFac) hFac.value = F.name;
-                    if (hCar) hCar.value = C.name;
-
-                    form.submit();
-                } catch (e) { alert(e.message || 'No se pudo guardar. Intentá de nuevo.'); }
-            });
+            // Carrera
+            let cName = '';
+            if (carSel.value === '__other__') {
+                const name = (carOther && carOther.value.trim()) || '';
+                if (!name) throw new Error('Escribí tu Carrera.');
+                const c = await createCareer(name, chosenFacId);
+                cName = c.name;
+            } else if (carSel.value) {
+                cName = carSel.options[carSel.selectedIndex]?.text || '';
+            } else {
+                throw new Error('Seleccioná tu Carrera.');
+            }
+            if (hCar) hCar.value = cName;
         }
 
-        // Precarga libre (opcional)
-        if (initial && initial.university && enableCreate) {
-            uni.value = '__other__'; vis(uniO, true); vis(facO, true); vis(carO, true);
-            uniO.value = initial.university || ''; facO.value = initial.faculty || ''; carO.value = initial.career || '';
-            enable(fac, false); enable(car, false);
-        }
-    }
-
-    window.initAcademicsSelects = initAcademicsSelects;
+        return { resolveHidden };
+    };
 })();

@@ -1,115 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
-<style>
-    .card {
-        max-width: 720px;
-        margin: 32px auto;
-        padding: 24px;
-        border: 1px solid #eee;
-        border-radius: 14px;
-        background: #fff;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, .04)
-    }
-
-    .card h2 {
-        margin: 0 0 8px 0;
-        font-size: 24px
-    }
-
-    .card p.lead {
-        margin: 0 0 20px 0;
-        color: #666
-    }
-
-    .grid {
-        display: grid;
-        gap: 14px;
-        grid-template-columns: 1fr
-    }
-
-    @media(min-width:820px) {
-        .grid {
-            grid-template-columns: repeat(3, 1fr)
-        }
-    }
-
-    .btn {
-        display: inline-block;
-        margin-top: 18px;
-        padding: 10px 18px;
-        border-radius: 10px;
-        border: 0;
-        background: #4478ff;
-        color: #fff;
-        font-weight: 600;
-        cursor: pointer;
-        transition: transform .02s ease, box-shadow .2s;
-        box-shadow: 0 6px 16px rgba(68, 120, 255, .2)
-    }
-
-    .btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 8px 22px rgba(68, 120, 255, .28)
-    }
-
-    .muted {
-        font-size: 12px;
-        color: #777;
-        margin-top: 10px
-    }
-
-    .select,
-    .input {
-        width: 100%;
-        padding: 12px 14px;
-        border: 1px solid #d9d9e3;
-        border-radius: 10px;
-        background: #fff;
-        font-size: 15px
-    }
-
-    .select:focus,
-    .input:focus {
-        outline: none;
-        border-color: #6ca3ff;
-        box-shadow: 0 0 0 3px rgba(108, 163, 255, .15)
-    }
-
-    label {
-        display: block;
-        font-weight: 600;
-        margin: 14px 0 6px
-    }
-</style>
-
-<div class="card">
+<div class="card" style="max-width:900px;margin:32px auto">
     <h2>Completá tu perfil</h2>
     {% if name %}<p class="lead">¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>{% endif %}
 
     <form method="POST" action="{{ url_for('complete_profile') }}" id="completeProfileForm">
+        {% set prefix = 'cp' %}
+        {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
+        {% include 'components/academics_selects.html' %}
 
-        {# --- Selector reutilizable --- #}
-        {% include 'components/academics_selects.html' with context %}
-        {# por defecto usa names: university/faculty/career y prefix="acad" #}
-
-        <button class="btn" type="submit">Guardar y continuar</button>
-        <p class="muted">Podrás editar esta información luego desde tu perfil.</p>
+        <button class="btn" type="submit" style="margin-top:16px">Guardar y continuar</button>
+        <p class="muted" style="margin-top:10px">Podrás editar esta información luego desde tu perfil.</p>
     </form>
 </div>
 
-{# Cargar el JS del componente (IMPORTANTE) #}
-<script src="{{ url_for('static', filename='js/academics_selects.js') }}"></script>
+<script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=1"></script>
 <script>
     document.addEventListener('DOMContentLoaded', async () => {
-        // Inicializamos el componente. Si querés precargar valores, pasalos en "initial"
-        await window.initAcademicsSelects({
-            // prefix: 'acad',         // opcional; coincide con el include
-            // names: { university:'university', faculty:'faculty', career:'career' }, // default
-            initial: {
-                university: "{{ current_user.university|default('', true)|e }}",
-                faculty: "{{ current_user.faculty|default('', true)|e }}",
-                career: "{{ current_user.career|default('', true)|e }}"
-            }
+        const api = await window.initAcademicsSelects({ prefix: 'cp', enableCreate: true });
+        const form = document.getElementById('completeProfileForm');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try { await api.resolveHidden(); } catch (err) { alert(err.message); return; }
+            form.submit();
         });
     });
 </script>
