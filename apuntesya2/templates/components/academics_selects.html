@@ -6,19 +6,11 @@
 {% set prefix = prefix or 'acad' %}
 {% set names = names or {'university':'university','faculty':'faculty','career':'career'} %}
 
-<div id="{{ prefix }}-box" class="grid" style="display:grid;gap:14px;grid-template-columns:1fr;max-width:1200px">
+<div id="{{ prefix }}-box" class="ay-grid" style="display:grid;gap:14px;grid-template-columns:1fr;max-width:1200px">
     <style>
-        @media(min-width: 820px) {
-            #{{ prefix }
-        }
-
-        -box {
-            grid-template-columns: repeat(3, 1fr);
-        }
-        }
-
-        .ay-select,
-        .ay-input {
+        /* Usamos clases genéricas para evitar Jinja dentro del CSS */
+        .ay-grid .ay-select,
+        .ay-grid .ay-input {
             width: 100%;
             padding: 12px 14px;
             border: 1px solid #d9d9e3;
@@ -27,17 +19,23 @@
             font-size: 15px;
         }
 
-        .ay-select:focus,
-        .ay-input:focus {
+        .ay-grid .ay-select:focus,
+        .ay-grid .ay-input:focus {
             outline: none;
             border-color: #6ca3ff;
             box-shadow: 0 0 0 3px rgba(108, 163, 255, .15);
         }
 
-        label {
+        .ay-grid label {
             display: block;
             font-weight: 600;
             margin: 14px 0 6px;
+        }
+
+        @media(min-width: 820px) {
+            .ay-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
         }
     </style>
 
