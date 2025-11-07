@@ -27,6 +27,19 @@
         <a href="{{ url_for('help_mp') }}" class="text-blue-600 hover:underline">Ver instructivo</a>.
       </p>
     </div>
+    <div class="card mt-4" id="resumen-publicacion" data-ay="{{ config.PLATFORM_FEE_PCT or 5 }}"
+      data-mp="{{ MP_FEE_IMMEDIATE_TOTAL_PCT if MP_FEE_IMMEDIATE_TOTAL_PCT is defined else 7.61 }}">
+      <h3>Resumen de publicación</h3>
+      <p class="text-sm">Este cálculo es estimativo. Usa comisión de ApuntesYa (<strong>{{ config.PLATFORM_FEE_PCT or 5
+          }}%</strong>) y comisión de Mercado Pago para <strong>acreditación inmediata</strong> (≈ <strong>{{ '%.2f' %
+          (MP_FEE_IMMEDIATE_TOTAL_PCT if MP_FEE_IMMEDIATE_TOTAL_PCT is defined else 7.61) }}%</strong>).</p>
+      <div class="grid">
+        <div><strong>Precio:</strong> $<span id="rp-precio">0.00</span></div>
+        <div><strong>Fee AY:</strong> $<span id="rp-ay">0.00</span></div>
+        <div><strong>MP (inmediato):</strong> $<span id="rp-mp">0.00</span></div>
+        <div><strong>Neto estimado:</strong> $<span id="rp-neto">0.00</span></div>
+      </div>
+    </div>
 
     <label style="margin-top:14px">Archivo PDF</label>
     <input class="input" type="file" name="file" accept="application/pdf" required>
