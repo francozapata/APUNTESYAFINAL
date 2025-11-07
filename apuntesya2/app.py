@@ -3,6 +3,8 @@
 import os
 import secrets
 import math
+import json
+import base64
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
@@ -49,19 +51,19 @@ def _load_or_create_secret_key(path: str) -> str:
         f.write(key)
     return key
 
-# Usa ENV si está; si no, archivo compartido (funciona en Render con múltiples workers)
+# Usa ENV si está; si no, archivo compartido (Render con múltiples workers)
 SECRET_KEY_ENV = os.getenv("SECRET_KEY")
-SECRET_KEY_FILE = os.path.join("/tmp", "data", "flask_secret_key")  # mismo BASE_DATA que usás
+SECRET_KEY_FILE = os.path.join("/tmp", "data", "flask_secret_key")
 app.config["SECRET_KEY"] = SECRET_KEY_ENV or _load_or_create_secret_key(SECRET_KEY_FILE)
 
-# Cookies seguras (estás en HTTPS)
+# Cookies seguras
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-
 app.config["ENV"] = os.getenv("FLASK_ENV", "production")
-import json
-import base64
 
+# -----------------------------------------------------------------------------
+# Firebase Admin (única inicialización)
+# -----------------------------------------------------------------------------
 def _init_firebase_admin():
     if firebase_admin._apps:
         return
@@ -71,7 +73,7 @@ def _init_firebase_admin():
     if project_id:
         fb_opts["projectId"] = project_id.strip()
 
-    cred = None
+    cred_obj = None
 
     # 1) Credencial como base64 en ENV
     b64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "").strip()
@@ -79,23 +81,23 @@ def _init_firebase_admin():
         try:
             raw = base64.b64decode(b64).decode("utf-8")
             data = json.loads(raw)
-            cred = credentials.Certificate(data)
+            cred_obj = credentials.Certificate(data)
         except Exception as e:
             print("[Firebase] WARNING: no pude decodificar FIREBASE_SERVICE_ACCOUNT_B64:", e)
 
     # 2) Ruta a JSON en disco
-    if not cred:
+    if not cred_obj:
         cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
         if cred_path and os.path.exists(cred_path):
             try:
-                cred = credentials.Certificate(cred_path)
+                cred_obj = credentials.Certificate(cred_path)
             except Exception as e:
                 print("[Firebase] WARNING: credencial en ruta inválida:", e)
 
-    # 3) Sin credencial: igual inicializamos con projectId (suficiente para verify_id_token)
+    # 3) Sin credencial: igual inicializamos con projectId
     try:
-        if cred:
-            firebase_admin.initialize_app(cred, fb_opts or None)
+        if cred_obj:
+            firebase_admin.initialize_app(cred_obj, fb_opts or None)
         else:
             firebase_admin.initialize_app(options=fb_opts or None)
         print("[Firebase] Admin SDK inicializado.", "projectId=", fb_opts.get("projectId"))
@@ -105,16 +107,14 @@ def _init_firebase_admin():
 _init_firebase_admin()
 
 def verify_firebase_id_token(id_token: str):
-    """
-    Verifica el ID token de Firebase y devuelve datos básicos del usuario.
-    Lanza excepción si no es válido.
-    """
+    """Verifica el ID token de Firebase y devuelve datos básicos del usuario."""
     decoded = fb_auth.verify_id_token(id_token)
     email   = decoded.get("email")
     name    = decoded.get("name") or decoded.get("firebase", {}).get("sign_in_provider", "Google user")
     picture = decoded.get("picture")
     uid     = decoded.get("uid")
     return {"uid": uid, "email": email, "name": name, "picture": picture}
+
 # --- MP immediate fee estimate available in templates ---
 try:
     MP_FEE_IMMEDIATE_TOTAL_PCT = float(app.config.get("MP_FEE_IMMEDIATE_TOTAL_PCT", 7.61))
@@ -137,34 +137,6 @@ def fees_ctx():
         except Exception:
             return 0.0
     return dict(MP_FEE_IMMEDIATE_TOTAL_PCT=MP_FEE_IMMEDIATE_TOTAL_PCT, mp_fee_estimate=mp_fee_estimate)
-
-
-
-# -----------------------------------------------------------------------------
-# Firebase Admin (evitar doble init)
-# -----------------------------------------------------------------------------
-if not firebase_admin._apps:
-    try:
-        cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
-        if cred_path and os.path.exists(cred_path):
-            firebase_admin.initialize_app(credentials.Certificate(cred_path))
-        else:
-            firebase_admin.initialize_app()
-        print("[Firebase] Admin SDK inicializado.")
-    except Exception as e:
-        print("[Firebase] WARNING:", e)
-
-def verify_firebase_id_token(id_token: str):
-    """
-    Verifica el ID token de Firebase y devuelve datos básicos del usuario.
-    Lanza excepción si no es válido.
-    """
-    decoded = fb_auth.verify_id_token(id_token)
-    email   = decoded.get("email")
-    name    = decoded.get("name") or decoded.get("firebase", {}).get("sign_in_provider", "Google user")
-    picture = decoded.get("picture")
-    uid     = decoded.get("uid")
-    return {"uid": uid, "email": email, "name": name, "picture": picture}
 
 # -----------------------------------------------------------------------------
 # Paths (Render usa /tmp; local usa ./data)
@@ -286,6 +258,16 @@ def allowed_pdf(filename: str) -> bool:
 def ensure_dirs():
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
+# Decorador simple para admin
+def admin_required(fn):
+    from functools import wraps
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated or not getattr(current_user, "is_admin", False):
+            return redirect(url_for("index"))
+        return fn(*args, **kwargs)
+    return wrapper
+
 # -----------------------------------------------------------------------------
 # Health
 # -----------------------------------------------------------------------------
@@ -330,7 +312,6 @@ def _promote_admin_once():
 # -----------------------------------------------------------------------------
 # Rutas principales
 # -----------------------------------------------------------------------------
-# app.py
 @app.route("/")
 def index():
     with Session() as s:
@@ -338,7 +319,6 @@ def index():
             select(Note).where(Note.is_active == True).order_by(Note.created_at.desc()).limit(30)
         ).scalars().all()
     return render_template("index.html", notes=notes, include_dynamic_selects=True)
-
 
 @app.route("/search")
 def search():
@@ -370,7 +350,6 @@ def search():
 # -----------------------------------------------------------------------------
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    # Redirigimos al login con Google (no hay registro por email)
     return redirect(url_for("login"))
 
 @app.route("/login", methods=["GET"])
@@ -384,10 +363,7 @@ def logout():
 
 @app.post("/auth/session_login")
 def auth_session_login():
-    """
-    Recibe el ID token de Firebase desde el front, lo valida con Firebase Admin,
-    y decide si: (a) loguea directo, o (b) envía a completar perfil.
-    """
+    """Valida el ID token y decide si loguea directo o completa perfil."""
     try:
         data = request.get_json(silent=True) or {}
         id_token = (data.get("id_token") or "").strip()
@@ -407,7 +383,6 @@ def auth_session_login():
                 login_user(u)
                 return {"ok": True, "next": url_for("index")}, 200
 
-        # Usuario nuevo → guardar mínimos en sesión y solicitar perfil
         session["pending_google"] = {
             "email": email,
             "name": name,
@@ -419,7 +394,6 @@ def auth_session_login():
     except Exception as e:
         app.logger.exception("session_login error")
         return {"ok": False, "error": str(e)}, 500
-
 
 @app.get("/complete_profile")
 def complete_profile():
@@ -452,7 +426,6 @@ def complete_profile_post():
             session.pop("pending_google", None)
             return redirect(url_for("index"))
 
-        # Creamos usuario completo
         u = User(
             name=name,
             email=email,
@@ -492,7 +465,7 @@ def profile_balance():
 
     try:
         start = datetime.strptime(start_str, fmt)
-        end = datetime.strptime(end_str, fmt) + timedelta(days=1)  # inclusivo
+        end = datetime.strptime(end_str, fmt) + timedelta(days=1)
     except Exception:
         start = datetime(default_start.year, default_start.month, 1)
         end = datetime(today.year, today.month, today.day) + timedelta(days=1)
@@ -1093,7 +1066,7 @@ def report_note(note_id):
     return redirect(url_for("note_detail", note_id=note_id))
 
 # -----------------------------------------------------------------------------
-# Taxonomías académicas (dropdowns)
+# Taxonomías académicas (dropdowns) + creación "aprendida"
 # -----------------------------------------------------------------------------
 def _norm(s: str) -> str:
     return (s or "").strip()
@@ -1124,8 +1097,6 @@ def api_list_careers():
         rows = s.execute(q.order_by(Career.name)).scalars().all()
         return jsonify([{"id": c.id, "name": c.name, "faculty_id": c.faculty_id} for c in rows])
 
-# ====== Creación "aprendida" ======
-from sqlalchemy import func  # lo tenés importado arriba
 @app.post("/api/academics/universities")
 def api_create_university():
     data = request.get_json(silent=True) or {}
@@ -1238,6 +1209,99 @@ def help_mp():
 @app.route("/help/comisiones")
 def help_commissions():
     return render_template("help/commissions.html")
+
+# -----------------------------------------------------------------------------
+# HUB DE ADMIN + MINI APIs
+# -----------------------------------------------------------------------------
+@app.route("/admin/hub")
+@login_required
+@admin_required
+def admin_hub():
+    return render_template("admin/hub.html")
+
+@app.post("/admin/api/users")
+@login_required
+@admin_required
+def admin_api_users():
+    q = (request.args.get("q") or "").strip().lower()
+    with Session() as s:
+        qry = select(User)
+        if q:
+            qry = qry.where(
+                or_(func.lower(User.email).like(f"%{q}%"),
+                    func.lower(User.name).like(f"%{q}%"))
+            )
+        users = s.execute(qry.order_by(User.created_at.desc()).limit(100)).scalars().all()
+        return jsonify([
+            {"id": u.id, "name": u.name, "email": u.email, "blocked": bool(getattr(u, "is_blocked", False))}
+            for u in users
+        ])
+
+@app.post("/admin/api/users/block")
+@login_required
+@admin_required
+def admin_api_users_block():
+    data = request.get_json(force=True)
+    uid = data.get("user_id")
+    block = bool(data.get("block"))
+    with Session() as s:
+        u = s.get(User, uid)
+        if not u:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        # si el modelo no tiene is_blocked, lo agregaste en migración previa
+        setattr(u, "is_blocked", block)
+        s.commit()
+    return jsonify({"ok": True})
+
+@app.post("/admin/api/files")
+@login_required
+@admin_required
+def admin_api_files():
+    q = (request.args.get("q") or "").strip().lower()
+    with Session() as s:
+        qry = select(Note, User).join(User, User.id == Note.seller_id)
+        if q:
+            qry = qry.where(
+                or_(
+                    func.lower(Note.title).like(f"%{q}%"),
+                    func.lower(User.name).like(f"%{q}%"),
+                    func.lower(User.email).like(f"%{q}%"),
+                )
+            )
+        rows = s.execute(qry.order_by(Note.created_at.desc()).limit(100)).all()
+        return jsonify([
+            {
+                "id": n.id,
+                "title": n.title,
+                "author": (u.name or u.email),
+                "price": float((n.price_cents or 0) / 100.0)
+            }
+            for (n, u) in rows
+        ])
+
+@app.post("/admin/api/files/delete")
+@login_required
+@admin_required
+def admin_api_files_delete():
+    data = request.get_json(force=True)
+    fid = data.get("file_id")
+    with Session() as s:
+        n = s.get(Note, fid)
+        if not n:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        # Borrar archivo físico si existe
+        try:
+            if n.file_path:
+                path = os.path.join(app.config["UPLOAD_FOLDER"], n.file_path)
+                if os.path.exists(path):
+                    os.remove(path)
+        except Exception:
+            pass
+
+        s.delete(n)
+        s.commit()
+    return jsonify({"ok": True})
 
 # -----------------------------------------------------------------------------
 # Main
