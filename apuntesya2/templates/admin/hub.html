@@ -1,49 +1,35 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-    .card {
+    .admin-card {
         max-width: 980px;
-        margin: 28px auto;
+        margin: 32px auto;
         background: #fff;
         border: 1px solid #eee;
-        border-radius: 16px;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, .06);
-    }
-
-    .header {
-        padding: 22px 24px 8px;
-    }
-
-    .title {
-        font-size: 28px;
-        font-weight: 800;
-        margin: 0 0 8px;
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .04);
     }
 
     .tabs {
         display: flex;
         gap: 10px;
-        padding: 0 24px 18px;
+        margin-bottom: 14px;
     }
 
     .tab {
         padding: 8px 14px;
         border-radius: 10px;
-        background: #eef3ff;
-        color: #2a4bff;
-        border: 1px solid #cfe0ff;
+        border: 1px solid #d9d9e3;
+        background: #f7f9ff;
         cursor: pointer;
-        font-weight: 700;
+        font-weight: 600
     }
 
     .tab.active {
-        background: #2a4bff;
+        background: #4478ff;
         color: #fff;
-        border-color: #2a4bff;
-    }
-
-    .body {
-        padding: 0 24px 24px;
+        border-color: #4478ff
     }
 
     .input {
@@ -51,232 +37,154 @@
         padding: 12px 14px;
         border: 1px solid #d9d9e3;
         border-radius: 10px;
-        background: #f7faff;
-    }
-
-    .list {
-        margin-top: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
+        background: #fff;
+        font-size: 15px;
     }
 
     .row {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        padding: 14px;
+        padding: 10px 12px;
         border: 1px solid #eee;
-        border-radius: 12px;
-        background: #fafbff;
-    }
-
-    .row-left {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
+        border-radius: 10px;
+        margin-top: 10px;
     }
 
     .muted {
-        color: #667;
-        font-size: 13px;
-    }
-
-    .pill {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 999px;
-        background: #eef3ff;
-        color: #2a4bff;
-        font-size: 12px;
-        margin-left: 6px;
+        color: #666;
+        font-size: 13px
     }
 
     .btn {
         padding: 8px 12px;
-        border-radius: 10px;
         border: 0;
+        border-radius: 10px;
         background: #4478ff;
         color: #fff;
-        font-weight: 700;
-        cursor: pointer;
+        font-weight: 600;
+        cursor: pointer
     }
 
     .btn.ghost {
-        background: #eef3ff;
-        color: #2a4bff;
+        background: #f3f6ff;
+        color: #335
     }
 
-    .btn.danger {
-        background: #ef4444;
-    }
-
-    .empty {
-        padding: 16px;
-        color: #777;
-        background: #fafafa;
-        border: 1px dashed #ddd;
-        border-radius: 10px;
+    .right {
+        display: flex;
+        gap: 8px;
+        align-items: center
     }
 </style>
 
-<div class="card">
-    <div class="header">
-        <div class="title">Administrar AP</div>
-    </div>
+<div class="admin-card">
+    <h2 style="margin:0 0 6px">Administrar AP</h2>
 
     <div class="tabs">
         <button id="tabUsers" class="tab active">Usuarios</button>
         <button id="tabNotes" class="tab">Apuntes</button>
     </div>
 
-    <div class="body">
-        <!-- BUSCADOR -->
-        <input id="searchBox" class="input" placeholder="Buscar usuario (nombre/email) / Buscar por título o autor" />
+    <!-- BUSCADOR -->
+    <input id="searchBox" class="input" placeholder="Buscar usuario (nombre/email)">
 
-        <!-- LISTADOS -->
-        <div id="usersList" class="list"></div>
-        <div id="notesList" class="list" style="display:none"></div>
-
-        <div id="emptyBox" class="empty" style="display:none">No hay resultados.</div>
-    </div>
+    <!-- CONTENEDORES -->
+    <div id="usersPane" style="margin-top:14px;"></div>
+    <div id="notesPane" style="display:none;margin-top:14px;"></div>
 </div>
 
 <script>
-    (() => {
-        const $ = (s) => document.querySelector(s);
-        const usersTab = $("#tabUsers");
-        const notesTab = $("#tabNotes");
-        const usersList = $("#usersList");
-        const notesList = $("#notesList");
-        const searchBox = $("#searchBox");
-        const emptyBox = $("#emptyBox");
+    (function () {
+        const tabUsers = document.getElementById('tabUsers');
+        const tabNotes = document.getElementById('tabNotes');
+        const searchBox = document.getElementById('searchBox');
+        const usersPane = document.getElementById('usersPane');
+        const notesPane = document.getElementById('notesPane');
 
-        // estado actual
-        let mode = "users"; // "users" | "notes"
+        let activeTab = 'users'; // 'users' | 'notes'
+        let timer = null;
 
-        // --- helpers UI ---
-        function show(listEl, show) { listEl.style.display = show ? "" : "none"; }
-        function setActive(tabBtn, on) {
-            tabBtn.classList.toggle("active", !!on);
+        function sw(tab) {
+            activeTab = tab;
+            tabUsers.classList.toggle('active', tab === 'users');
+            tabNotes.classList.toggle('active', tab === 'notes');
+            usersPane.style.display = tab === 'users' ? '' : 'none';
+            notesPane.style.display = tab === 'notes' ? '' : 'none';
+            searchBox.placeholder = tab === 'users'
+                ? 'Buscar usuario (nombre/email)'
+                : 'Buscar por título, descripción, universidad, facultad o carrera';
+            load();
         }
-        function setEmpty(showIt, message) {
-            emptyBox.textContent = message || "No hay resultados.";
-            show(emptyBox, !!showIt);
+
+        tabUsers.addEventListener('click', () => sw('users'));
+        tabNotes.addEventListener('click', () => sw('notes'));
+
+        searchBox.addEventListener('input', () => {
+            clearTimeout(timer);
+            timer = setTimeout(load, 300);
+        });
+
+        async function load() {
+            const q = encodeURIComponent(searchBox.value || '');
+            if (activeTab === 'users') {
+                usersPane.innerHTML = '<div class="muted">Cargando…</div>';
+                const r = await fetch(`/admin/api/users?q=${q}`);
+                const js = await r.json();
+                renderUsers(js.items || []);
+            } else {
+                notesPane.innerHTML = '<div class="muted">Cargando…</div>';
+                const r = await fetch(`/admin/api/notes?q=${q}`);
+                const js = await r.json();
+                renderNotes(js.items || []);
+            }
         }
 
-        // --- carga usuarios ---
-        async function loadUsers() {
-            const q = searchBox.value.trim();
-            const res = await fetch(`/api/admin/users${q ? ("?q=" + encodeURIComponent(q)) : ""}`);
-            const data = await res.json();
-            usersList.innerHTML = "";
-            if (!data || !data.length) { setEmpty(true, "No se encontraron usuarios."); return; }
-            setEmpty(false);
-
-            for (const u of data) {
-                const wrap = document.createElement("div");
-                wrap.className = "row";
-
-                const left = document.createElement("div");
-                left.className = "row-left";
-                left.innerHTML = `
-        <div><strong>${u.name || "(sin nombre)"} </strong>
-          ${u.is_admin ? '<span class="pill">Admin</span>' : ''}
-          ${u.is_blocked ? '<span class="pill" style="background:#ffe8e8;color:#b00000;">Bloqueado</span>' : ''}
+        function renderUsers(items) {
+            if (!items.length) { usersPane.innerHTML = '<div class="muted">Sin resultados.</div>'; return; }
+            usersPane.innerHTML = items.map(u => `
+      <div class="row">
+        <div>
+          <div><strong>${escapeHtml(u.name || '(sin nombre)')}</strong> <span class="muted">— ${escapeHtml(u.email || '')}</span></div>
+          <div class="muted">${escapeHtml(u.university || '')} • ${escapeHtml(u.faculty || '')} • ${escapeHtml(u.career || '')}</div>
         </div>
-        <div class="muted">${u.email}</div>
-        <div class="muted">Apuntes: ${u.notes_count}${u.created_at ? " • Alta: " + u.created_at : ""}</div>
-      `;
-
-                const right = document.createElement("div");
-                right.style.display = "flex";
-                right.style.gap = "8px";
-
-                // acciones
-                const btnAdmin = document.createElement("button");
-                btnAdmin.className = "btn ghost";
-                btnAdmin.textContent = u.is_admin ? "Quitar admin" : "Hacer admin";
-                btnAdmin.onclick = async () => {
-                    await doUserAction(u.id, u.is_admin ? "demote" : "promote");
-                    loadUsers();
-                };
-
-                const btnBlock = document.createElement("button");
-                btnBlock.className = "btn ghost";
-                btnBlock.textContent = u.is_blocked ? "Desbloquear" : "Bloquear";
-                btnBlock.onclick = async () => {
-                    await doUserAction(u.id, u.is_blocked ? "unblock" : "block");
-                    loadUsers();
-                };
-
-                const btnDelete = document.createElement("button");
-                btnDelete.className = "btn danger";
-                btnDelete.textContent = "Eliminar";
-                btnDelete.onclick = async () => {
-                    if (!confirm("Esto eliminará al usuario y todos sus apuntes. ¿Continuar?")) return;
-                    await doUserAction(u.id, "delete");
-                    loadUsers();
-                };
-
-                right.appendChild(btnAdmin);
-                right.appendChild(btnBlock);
-                right.appendChild(btnDelete);
-
-                wrap.appendChild(left);
-                wrap.appendChild(right);
-                usersList.appendChild(wrap);
-            }
+        <div class="right">
+          ${u.is_admin ? '<span class="muted">Admin</span>' : ''}
+          ${u.is_active ? '<span class="muted">Activo</span>' : '<span class="muted">Inactivo</span>'}
+        </div>
+      </div>
+    `).join('');
         }
 
-        async function doUserAction(id, action) {
-            const res = await fetch(`/api/admin/users/${id}/${action}`, { method: "POST" });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || data.ok === false) {
-                alert(data.error || "No se pudo completar la acción");
-            }
+        function renderNotes(items) {
+            if (!items.length) { notesPane.innerHTML = '<div class="muted">Sin resultados.</div>'; return; }
+            notesPane.innerHTML = items.map(n => `
+      <div class="row">
+        <div>
+          <div><strong>${escapeHtml(n.title)}</strong> <span class="muted">— ${n.seller_name ? escapeHtml(n.seller_name) : ''}</span></div>
+          <div class="muted">${escapeHtml(n.university || '')} • ${escapeHtml(n.faculty || '')} • ${escapeHtml(n.career || '')}</div>
+        </div>
+        <div class="right">
+          <span class="muted">$${(n.price_cents / 100).toFixed(2)}</span>
+          <button class="btn ghost" onclick="deleteNote(${n.id})">Eliminar</button>
+        </div>
+      </div>
+    `).join('');
         }
 
-        // --- (opcional) carga apuntes si quisieras mantenerlo por API separada ---
-        async function loadNotes() {
-            // ya tenías la lista funcionando; si en algún momento le hacés API, pintalo acá.
-            notesList.innerHTML = "";
-            setEmpty(true, "Usá el tab Apuntes que ya tenías implementado o migrá su lógica aquí.");
+        window.deleteNote = async function (id) {
+            if (!confirm('¿Eliminar este apunte?')) return;
+            const r = await fetch(`/admin/api/notes/${id}/delete`, { method: 'POST' });
+            const js = await r.json().catch(() => ({ ok: false }));
+            if (js.ok) { load(); } else { alert('No se pudo eliminar.'); }
         }
 
-        // --- eventos UI ---
-        usersTab.addEventListener("click", () => {
-            mode = "users";
-            setActive(usersTab, true);
-            setActive(notesTab, false);
-            show(usersList, true);
-            show(notesList, false);
-            searchBox.placeholder = "Buscar usuario (nombre/email)";
-            loadUsers();
-        });
+        function escapeHtml(s) {
+            return (s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        }
 
-        notesTab.addEventListener("click", () => {
-            mode = "notes";
-            setActive(usersTab, false);
-            setActive(notesTab, true);
-            show(usersList, false);
-            show(notesList, true);
-            searchBox.placeholder = "Buscar por título o autor";
-            loadNotes();
-        });
-
-        let t;
-        searchBox.addEventListener("input", () => {
-            clearTimeout(t);
-            t = setTimeout(() => {
-                if (mode === "users") loadUsers();
-                else loadNotes();
-            }, 250);
-        });
-
-        // carga inicial
-        loadUsers();
+        // primera carga
+        load();
     })();
 </script>
 {% endblock %}

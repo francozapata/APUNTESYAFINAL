@@ -106,6 +106,10 @@ def _init_firebase_admin():
 
 _init_firebase_admin()
 
+def _require_admin():
+    if not (current_user.is_authenticated and getattr(current_user, "is_admin", False)):
+        abort(403)
+
 def verify_firebase_id_token(id_token: str):
     """Verifica el ID token de Firebase y devuelve datos básicos del usuario."""
     decoded = fb_auth.verify_id_token(id_token)
@@ -332,6 +336,45 @@ def index():
             select(Note).where(Note.is_active == True).order_by(Note.created_at.desc()).limit(30)
         ).scalars().all()
     return render_template("index.html", notes=notes, include_dynamic_selects=True)
+
+@app.get("/search")
+def search():
+    q = (request.args.get("q") or "").strip()
+    uni = (request.args.get("university") or "").strip()
+    fac = (request.args.get("faculty") or "").strip()
+    car = (request.args.get("career") or "").strip()
+    t   = (request.args.get("type") or "").strip()
+
+    with Session() as s:
+        stmt = select(Note).where(Note.is_active == True)
+
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(Note.title.ilike(like), Note.description.ilike(like)))
+
+        if uni:
+            stmt = stmt.where(Note.university.ilike(f"%{uni}%"))
+        if fac:
+            stmt = stmt.where(Note.faculty.ilike(f"%{fac}%"))
+        if car:
+            stmt = stmt.where(Note.career.ilike(f"%{car}%"))
+
+        if t == "free":
+            stmt = stmt.where(Note.price_cents == 0)
+        elif t == "paid":
+            stmt = stmt.where(Note.price_cents > 0)
+
+        notes = s.execute(stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
+
+    # Mostramos los selects avanzados en la vista y mantenemos el texto buscado
+    return render_template(
+        "index.html",
+        notes=notes,
+        q=q,
+        filters={"university": uni, "faculty": fac, "career": car, "type": t},
+        include_dynamic_selects=True
+    )
+
 
 @app.route("/search")
 def search():
@@ -1321,10 +1364,100 @@ def admin_api_files_delete():
 # ------------------------------
 @app.get("/admin/hub", endpoint="admin_hub_ui")
 @login_required
-@admin_required
 def admin_hub():
-    # Renderiza la plantilla; los datos se cargan con fetch() desde el front
+    _require_admin()
+    # El contenido lo carga el template vía fetch
     return render_template("admin/hub.html")
+
+
+from sqlalchemy import asc, desc  # si no lo tenías
+
+@app.get("/admin/api/users")
+@login_required
+def admin_api_users():
+    _require_admin()
+    q = (request.args.get("q") or "").strip()
+    limit = request.args.get("limit", type=int) or 100
+
+    with Session() as s:
+        stmt = select(User).order_by(desc(User.created_at)).limit(limit)
+        if q:
+            like = f"%{q}%"
+            stmt = select(User).where(
+                or_(User.name.ilike(like), User.email.ilike(like))
+            ).order_by(desc(User.created_at)).limit(limit)
+        rows = s.execute(stmt).scalars().all()
+
+        data = []
+        for u in rows:
+            data.append({
+                "id": u.id,
+                "name": u.name,
+                "email": u.email,
+                "created_at": (u.created_at.isoformat() if getattr(u, "created_at", None) else None),
+                "university": getattr(u, "university", "") or "",
+                "faculty": getattr(u, "faculty", "") or "",
+                "career": getattr(u, "career", "") or "",
+                "is_active": getattr(u, "is_active", True),
+                "is_admin": getattr(u, "is_admin", False),
+            })
+        return jsonify({"items": data})
+
+@app.get("/admin/api/notes")
+@login_required
+def admin_api_notes():
+    _require_admin()
+    q = (request.args.get("q") or "").strip()
+    limit = request.args.get("limit", type=int) or 100
+
+    with Session() as s:
+        stmt = select(Note).where(Note.is_active == True)
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(
+                Note.title.ilike(like),
+                Note.description.ilike(like),
+                Note.university.ilike(like),
+                Note.faculty.ilike(like),
+                Note.career.ilike(like),
+            ))
+        stmt = stmt.order_by(desc(Note.created_at)).limit(limit)
+
+        notes = s.execute(stmt).scalars().all()
+
+        # conseguir autores en bloque (opcional)
+        seller_ids = list({n.seller_id for n in notes if n.seller_id})
+        sellers = {}
+        if seller_ids:
+            sellers_rows = s.execute(select(User.id, User.name).where(User.id.in_(seller_ids))).all()
+            sellers = {i: n for i, n in sellers_rows}
+
+        data = []
+        for n in notes:
+            data.append({
+                "id": n.id,
+                "title": n.title,
+                "price_cents": n.price_cents,
+                "seller_name": sellers.get(n.seller_id, ""),
+                "university": n.university,
+                "faculty": n.faculty,
+                "career": n.career,
+                "created_at": (n.created_at.isoformat() if getattr(n, "created_at", None) else None),
+            })
+        return jsonify({"items": data})
+
+@app.post("/admin/api/notes/<int:note_id>/delete")
+@login_required
+def admin_api_notes_delete(note_id):
+    _require_admin()
+    with Session() as s:
+        n = s.get(Note, note_id)
+        if not n:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        n.is_active = False
+        s.commit()
+    return jsonify({"ok": True})
+
 
 # ------------------------------
 # API: Usuarios (listar/acciones)
