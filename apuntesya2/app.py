@@ -7,6 +7,7 @@ import json
 import base64
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
+from functools import wraps
 
 from dotenv import load_dotenv
 from flask import (
@@ -16,9 +17,9 @@ from flask import (
 from flask_login import (
     LoginManager, login_user, logout_user, current_user, login_required
 )
-from sqlalchemy import create_engine, select, or_, and_, func, text
+from sqlalchemy import create_engine, select, or_, and_, func, text, desc
 from sqlalchemy.orm import sessionmaker, scoped_session
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 
 # Firebase Admin
@@ -106,10 +107,6 @@ def _init_firebase_admin():
 
 _init_firebase_admin()
 
-def _require_admin():
-    if not (current_user.is_authenticated and getattr(current_user, "is_admin", False)):
-        abort(403)
-
 def verify_firebase_id_token(id_token: str):
     """Verifica el ID token de Firebase y devuelve datos básicos del usuario."""
     decoded = fb_auth.verify_id_token(id_token)
@@ -124,14 +121,6 @@ try:
     MP_FEE_IMMEDIATE_TOTAL_PCT = float(app.config.get("MP_FEE_IMMEDIATE_TOTAL_PCT", 7.61))
 except Exception:
     MP_FEE_IMMEDIATE_TOTAL_PCT = 7.61
-
-def user_bought_note(s, buyer_id: int, note_id: int) -> bool:
-    q = select(Purchase.id).where(
-        Purchase.buyer_id == buyer_id,
-        Purchase.note_id == note_id,
-        Purchase.status == "approved"
-    )
-    return s.execute(q).first() is not None
 
 @app.context_processor
 def fees_ctx():
@@ -184,29 +173,26 @@ login_manager.login_view = "login"
 def load_user(user_id):
     with Session() as s:
         return s.get(User, int(user_id))
-    
+
+# Decorador simple para admin (única definición)
 def admin_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if not current_user.is_authenticated:
             return redirect(url_for("login"))
-        # si tenés columna is_blocked, respetala; si no existe, getattr -> False
-        if not current_user.is_admin or getattr(current_user, "is_blocked", False):
+        if not getattr(current_user, "is_admin", False) or getattr(current_user, "is_blocked", False):
             abort(403)
         return fn(*args, **kwargs)
     return wrapper
 
-
 # -----------------------------------------------------------------------------
-# Config MP / Comisiones / Mail / Contact
+# Config MP / Comisiones / Contacto
 # -----------------------------------------------------------------------------
-# Mercado Pago
 app.config["MP_PUBLIC_KEY"] = os.getenv("MP_PUBLIC_KEY", "")
 app.config["MP_ACCESS_TOKEN"] = os.getenv("MP_ACCESS_TOKEN", "")
 app.config["MP_WEBHOOK_SECRET"] = os.getenv("MP_WEBHOOK_SECRET", "")
 app.config["BASE_URL"] = os.getenv("BASE_URL", "")
 
-# Comisiones
 app.config["PLATFORM_FEE_PERCENT"] = float(os.getenv("MP_PLATFORM_FEE_PERCENT", "5.0"))
 app.config["MP_COMMISSION_RATE"] = float(os.getenv("MP_COMMISSION_RATE", "0.0774"))
 app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.05"))
@@ -218,16 +204,13 @@ APY_COMMISSION_RATE = app.config["APY_COMMISSION_RATE"]
 IIBB_ENABLED = app.config["IIBB_ENABLED"]
 IIBB_RATE = app.config["IIBB_RATE"]
 
-# Token plataforma (fallback si el vendedor no vinculó MP)
 app.config["MP_ACCESS_TOKEN_PLATFORM"] = os.getenv("MP_ACCESS_TOKEN", "")
 app.config["MP_OAUTH_REDIRECT_URL"] = os.getenv("MP_OAUTH_REDIRECT_URL")
 
-# Password reset (legacy config – hoy usamos Google)
 app.config.setdefault("SECURITY_PASSWORD_SALT", os.getenv("SECURITY_PASSWORD_SALT", "pw-reset"))
 app.config.setdefault("PASSWORD_RESET_EXPIRATION", int(os.getenv("PASSWORD_RESET_EXPIRATION", "3600")))
 app.config.setdefault("ENABLE_SMTP", os.getenv("ENABLE_SMTP", "false"))
 
-# Contacto
 app.config["CONTACT_EMAILS"] = os.getenv("CONTACT_EMAILS", "soporte.apuntesya@gmail.com")
 app.config["CONTACT_WHATSAPP"] = os.getenv("CONTACT_WHATSAPP", "+543510000000")
 app.config["SUGGESTIONS_URL"] = os.getenv("SUGGESTIONS_URL",
@@ -260,8 +243,9 @@ try:
 except Exception:
     auth_reset_bp = None
 
-if admin_bp:
-    app.register_blueprint(admin_bp)
+# ⚠️ Para evitar choques con el Hub nativo, NO registramos el blueprint admin.
+# if admin_bp:
+#     app.register_blueprint(admin_bp)
 if auth_reset_bp:
     app.register_blueprint(auth_reset_bp)
 
@@ -273,17 +257,6 @@ def allowed_pdf(filename: str) -> bool:
 
 def ensure_dirs():
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-
-# Decorador simple para admin
-def admin_required(fn):
-    from sqlalchemy.sql import label
-    from functools import wraps
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not current_user.is_authenticated or not getattr(current_user, "is_admin", False):
-            return redirect(url_for("index"))
-        return fn(*args, **kwargs)
-    return wrapper
 
 # -----------------------------------------------------------------------------
 # Health
@@ -373,7 +346,6 @@ def search_view():
         filters={"university": uni, "faculty": fac, "career": car, "type": t},
         include_dynamic_selects=True
     )
-
 
 # -----------------------------------------------------------------------------
 # Auth (sólo Google con Firebase)
@@ -1241,115 +1213,18 @@ def help_commissions():
     return render_template("help/commissions.html")
 
 # -----------------------------------------------------------------------------
-# HUB DE ADMIN + MINI APIs
+# HUB DE ADMIN + MINI APIs (sin duplicados)
 # -----------------------------------------------------------------------------
-@app.route("/admin/hub")
+@app.get("/admin/hub")
 @login_required
 @admin_required
 def admin_hub():
     return render_template("admin/hub.html")
-
-@app.post("/admin/api/users")
-@login_required
-@admin_required
-def admin_api_users():
-    q = (request.args.get("q") or "").strip().lower()
-    with Session() as s:
-        qry = select(User)
-        if q:
-            qry = qry.where(
-                or_(func.lower(User.email).like(f"%{q}%"),
-                    func.lower(User.name).like(f"%{q}%"))
-            )
-        users = s.execute(qry.order_by(User.created_at.desc()).limit(100)).scalars().all()
-        return jsonify([
-            {"id": u.id, "name": u.name, "email": u.email, "blocked": bool(getattr(u, "is_blocked", False))}
-            for u in users
-        ])
-
-@app.post("/admin/api/users/block")
-@login_required
-@admin_required
-def admin_api_users_block():
-    data = request.get_json(force=True)
-    uid = data.get("user_id")
-    block = bool(data.get("block"))
-    with Session() as s:
-        u = s.get(User, uid)
-        if not u:
-            return jsonify({"ok": False, "error": "not_found"}), 404
-        # si el modelo no tiene is_blocked, lo agregaste en migración previa
-        setattr(u, "is_blocked", block)
-        s.commit()
-    return jsonify({"ok": True})
-
-@app.post("/admin/api/files")
-@login_required
-@admin_required
-def admin_api_files():
-    q = (request.args.get("q") or "").strip().lower()
-    with Session() as s:
-        qry = select(Note, User).join(User, User.id == Note.seller_id)
-        if q:
-            qry = qry.where(
-                or_(
-                    func.lower(Note.title).like(f"%{q}%"),
-                    func.lower(User.name).like(f"%{q}%"),
-                    func.lower(User.email).like(f"%{q}%"),
-                )
-            )
-        rows = s.execute(qry.order_by(Note.created_at.desc()).limit(100)).all()
-        return jsonify([
-            {
-                "id": n.id,
-                "title": n.title,
-                "author": (u.name or u.email),
-                "price": float((n.price_cents or 0) / 100.0)
-            }
-            for (n, u) in rows
-        ])
-
-@app.post("/admin/api/files/delete")
-@login_required
-@admin_required
-def admin_api_files_delete():
-    data = request.get_json(force=True)
-    fid = data.get("file_id")
-    with Session() as s:
-        n = s.get(Note, fid)
-        if not n:
-            return jsonify({"ok": False, "error": "not_found"}), 404
-
-        # Borrar archivo físico si existe
-        try:
-            if n.file_path:
-                path = os.path.join(app.config["UPLOAD_FOLDER"], n.file_path)
-                if os.path.exists(path):
-                    os.remove(path)
-        except Exception:
-            pass
-
-        s.delete(n)
-        s.commit()
-    return jsonify({"ok": True})
-
-# ------------------------------
-# Admin HUB (pantalla única)
-# ------------------------------
-@app.get("/admin/hub", endpoint="admin_hub_ui")
-@login_required
-def admin_hub():
-    _require_admin()
-    # El contenido lo carga el template vía fetch
-    return render_template("admin/hub.html")
-
-
-from sqlalchemy import asc, desc  # si no lo tenías
 
 @app.get("/admin/api/users")
 @login_required
+@admin_required
 def admin_api_users():
-    _require_admin()
     q = (request.args.get("q") or "").strip()
     limit = request.args.get("limit", type=int) or 100
 
@@ -1377,10 +1252,22 @@ def admin_api_users():
             })
         return jsonify({"items": data})
 
+@app.post("/admin/api/users/<int:user_id>/toggle_admin")
+@login_required
+@admin_required
+def admin_toggle_admin(user_id):
+    with Session() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        u.is_admin = not bool(u.is_admin)
+        s.commit()
+    return jsonify({"ok": True, "is_admin": bool(u.is_admin)})
+
 @app.get("/admin/api/notes")
 @login_required
+@admin_required
 def admin_api_notes():
-    _require_admin()
     q = (request.args.get("q") or "").strip()
     limit = request.args.get("limit", type=int) or 100
 
@@ -1399,7 +1286,6 @@ def admin_api_notes():
 
         notes = s.execute(stmt).scalars().all()
 
-        # conseguir autores en bloque (opcional)
         seller_ids = list({n.seller_id for n in notes if n.seller_id})
         sellers = {}
         if seller_ids:
@@ -1422,130 +1308,14 @@ def admin_api_notes():
 
 @app.post("/admin/api/notes/<int:note_id>/delete")
 @login_required
+@admin_required
 def admin_api_notes_delete(note_id):
-    _require_admin()
     with Session() as s:
         n = s.get(Note, note_id)
         if not n:
             return jsonify({"ok": False, "error": "not_found"}), 404
+        # baja lógica
         n.is_active = False
-        s.commit()
-    return jsonify({"ok": True})
-
-
-# ------------------------------
-# API: Usuarios (listar/acciones)
-# ------------------------------
-@app.get("/api/admin/users")
-@login_required
-@admin_required
-def api_admin_users():
-    """
-    Devuelve usuarios con datos básicos y cantidad de apuntes.
-    Soporta ?q= para buscar por nombre o email.
-    """
-    q = (request.args.get("q") or "").strip().lower()
-    with Session() as s:
-        stmt = (
-            select(
-                User.id,
-                User.name,
-                User.email,
-                User.is_admin,
-                # si no tenés la columna en el modelo, getattr luego en el front
-                User.is_active,
-                getattr(User, "is_blocked", False).label("is_blocked") if hasattr(User, "is_blocked") else label("is_blocked", False),
-                func.coalesce(func.count(Note.id), 0).label("notes_count"),
-                func.min(User.created_at).label("created_at") if hasattr(User, "created_at") else label("created_at", None),
-            )
-            .join(Note, Note.seller_id == User.id, isouter=True)
-            .group_by(User.id)
-            .order_by(User.name.asc())
-        )
-        if q:
-            stmt = stmt.where(or_(
-                func.lower(User.name).like(f"%{q}%"),
-                func.lower(User.email).like(f"%{q}%"),
-            ))
-        rows = s.execute(stmt).all()
-
-        data = []
-        for r in rows:
-            # compat si no tenés created_at o is_blocked en la tabla
-            created = None
-            try:
-                created = r.created_at.strftime("%Y-%m-%d") if r.created_at else None
-            except Exception:
-                created = None
-            data.append(dict(
-                id=r.id,
-                name=r.name or "",
-                email=r.email or "",
-                is_admin=bool(r.is_admin),
-                is_active=bool(r.is_active),
-                is_blocked=bool(getattr(r, "is_blocked", False)),
-                notes_count=int(r.notes_count or 0),
-                created_at=created,
-            ))
-        return jsonify(data)
-
-@app.post("/api/admin/users/<int:user_id>/<action>")
-@login_required
-@admin_required
-def api_admin_users_action(user_id, action):
-    """
-    Acciones: block | unblock | promote | demote | delete
-    """
-    if action not in {"block", "unblock", "promote", "demote", "delete"}:
-        return jsonify({"ok": False, "error": "acción inválida"}), 400
-
-    # Por seguridad, impedimos auto-operarse y tocar a otros admins en delete/block
-    if user_id == current_user.id and action in {"block", "delete"}:
-        return jsonify({"ok": False, "error": "No podés realizar esa acción sobre tu propia cuenta."}), 400
-
-    with Session() as s:
-        u = s.get(User, user_id)
-        if not u:
-            return jsonify({"ok": False, "error": "usuario no encontrado"}), 404
-
-        if action == "promote":
-            u.is_admin = True
-
-        elif action == "demote":
-            # no te auto-despromuevas
-            if u.id == current_user.id:
-                return jsonify({"ok": False, "error": "No podés quitarte permisos a vos mismo."}), 400
-            u.is_admin = False
-
-        elif action == "block":
-            # si la columna no existe en tu modelo DB, esta línea no hará nada
-            if hasattr(u, "is_blocked"):
-                # no bloquees a otro admin (opcional)
-                if u.is_admin:
-                    return jsonify({"ok": False, "error": "No podés bloquear administradores."}), 400
-                u.is_blocked = True
-
-        elif action == "unblock":
-            if hasattr(u, "is_blocked"):
-                u.is_blocked = False
-
-        elif action == "delete":
-            # no borres a otro admin
-            if u.is_admin:
-                return jsonify({"ok": False, "error": "No podés borrar administradores."}), 400
-            # borrar sus apuntes fisicos y DB
-            notes = s.execute(select(Note).where(Note.seller_id == u.id)).scalars().all()
-            for n in notes:
-                try:
-                    if n.file_path:
-                        f = os.path.join(app.config["UPLOAD_FOLDER"], n.file_path)
-                        if os.path.exists(f):
-                            os.remove(f)
-                except Exception:
-                    pass
-                s.delete(n)
-            s.delete(u)
-
         s.commit()
     return jsonify({"ok": True})
 
