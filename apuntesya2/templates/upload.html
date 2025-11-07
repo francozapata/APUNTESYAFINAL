@@ -40,6 +40,42 @@
         <div><strong>Neto estimado:</strong> $<span id="rp-neto">0.00</span></div>
       </div>
     </div>
+    <div class="mt-3">
+      <label class="inline-flex items-center">
+        <input type="checkbox" name="accept_commissions" required>
+        <span class="ml-2 text-sm">
+          Declaro haber leído y aceptado las comisiones y plazos de acreditación indicados.
+          <a href="{{ url_for('help_commissions') }}" class="text-blue-600 hover:underline">Ver detalle</a>
+        </span>
+      </label>
+    </div>
+
+    <script>
+      (function () {
+        function toNum(x) { var n = parseFloat(x); return isNaN(n) ? 0 : n; }
+        var precioInput = document.querySelector('input[name="price"]');
+        var box = document.getElementById('resumen-publicacion');
+        if (!box) return;
+        var ayPct = parseFloat(box.getAttribute('data-ay') || '5');
+        var mpPct = parseFloat(box.getAttribute('data-mp') || '7.61');
+
+        function recalc() {
+          var p = toNum(precioInput && precioInput.value);
+          var feeAY = +(p * (ayPct / 100)).toFixed(2);
+          var feeMP = +(p * (mpPct / 100)).toFixed(2);
+          var neto = +(p - feeAY - feeMP).toFixed(2);
+          var $ = function (id) { return document.getElementById(id) };
+          $('rp-precio').textContent = p.toFixed(2);
+          $('rp-ay').textContent = feeAY.toFixed(2);
+          $('rp-mp').textContent = feeMP.toFixed(2);
+          $('rp-neto').textContent = neto.toFixed(2);
+        }
+        if (precioInput) {
+          precioInput.addEventListener('input', recalc);
+          recalc();
+        }
+      })();
+    </script>
 
     <label style="margin-top:14px">Archivo PDF</label>
     <input class="input" type="file" name="file" accept="application/pdf" required>
