@@ -1216,11 +1216,22 @@ def admin_hub():
 from functools import wraps  # asegúrate de tenerlo arriba
 from sqlalchemy import desc   # ya lo tenías
 
-@app.get("/admin/api/users")
+# ------------------------------
+# Admin HUB - listado de usuarios (UNIFICADO)
+# ------------------------------
+from sqlalchemy import desc  # ya lo tenés importado arriba probablemente
+
+@app.route("/admin/api/users", methods=["GET", "POST"], endpoint="admin_api_users_list")
 @login_required
-def admin_api_users():
+def admin_api_users_list():
     _require_admin()
+
+    # Soporta ?q= (GET) y JSON {q:"..."} (POST)
     q = (request.args.get("q") or "").strip()
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        q = (payload.get("q") or q or "").strip()
+
     limit = request.args.get("limit", type=int) or 100
 
     with Session() as s:
@@ -1231,23 +1242,11 @@ def admin_api_users():
                 or_(User.name.ilike(like), User.email.ilike(like))
             ).order_by(desc(User.created_at)).limit(limit)
 
-        users = s.execute(stmt).scalars().all()
+        rows = s.execute(stmt).scalars().all()
 
-        # Si querés cantidad de apuntes por usuario:
-        # armamos un mapa rápido de counts sin hacer GROUP BY raro
-        ids = [u.id for u in users]
-        counts = {}
-        if ids:
-            rows = s.execute(
-                select(Note.seller_id, func.count(Note.id))
-                .where(Note.seller_id.in_(ids))
-                .group_by(Note.seller_id)
-            ).all()
-            counts = {sid: c for sid, c in rows}
-
-        data = []
-        for u in users:
-            data.append({
+        items = []
+        for u in rows:
+            items.append({
                 "id": u.id,
                 "name": u.name or "",
                 "email": u.email or "",
@@ -1258,10 +1257,12 @@ def admin_api_users():
                 "is_active": bool(getattr(u, "is_active", True)),
                 "is_admin": bool(getattr(u, "is_admin", False)),
                 "is_blocked": bool(getattr(u, "is_blocked", False)),
-                "notes_count": int(counts.get(u.id, 0)),
             })
 
-        return jsonify({"items": data})
+    # El tab “Usuarios” del hub esperaba lista directa o {"items":...}.
+    # Para máxima compatibilidad, devolvemos ambas formas:
+    return jsonify({"items": items, "list": items})
+
 
 @app.get("/admin/api/notes")
 @login_required
