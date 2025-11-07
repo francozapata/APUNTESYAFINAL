@@ -337,9 +337,9 @@ def index():
         ).scalars().all()
     return render_template("index.html", notes=notes, include_dynamic_selects=True)
 
-@app.get("/search")
-def search():
-    q = (request.args.get("q") or "").strip()
+@app.get("/search", endpoint="search")
+def search_view():
+    q  = (request.args.get("q") or "").strip()
     uni = (request.args.get("university") or "").strip()
     fac = (request.args.get("faculty") or "").strip()
     car = (request.args.get("career") or "").strip()
@@ -364,9 +364,8 @@ def search():
         elif t == "paid":
             stmt = stmt.where(Note.price_cents > 0)
 
-        notes = s.execute(stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
+        notes = s.execute(stmt.order_by(Note.created_at.desc()).limit(100)).scalars().all()
 
-    # Mostramos los selects avanzados en la vista y mantenemos el texto buscado
     return render_template(
         "index.html",
         notes=notes,
@@ -375,31 +374,6 @@ def search():
         include_dynamic_selects=True
     )
 
-
-@app.route("/search")
-def search():
-    q = request.args.get("q", "").strip()
-    university = request.args.get("university", "").strip()
-    faculty = request.args.get("faculty", "").strip()
-    career = request.args.get("career", "").strip()
-    t = request.args.get("type", "")
-
-    with Session() as s:
-        stmt = select(Note).where(Note.is_active == True)
-        if q:
-            stmt = stmt.where(or_(Note.title.ilike(f"%{q}%"), Note.description.ilike(f"%{q}%")))
-        if university:
-            stmt = stmt.where(Note.university.ilike(f"%{university}%"))
-        if faculty:
-            stmt = stmt.where(Note.faculty.ilike(f"%{faculty}%"))
-        if career:
-            stmt = stmt.where(Note.career.ilike(f"%{career}%"))
-        if t == "free":
-            stmt = stmt.where(Note.price_cents == 0)
-        elif t == "paid":
-            stmt = stmt.where(Note.price_cents > 0)
-        notes = s.execute(stmt.order_by(Note.created_at.desc()).limit(100)).scalars().all()
-    return render_template("index.html", notes=notes)
 
 # -----------------------------------------------------------------------------
 # Auth (sólo Google con Firebase)
