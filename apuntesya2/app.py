@@ -1252,17 +1252,55 @@ def admin_api_users():
             })
         return jsonify({"items": data})
 
-@app.post("/admin/api/users/<int:user_id>/toggle_admin")
+from functools import wraps  # asegúrate de tenerlo arriba
+from sqlalchemy import desc   # ya lo tenías
+
+@app.get("/admin/api/users")
 @login_required
-@admin_required
-def admin_toggle_admin(user_id):
+def admin_api_users():
+    _require_admin()
+    q = (request.args.get("q") or "").strip()
+    limit = request.args.get("limit", type=int) or 100
+
     with Session() as s:
-        u = s.get(User, user_id)
-        if not u:
-            return jsonify({"ok": False, "error": "not_found"}), 404
-        u.is_admin = not bool(u.is_admin)
-        s.commit()
-    return jsonify({"ok": True, "is_admin": bool(u.is_admin)})
+        stmt = select(User).order_by(desc(User.created_at)).limit(limit)
+        if q:
+            like = f"%{q}%"
+            stmt = select(User).where(
+                or_(User.name.ilike(like), User.email.ilike(like))
+            ).order_by(desc(User.created_at)).limit(limit)
+
+        users = s.execute(stmt).scalars().all()
+
+        # Si querés cantidad de apuntes por usuario:
+        # armamos un mapa rápido de counts sin hacer GROUP BY raro
+        ids = [u.id for u in users]
+        counts = {}
+        if ids:
+            rows = s.execute(
+                select(Note.seller_id, func.count(Note.id))
+                .where(Note.seller_id.in_(ids))
+                .group_by(Note.seller_id)
+            ).all()
+            counts = {sid: c for sid, c in rows}
+
+        data = []
+        for u in users:
+            data.append({
+                "id": u.id,
+                "name": u.name or "",
+                "email": u.email or "",
+                "created_at": (u.created_at.isoformat() if getattr(u, "created_at", None) else None),
+                "university": getattr(u, "university", "") or "",
+                "faculty": getattr(u, "faculty", "") or "",
+                "career": getattr(u, "career", "") or "",
+                "is_active": bool(getattr(u, "is_active", True)),
+                "is_admin": bool(getattr(u, "is_admin", False)),
+                "is_blocked": bool(getattr(u, "is_blocked", False)),
+                "notes_count": int(counts.get(u.id, 0)),
+            })
+
+        return jsonify({"items": data})
 
 @app.get("/admin/api/notes")
 @login_required
