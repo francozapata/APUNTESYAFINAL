@@ -151,50 +151,52 @@
         });
 
         async function resolveHidden() {
-            // Universidad
+            // --- UNIVERSIDAD ---
             let uName = '';
             if (uniSel.value === '__other__') {
                 const name = (uniOther && uniOther.value.trim()) || '';
                 if (!name) throw new Error('Escribí tu Universidad.');
+                // Crea la universidad si no existe
                 const u = await createUniversity(name);
                 chosenUniId = u.id;
                 uName = u.name;
             } else if (uniSel.value) {
                 uName = uniSel.options[uniSel.selectedIndex]?.text || '';
+                chosenUniId = parseInt(uniSel.value, 10);
             } else {
                 throw new Error('Seleccioná tu Universidad.');
             }
             if (hUni) hUni.value = uName;
 
-            // Facultad
+            // --- FACULTAD ---
             let fName = '';
-            if (facSel.value === '__other__') {
+            if (facSel.value === '__other__' || !facSel.value) {
+                // Permitir creación directa si "Otra..." o vacío
                 const name = (facOther && facOther.value.trim()) || '';
                 if (!name) throw new Error('Escribí tu Facultad.');
                 const f = await createFaculty(name, chosenUniId);
                 chosenFacId = f.id;
                 fName = f.name;
-            } else if (facSel.value) {
-                fName = facSel.options[facSel.selectedIndex]?.text || '';
             } else {
-                throw new Error('Seleccioná tu Facultad.');
+                fName = facSel.options[facSel.selectedIndex]?.text || '';
+                chosenFacId = parseInt(facSel.value, 10);
             }
             if (hFac) hFac.value = fName;
 
-            // Carrera
+            // --- CARRERA ---
             let cName = '';
-            if (carSel.value === '__other__') {
+            if (carSel.value === '__other__' || !carSel.value) {
+                // Igual lógica que en facultad
                 const name = (carOther && carOther.value.trim()) || '';
                 if (!name) throw new Error('Escribí tu Carrera.');
                 const c = await createCareer(name, chosenFacId);
                 cName = c.name;
-            } else if (carSel.value) {
-                cName = carSel.options[carSel.selectedIndex]?.text || '';
             } else {
-                throw new Error('Seleccioná tu Carrera.');
+                cName = carSel.options[carSel.selectedIndex]?.text || '';
             }
             if (hCar) hCar.value = cName;
         }
+
 
         return { resolveHidden };
     };
