@@ -26,6 +26,7 @@ class User(Base, UserMixin):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     deleted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     
+    
 
     # Mercado Pago OAuth
     mp_user_id: Mapped[str] = mapped_column(String(64), nullable=True)
