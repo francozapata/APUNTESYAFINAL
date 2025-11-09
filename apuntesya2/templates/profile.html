@@ -21,6 +21,16 @@
   <div class="actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
     <a class="btn secondary" href="{{ url_for('update_academics_get') }}">¿Querés actualizar tus datos académicos?</a>
   </div>
+  <form action="{{ url_for('profile_update_contact') }}" method="post">
+    <input class="input" type="text" name="seller_contact" value="{{ seller_contact or '' }}"
+      placeholder="+549351..., alguien@dominio.com o https://...">
+    <button class="btn">Guardar contacto</button>
+    {% if seller_contact_url %}
+    <a class="btn ghost" href="{{ seller_contact_url }}" target="_blank" rel="noopener">
+      {{ seller_contact_label }}
+    </a>
+    {% endif %}
+  </form>
 </div>
 
 <!-- NUEVO: contacto vendedor -->
