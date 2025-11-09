@@ -4,12 +4,13 @@
     <h2>{{ 'Actualizar datos académicos' if mode == 'update' else 'Completá tu perfil' }}</h2>
     {% if name %}<p class="lead">¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>{% endif %}
 
-    <form method="POST" action="{{ url_for('complete_profile') }}" id="completeProfileForm">
+    <form action="{{ url_for('update_academics_post') if mode == 'update' else url_for('complete_profile') }}"
+        method="post" id="complete-profile-form">
         {% set prefix = 'cp' %}
         {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
         {% include 'components/academics_selects.html' %}
 
-        <button class="btn primary" type="submit">
+        <button type="submit" class="btn primary">
             {{ 'Guardar cambios' if mode == 'update' else 'Guardar y continuar' }}
         </button>
         <p class="muted" style="margin-top:10px">Podrás editar esta información luego desde tu perfil.</p>

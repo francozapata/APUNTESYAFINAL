@@ -5,6 +5,7 @@ import secrets
 import math
 import json
 import base64
+import re
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from functools import wraps
@@ -257,6 +258,32 @@ def allowed_pdf(filename: str) -> bool:
 
 def ensure_dirs():
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+# ------------------------------ util contacto vendedor ------------------------------
+def _build_contact_link(raw: str) -> tuple[str, str]:
+    """
+    Devuelve (url, etiqueta). Acepta:
+      - Tel/WhatsApp -> wa.me/...
+      - Email -> mailto:
+      - URL -> directa
+    """
+    v = (raw or "").strip()
+    if not v:
+        return ("", "")
+
+    if v.lower().startswith(("http://", "https://")):
+        return (v, "Abrir enlace")
+
+    if "@" in v and "." in v.split("@")[-1]:
+        return (f"mailto:{v}", "Enviar correo")
+
+    digits = re.sub(r"[^\d+]", "", v)
+    wa = digits.replace("+", "") if digits.startswith("+") else digits
+    if wa:
+        text = "Hola, te escribo por tu apunte en ApuntesYa."
+        return (f"https://wa.me/{wa}?text={text}", "WhatsApp")
+
+    return (v, "Contacto")
 
 # -----------------------------------------------------------------------------
 # Health
@@ -542,7 +569,29 @@ def profile():
         my_notes = s.execute(
             select(Note).where(Note.seller_id == current_user.id).order_by(Note.created_at.desc())
         ).scalars().all()
-    return render_template("profile.html", my_notes=my_notes)
+
+        me = s.get(User, current_user.id)
+        seller_contact = getattr(me, "seller_contact", "") or ""
+        contact_url, contact_label = _build_contact_link(seller_contact)
+
+    return render_template(
+        "profile.html",
+        my_notes=my_notes,
+        seller_contact=seller_contact,
+        seller_contact_url=contact_url,
+        seller_contact_label=contact_label
+    )
+
+@app.post("/profile/update_contact")
+@login_required
+def profile_update_contact():
+    contact = (request.form.get("seller_contact") or "").strip()
+    with Session() as s:
+        u = s.get(User, current_user.id)
+        setattr(u, "seller_contact", contact)
+        s.commit()
+    flash("Contacto de vendedor actualizado.")
+    return redirect(url_for("profile"))
 
 @app.route("/profile/balance")
 @login_required
@@ -769,6 +818,15 @@ def note_detail(note_id):
                 ).scalar_one_or_none() is not None
                 can_review = not already_reviewed
 
+        # Contacto del vendedor
+        seller_contact_url = ""
+        seller_contact_label = ""
+        if note.seller_id:
+            seller = s.get(User, note.seller_id)
+            seller_contact_raw = getattr(seller, "seller_contact", "") or ""
+            if seller_contact_raw:
+                seller_contact_url, seller_contact_label = _build_contact_link(seller_contact_raw)
+
     return render_template(
         "note_detail.html",
         note=note,
@@ -776,7 +834,9 @@ def note_detail(note_id):
         reviews=reviews,
         avg_rating=avg_rating,
         can_review=can_review,
-        already_reviewed=already_reviewed
+        already_reviewed=already_reviewed,
+        seller_contact_url=seller_contact_url,
+        seller_contact_label=seller_contact_label
     )
 
 @app.post("/note/<int:note_id>/review")
@@ -1301,7 +1361,7 @@ def help_commissions():
     return render_template("help/commissions.html")
 
 # -----------------------------------------------------------------------------
-# HUB DE ADMIN + MINI APIs (sin duplicados)
+# HUB DE ADMIN + MINI APIs
 # -----------------------------------------------------------------------------
 @app.get("/admin/hub")
 @login_required
@@ -1309,14 +1369,11 @@ def help_commissions():
 def admin_hub():
     return render_template("admin/hub.html")
 
-# ------------------------------
-# Admin HUB - listado de usuarios (UNIFICADO)
-# ------------------------------
+# Admin HUB - usuarios
 @app.route("/admin/api/users", methods=["GET", "POST"], endpoint="admin_api_users_list")
 @login_required
 @admin_required
 def admin_api_users_list():
-    # Soporta ?q= (GET) y JSON {q:"..."} (POST)
     q = (request.args.get("q") or "").strip()
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
@@ -1349,9 +1406,9 @@ def admin_api_users_list():
                 "is_blocked": bool(getattr(u, "is_blocked", False)),
             })
 
-    # Compatibilidad: devolvemos ambas formas
     return jsonify({"items": items, "list": items})
 
+# Admin HUB - apuntes (info general)
 @app.get("/admin/api/notes")
 @login_required
 @admin_required
@@ -1402,11 +1459,60 @@ def admin_api_notes_delete(note_id):
         n = s.get(Note, note_id)
         if not n:
             return jsonify({"ok": False, "error": "not_found"}), 404
-        # baja lógica
         n.is_active = False
         s.commit()
     return jsonify({"ok": True})
 
+# Admin HUB - archivos (descarga PDFs)
+@app.get("/admin/api/files")
+@login_required
+@admin_required
+def admin_api_files():
+    q = (request.args.get("q") or "").strip()
+    limit = request.args.get("limit", type=int) or 100
+
+    with Session() as s:
+        stmt = select(Note).where(Note.is_active == True)
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(
+                Note.title.ilike(like),
+                Note.description.ilike(like),
+                Note.university.ilike(like),
+                Note.faculty.ilike(like),
+                Note.career.ilike(like)
+            ))
+        stmt = stmt.order_by(desc(Note.created_at)).limit(limit)
+        notes = s.execute(stmt).scalars().all()
+
+        data = []
+        for n in notes:
+            data.append({
+                "id": n.id,
+                "title": n.title,
+                "file_path": n.file_path,
+                "download_url": url_for("admin_download_note", note_id=n.id),
+                "created_at": (n.created_at.isoformat() if getattr(n, "created_at", None) else None),
+                "university": n.university,
+                "faculty": n.faculty,
+                "career": n.career,
+                "price_cents": n.price_cents
+            })
+    return jsonify({"items": data})
+
+@app.get("/admin/download/<int:note_id>")
+@login_required
+@admin_required
+def admin_download_note(note_id):
+    with Session() as s:
+        n = s.get(Note, note_id)
+        if not n or not n.is_active:
+            abort(404)
+        return send_from_directory(app.config["UPLOAD_FOLDER"], n.file_path, as_attachment=True)
+
+# -----------------------------------------------------------------------------
+# Actualizar datos académicos (redirige a form estilo complete_profile)
+# -----------------------------------------------------------------------------
 @app.post("/profile/update_academics")
 @login_required
 def update_academics():
@@ -1428,7 +1534,6 @@ def update_academics():
     flash("✅ Datos académicos actualizados correctamente.", "success")
     return redirect(url_for("profile"))
 
-
 @app.get("/update_academics")
 @login_required
 def update_academics_get():
@@ -1436,16 +1541,15 @@ def update_academics_get():
     return render_template(
         "complete_profile.html",
         name=current_user.name,
-        mode="update"  # para diferenciar visualmente
+        mode="update"
     )
 
 @app.post("/update_academics")
 @login_required
 def update_academics_post():
-    """Procesa los nuevos datos académicos."""
     university = (request.form.get("university") or "").strip()
-    faculty = (request.form.get("faculty") or "").strip()
-    career = (request.form.get("career") or "").strip()
+    faculty    = (request.form.get("faculty") or "").strip()
+    career     = (request.form.get("career") or "").strip()
 
     if not (university and faculty and career):
         flash("Completá todos los campos antes de guardar.", "warning")
@@ -1458,10 +1562,8 @@ def update_academics_post():
         u.career = career
         s.commit()
 
-    flash("✅ Datos académicos actualizados correctamente.", "success")
+    flash("✅ Datos académicos actualizados.", "success")
     return redirect(url_for("profile"))
-
-
 
 # -----------------------------------------------------------------------------
 # Main

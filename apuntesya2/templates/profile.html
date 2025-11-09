@@ -14,25 +14,34 @@
       <button class="btn">Cambiar foto de perfil</button>
     </form>
   </div>
-  <p><strong>{{ current_user.name }}</strong> — <strong> {{ current_user.email }}</strong></p>
+
+  <p><strong>{{ current_user.name }}</strong> — <strong>{{ current_user.email }}</strong></p>
   <p>{{ current_user.university }} • {{ current_user.faculty }} • {{ current_user.career }}</p>
-  <a href="{{ url_for('update_academics_get') }}" class="btn secondary">
-    ¿Querés actualizar tus datos académicos?
-  </a>
 
-
+  <div class="actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+    <a class="btn secondary" href="{{ url_for('update_academics_get') }}">¿Querés actualizar tus datos académicos?</a>
+  </div>
 </div>
 
+<!-- NUEVO: contacto vendedor -->
 <div class="card">
-  {% if current_user.mp_access_token %}
-  <p>Mercado Pago: <span class="badge">Conectado</span></p>
-  <a class="btn secondary" href="{{ url_for('disconnect_mp') }}">Desconectar</a>
-  {% else %}
-  <p>Mercado Pago: <span class="badge">No conectado</span></p>
-  <a class="btn" href="{{ url_for('connect_mp') }}">Conectar con Mercado Pago</a>
-  {% endif %}
-</div>
+  <h3>Contacto de vendedor (opcional)</h3>
+  <p class="muted">Mostramos un botón en tus apuntes para que los compradores puedan contactarte.<br>
+    Acepta WhatsApp/telefono, email o una URL.</p>
 
+  <form action="{{ url_for('profile_update_contact') }}" method="post" class="stack" style="gap:8px;">
+    <input type="text" class="input" name="seller_contact"
+      placeholder="+549351xxxxxxx, alguien@dominio.com o https://..." value="{{ seller_contact or '' }}">
+    <div class="actions" style="display:flex;gap:8px;align-items:center;">
+      <button class="btn">Guardar contacto</button>
+      {% if seller_contact_url %}
+      <a class="btn ghost" href="{{ seller_contact_url }}" target="_blank" rel="noopener">
+        {{ seller_contact_label }}
+      </a>
+      {% endif %}
+    </div>
+  </form>
+</div>
 
 <div class="card">
   <h3>Mis apuntes</h3>
