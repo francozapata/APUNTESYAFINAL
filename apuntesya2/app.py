@@ -527,6 +527,7 @@ def complete_profile_post():
     university = (request.form.get("university") or "").strip()
     faculty    = (request.form.get("faculty") or "").strip()
     career     = (request.form.get("career") or "").strip()
+    seller_contact = (request.form.get("seller_contact") or "").strip()
 
     if not (university and faculty and career):
         flash("Completá Universidad, Facultad y Carrera.")
@@ -1529,6 +1530,8 @@ def update_academics():
         u.university = university
         u.faculty = faculty
         u.career = career
+        if seller_contact:
+            u.seller_contact = seller_contact
         s.commit()
 
     flash("✅ Datos académicos actualizados correctamente.", "success")
@@ -1550,6 +1553,7 @@ def update_academics_post():
     university = (request.form.get("university") or "").strip()
     faculty    = (request.form.get("faculty") or "").strip()
     career     = (request.form.get("career") or "").strip()
+    seller_contact = (request.form.get("seller_contact") or "").strip()
 
     if not (university and faculty and career):
         flash("Completá todos los campos antes de guardar.", "warning")
@@ -1560,6 +1564,8 @@ def update_academics_post():
         u.university = university
         u.faculty = faculty
         u.career = career
+        if seller_contact:
+            u.seller_contact = seller_contact
         s.commit()
 
     flash("✅ Datos académicos actualizados.", "success")
