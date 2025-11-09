@@ -1,16 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 
-<!-- ===========================
-     Pestañas de búsqueda
-     =========================== -->
 <div class="card mt-3">
-  <div class="tabs">
-    <button class="tab {{ 'active' if (show_tab or '') != 'advanced' else '' }}" type="button"
+  <div class="tabs as-buttons">
+    <button class="tab btn ghost {{ 'active' if (show_tab or '') != 'advanced' else '' }}" type="button"
       onclick="toggleTab('quick')">
       Búsqueda rápida
     </button>
-    <button class="tab {{ 'active' if (show_tab or '') == 'advanced' else '' }}" type="button"
+    <button class="tab btn ghost {{ 'active' if (show_tab or '') == 'advanced' else '' }}" type="button"
       onclick="toggleTab('advanced')">
       Búsqueda avanzada
     </button>
@@ -18,8 +15,9 @@
 
   <!-- -------- BÚSQUEDA RÁPIDA -------- -->
   <div id="tab-quick" class="tab-panel" style="{{ '' if (show_tab or '') != 'advanced' else 'display:none' }}">
-    <form id="quick-search" action="{{ url_for('search_quick') }}" method="get" class="search-bar">
-      <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar por título, descripción o materia..." />
+    <form id="quick-search" action="{{ url_for('search_quick') }}" method="get" class="search-bar row gap">
+      <input class="input flex-1" type="text" name="q" value="{{ q or '' }}"
+        placeholder="Buscar por título, descripción o materia..." />
       <button type="submit" class="btn primary">Buscar</button>
     </form>
   </div>
@@ -33,38 +31,39 @@
       <!-- palabra clave opcional -->
       <div class="field">
         <label>Palabra clave (opcional)</label>
-        <input type="text" name="q" value="{{ q or '' }}" placeholder="Ej: Álgebra, parcial, guía..." />
+        <input class="input" type="text" name="q" value="{{ q or '' }}" placeholder="Ej: Álgebra, parcial, guía..." />
       </div>
 
       <!-- Selects académicos (por nombre) -->
       <div class="grid-3 gap">
         <div class="field">
           <label>Universidad</label>
-          <select id="acad-uni">
+          <select id="acad-uni" class="input">
             <option value="" disabled selected>Elegí tu Universidad</option>
             <option value="__other__">Otra…</option>
           </select>
-          <input id="acad-uni-other" type="text" placeholder="Escribí tu Universidad" style="display:none;">
+          <input id="acad-uni-other" class="input" type="text" placeholder="Escribí tu Universidad"
+            style="display:none;">
           <input type="hidden" name="university" id="acad-hidden-university" value="{{ (filters.university or '') }}" />
         </div>
 
         <div class="field">
           <label>Facultad</label>
-          <select id="acad-fac" disabled>
+          <select id="acad-fac" class="input" disabled>
             <option value="" disabled selected>Elegí tu Facultad</option>
             <option value="__other__">Otra…</option>
           </select>
-          <input id="acad-fac-other" type="text" placeholder="Escribí tu Facultad" style="display:none;">
+          <input id="acad-fac-other" class="input" type="text" placeholder="Escribí tu Facultad" style="display:none;">
           <input type="hidden" name="faculty" id="acad-hidden-faculty" value="{{ (filters.faculty or '') }}" />
         </div>
 
         <div class="field">
           <label>Carrera</label>
-          <select id="acad-car" disabled>
+          <select id="acad-car" class="input" disabled>
             <option value="" disabled selected>Elegí tu Carrera</option>
             <option value="__other__">Otra…</option>
           </select>
-          <input id="acad-car-other" type="text" placeholder="Escribí tu Carrera" style="display:none;">
+          <input id="acad-car-other" class="input" type="text" placeholder="Escribí tu Carrera" style="display:none;">
           <input type="hidden" name="career" id="acad-hidden-career" value="{{ (filters.career or '') }}" />
         </div>
       </div>
@@ -72,14 +71,14 @@
       <!-- Tipo (opcional) -->
       <div class="field">
         <label>Tipo</label>
-        <select name="type">
+        <select name="type" class="input">
           <option value="" {{ 'selected' if not filters.type }}>Todos</option>
           <option value="free" {{ 'selected' if (filters.type or '' )=='free' }}>Gratis</option>
           <option value="paid" {{ 'selected' if (filters.type or '' )=='paid' }}>Pago</option>
         </select>
       </div>
 
-      <div class="actions mt-2">
+      <div class="actions mt-2 row gap">
         <button type="submit" class="btn primary" onclick="return beforeSubmitAdvanced()">Aplicar filtros</button>
         <a href="{{ url_for('index') }}" class="btn ghost">Limpiar</a>
       </div>
@@ -88,25 +87,36 @@
 </div>
 
 <!-- ===========================
-     Resultados
+     Resultados (tarjetas)
      =========================== -->
 <div class="card mt-3">
   {% if notes and notes|length > 0 %}
   <p class="mt-1">{{ notes|length }} resultado(s)</p>
-  <div class="stack gap">
+
+  <div class="notes-grid">
     {% for n in notes %}
-    <div class="note-card">
-      <a href="{{ url_for('note_detail', note_id=n.id) }}" class="note-title">{{ n.title }}</a>
-      <div class="note-meta">{{ n.university }} • {{ n.faculty }} • {{ n.career }}</div>
-      {% if n.description %}<div class="note-desc">{{ n.description }}</div>{% endif %}
-      <div class="note-price">
-        {% if (n.price_cents or 0) > 0 %}
-        ${{ ('%.2f' % (n.price_cents / 100.0)) }}
-        {% else %}
-        Gratis
-        {% endif %}
-      </div>
-    </div>
+    <article class="note-card card">
+      <header class="note-card__header">
+        <a href="{{ url_for('note_detail', note_id=n.id) }}" class="note-title link-strong">{{ n.title }}</a>
+      </header>
+
+      {% if n.description %}
+      <p class="note-card__desc">{{ n.description }}</p>
+      {% endif %}
+
+      <div class="note-card__meta">{{ n.university }} • {{ n.faculty }} • {{ n.career }}</div>
+
+      <footer class="note-card__footer">
+        <span class="price-tag">
+          {% if (n.price_cents or 0) > 0 %}
+          ${{ ('%.2f' % (n.price_cents / 100.0)) }}
+          {% else %}
+          Gratis
+          {% endif %}
+        </span>
+        <a class="btn secondary" href="{{ url_for('note_detail', note_id=n.id) }}">Ver detalle</a>
+      </footer>
+    </article>
     {% endfor %}
   </div>
   {% else %}
@@ -127,24 +137,22 @@
     quick.style.display = which === 'quick' ? '' : 'none';
     adv.style.display = which === 'advanced' ? '' : 'none';
 
-    const tabs = document.querySelectorAll('.tabs .tab');
+    const tabs = document.querySelectorAll('.tabs.as-buttons .tab');
     tabs.forEach(t => t.classList.remove('active'));
     (which === 'advanced'
-      ? document.querySelector('.tabs .tab:nth-child(2)')
-      : document.querySelector('.tabs .tab:nth-child(1)')
+      ? document.querySelector('.tabs.as-buttons .tab:nth-child(2)')
+      : document.querySelector('.tabs.as-buttons .tab:nth-child(1)')
     ).classList.add('active');
   }
 
   let selectsApi = null;
 
-  // Inicializa selects dependientes (sin creación en buscador)
   document.addEventListener('DOMContentLoaded', async () => {
     try {
       selectsApi = await window.initAcademicsSelects({
         prefix: 'acad',
         enableCreate: false,
         onChange: ({ level, value }) => {
-          // sincronizamos el texto visible a los hidden
           const map = { university: 'uni', faculty: 'fac', career: 'car' };
           const sel = document.getElementById('acad-' + map[level]);
           const text = sel && sel.options && sel.selectedIndex >= 0
@@ -160,7 +168,6 @@
     }
   });
 
-  // Antes de enviar la avanzada, aseguramos que los hidden queden completos
   async function beforeSubmitAdvanced() {
     try {
       if (selectsApi && selectsApi.resolveHidden) {
