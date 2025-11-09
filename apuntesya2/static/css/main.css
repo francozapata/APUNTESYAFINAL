@@ -360,3 +360,121 @@ body,
   background: #1d4ed8;
   border-color: #1d4ed8;
 }
+
+
+/* ====== Inputs y filas ====== */
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.row.gap {
+  gap: 12px;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.input {
+  width: 100%;
+  padding: .75rem 1rem;
+  border: 1px solid #e6e9f0;
+  border-radius: 12px;
+  background: #f7f9fc;
+  outline: none;
+}
+
+.input:focus {
+  border-color: #b9cdfd;
+  background: #fff;
+}
+
+/* ====== Tabs como botones ====== */
+.tabs.as-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tabs.as-buttons .tab.btn {
+  border-radius: 999px;
+}
+
+.tabs.as-buttons .tab.active {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, .25) inset;
+}
+
+/* ====== Grilla de resultados ====== */
+.notes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+/* ====== Tarjeta de apunte ====== */
+.note-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(20, 20, 43, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.note-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.note-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.link-strong {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.link-strong:hover {
+  text-decoration: underline;
+}
+
+.note-card__desc {
+  color: #444;
+  line-height: 1.35;
+  max-height: 3.4em;
+  /* 2 líneas aprox */
+  overflow: hidden;
+}
+
+.note-card__meta {
+  font-size: .9rem;
+  color: #667085;
+}
+
+.note-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.price-tag {
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+/* ====== Formulario de búsqueda ====== */
+.search-bar {
+  display: flex;
+  gap: 10px;
+}
