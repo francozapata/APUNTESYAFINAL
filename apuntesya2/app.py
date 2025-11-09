@@ -310,6 +310,87 @@ def index():
         ).scalars().all()
     return render_template("index.html", notes=notes, include_dynamic_selects=True)
 
+# ------------------------------
+# BÚSQUEDA
+# ------------------------------
+from sqlalchemy import or_, desc
+
+@app.get("/search/quick", endpoint="search_quick")
+def search_quick():
+    """
+    Búsqueda rápida: solo 'q' (palabras en título o descripción).
+    """
+    q = (request.args.get("q") or "").strip()
+
+    notes = []
+    if q:
+        with Session() as s:
+            like = f"%{q}%"
+            stmt = (
+                select(Note)
+                .where(
+                    Note.is_active == True,
+                    or_(Note.title.ilike(like), Note.description.ilike(like))
+                )
+                .order_by(desc(Note.created_at))
+                .limit(100)
+            )
+            notes = s.execute(stmt).scalars().all()
+
+    # show_tab="quick" fuerza que se vea el panel de búsqueda rápida
+    return render_template(
+        "index.html",
+        notes=notes,
+        show_tab="quick",
+        q=q,
+        filters={"university": "", "faculty": "", "career": "", "type": ""},
+        include_dynamic_selects=True
+    )
+
+
+@app.get("/search/advanced", endpoint="search_advanced")
+def search_advanced():
+    """
+    Búsqueda avanzada: q opcional + universidad, facultad y carrera.
+    """
+    q          = (request.args.get("q") or "").strip()
+    university = (request.args.get("university") or "").strip()
+    faculty    = (request.args.get("faculty") or "").strip()
+    career     = (request.args.get("career") or "").strip()
+    note_type  = (request.args.get("type") or "").strip()  # "free" | "paid" | ""
+
+    with Session() as s:
+        stmt = select(Note).where(Note.is_active == True)
+
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(Note.title.ilike(like), Note.description.ilike(like)))
+
+        if university:
+            stmt = stmt.where(Note.university.ilike(f"%{university}%"))
+        if faculty:
+            stmt = stmt.where(Note.faculty.ilike(f"%{faculty}%"))
+        if career:
+            stmt = stmt.where(Note.career.ilike(f"%{career}%"))
+
+        if note_type == "free":
+            stmt = stmt.where(Note.price_cents == 0)
+        elif note_type == "paid":
+            stmt = stmt.where(Note.price_cents > 0)
+
+        notes = s.execute(stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
+
+    # show_tab="advanced" fuerza que se vea el panel de búsqueda avanzada
+    return render_template(
+        "index.html",
+        notes=notes,
+        show_tab="advanced",
+        q=q,
+        filters={"university": university, "faculty": faculty, "career": career, "type": note_type},
+        include_dynamic_selects=True
+    )
+
+
 # --- BÚSQUEDA ---
 @app.get("/search", endpoint="search")
 def search():

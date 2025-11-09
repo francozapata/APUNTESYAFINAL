@@ -1,77 +1,177 @@
 {% extends "base.html" %}
 {% block content %}
-<form id="quick-search" action="{{ url_for('search') }}" method="get" class="search-bar">
-  <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar por título, descripción o materia..." />
-  <button type="submit">Buscar</button>
-</form>
 
+<!-- ===========================
+     Pestañas de búsqueda
+     =========================== -->
 <div class="card mt-3">
-  <h2>Buscar apuntes</h2>
+  <div class="tabs">
+    <button class="tab {{ 'active' if (show_tab or '') != 'advanced' else '' }}" type="button"
+      onclick="toggleTab('quick')">
+      Búsqueda rápida
+    </button>
+    <button class="tab {{ 'active' if (show_tab or '') == 'advanced' else '' }}" type="button"
+      onclick="toggleTab('advanced')">
+      Búsqueda avanzada
+    </button>
+  </div>
 
-  <form id="advanced-search" action="{{ url_for('search') }}" method="get">
-    <input type="hidden" name="q" id="adv-q" value="{{ q or '' }}" />
+  <!-- -------- BÚSQUEDA RÁPIDA -------- -->
+  <div id="tab-quick" class="tab-panel" style="{{ '' if (show_tab or '') != 'advanced' else 'display:none' }}">
+    <form id="quick-search" action="{{ url_for('search_quick') }}" method="get" class="search-bar">
+      <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar por título, descripción o materia..." />
+      <button type="submit" class="btn primary">Buscar</button>
+    </form>
+  </div>
 
-    <div class="field">
-      <label>Universidad</label>
-      <select id="acad-uni"></select>
-    </div>
+  <!-- -------- BÚSQUEDA AVANZADA -------- -->
+  <div id="tab-advanced" class="tab-panel" style="{{ '' if (show_tab or '') == 'advanced' else 'display:none' }}">
+    <h2 class="mt-2">Buscar apuntes</h2>
 
-    <div class="field">
-      <label>Facultad</label>
-      <select id="acad-fac" disabled></select>
-    </div>
+    <form id="advanced-search" action="{{ url_for('search_advanced') }}" method="get" class="stack gap">
 
-    <div class="field">
-      <label>Carrera</label>
-      <select id="acad-car" disabled></select>
-    </div>
+      <!-- palabra clave opcional -->
+      <div class="field">
+        <label>Palabra clave (opcional)</label>
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="Ej: Álgebra, parcial, guía..." />
+      </div>
 
-    <!-- estos inputs se completan con el texto del select (no ids) -->
-    <input type="hidden" name="university" id="acad-hidden-university" />
-    <input type="hidden" name="faculty" id="acad-hidden-faculty" />
-    <input type="hidden" name="career" id="acad-hidden-career" />
+      <!-- Selects académicos (por nombre) -->
+      <div class="grid-3 gap">
+        <div class="field">
+          <label>Universidad</label>
+          <select id="acad-uni">
+            <option value="" disabled selected>Elegí tu Universidad</option>
+            <option value="__other__">Otra…</option>
+          </select>
+          <input id="acad-uni-other" type="text" placeholder="Escribí tu Universidad" style="display:none;">
+          <input type="hidden" name="university" id="acad-hidden-university" value="{{ (filters.university or '') }}" />
+        </div>
 
-    <div class="actions mt-2">
-      <button type="submit">Aplicar filtros</button>
-      <a href="{{ url_for('index') }}" class="btn ghost">Limpiar</a>
-    </div>
-  </form>
+        <div class="field">
+          <label>Facultad</label>
+          <select id="acad-fac" disabled>
+            <option value="" disabled selected>Elegí tu Facultad</option>
+            <option value="__other__">Otra…</option>
+          </select>
+          <input id="acad-fac-other" type="text" placeholder="Escribí tu Facultad" style="display:none;">
+          <input type="hidden" name="faculty" id="acad-hidden-faculty" value="{{ (filters.faculty or '') }}" />
+        </div>
 
+        <div class="field">
+          <label>Carrera</label>
+          <select id="acad-car" disabled>
+            <option value="" disabled selected>Elegí tu Carrera</option>
+            <option value="__other__">Otra…</option>
+          </select>
+          <input id="acad-car-other" type="text" placeholder="Escribí tu Carrera" style="display:none;">
+          <input type="hidden" name="career" id="acad-hidden-career" value="{{ (filters.career or '') }}" />
+        </div>
+      </div>
+
+      <!-- Tipo (opcional) -->
+      <div class="field">
+        <label>Tipo</label>
+        <select name="type">
+          <option value="" {{ 'selected' if not filters.type }}>Todos</option>
+          <option value="free" {{ 'selected' if (filters.type or '' )=='free' }}>Gratis</option>
+          <option value="paid" {{ 'selected' if (filters.type or '' )=='paid' }}>Pago</option>
+        </select>
+      </div>
+
+      <div class="actions mt-2">
+        <button type="submit" class="btn primary" onclick="return beforeSubmitAdvanced()">Aplicar filtros</button>
+        <a href="{{ url_for('index') }}" class="btn ghost">Limpiar</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===========================
+     Resultados
+     =========================== -->
+<div class="card mt-3">
   {% if notes and notes|length > 0 %}
-  <p class="mt-2">{{ notes|length }} resultado(s)</p>
+  <p class="mt-1">{{ notes|length }} resultado(s)</p>
+  <div class="stack gap">
+    {% for n in notes %}
+    <div class="note-card">
+      <a href="{{ url_for('note_detail', note_id=n.id) }}" class="note-title">{{ n.title }}</a>
+      <div class="note-meta">{{ n.university }} • {{ n.faculty }} • {{ n.career }}</div>
+      {% if n.description %}<div class="note-desc">{{ n.description }}</div>{% endif %}
+      <div class="note-price">
+        {% if (n.price_cents or 0) > 0 %}
+        ${{ ('%.2f' % (n.price_cents / 100.0)) }}
+        {% else %}
+        Gratis
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
   {% else %}
   <p class="muted mt-2">No hay resultados.</p>
   {% endif %}
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
+{% if include_dynamic_selects %}
+<script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=2"></script>
 <script>
-  // Sin creación (solo filtrar), por eso enableCreate: false
-  window.addEventListener('DOMContentLoaded', async () => {
+  // Tabs
+  function toggleTab(which) {
+    const quick = document.getElementById('tab-quick');
+    const adv = document.getElementById('tab-advanced');
+    quick.style.display = which === 'quick' ? '' : 'none';
+    adv.style.display = which === 'advanced' ? '' : 'none';
+
+    const tabs = document.querySelectorAll('.tabs .tab');
+    tabs.forEach(t => t.classList.remove('active'));
+    (which === 'advanced'
+      ? document.querySelector('.tabs .tab:nth-child(2)')
+      : document.querySelector('.tabs .tab:nth-child(1)')
+    ).classList.add('active');
+  }
+
+  let selectsApi = null;
+
+  // Inicializa selects dependientes (sin creación en buscador)
+  document.addEventListener('DOMContentLoaded', async () => {
     try {
-      const api = await window.initAcademicsSelects({
+      selectsApi = await window.initAcademicsSelects({
         prefix: 'acad',
         enableCreate: false,
         onChange: ({ level, value }) => {
           // sincronizamos el texto visible a los hidden
-          const sel = document.getElementById('acad-' + (level === 'university' ? 'uni' : level === 'faculty' ? 'fac' : 'car'));
-          const text = sel && sel.options && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].text : '';
-          if (level === 'university') document.getElementById('acad-hidden-university').value = (value ? text : '');
-          if (level === 'faculty') document.getElementById('acad-hidden-faculty').value = (value ? text : '');
-          if (level === 'career') document.getElementById('acad-hidden-career').value = (value ? text : '');
+          const map = { university: 'uni', faculty: 'fac', career: 'car' };
+          const sel = document.getElementById('acad-' + map[level]);
+          const text = sel && sel.options && sel.selectedIndex >= 0
+            ? sel.options[sel.selectedIndex].text
+            : '';
+          if (level === 'university') document.getElementById('acad-hidden-university').value = value ? text : '';
+          if (level === 'faculty') document.getElementById('acad-hidden-faculty').value = value ? text : '';
+          if (level === 'career') document.getElementById('acad-hidden-career').value = value ? text : '';
         }
-      });
-
-      // sincronizá el texto de selects antes de enviar
-      const advForm = document.getElementById('advanced-search');
-      advForm.addEventListener('submit', async (e) => {
-        // sincronizar el q del input rápido si lo usaron
-        const quickQ = document.querySelector('#quick-search input[name="q"]');
-        document.getElementById('adv-q').value = (quickQ && quickQ.value) ? quickQ.value.trim() : document.getElementById('adv-q').value;
       });
     } catch (e) {
       console.error('init selects error', e);
     }
   });
-</script>
 
+  // Antes de enviar la avanzada, aseguramos que los hidden queden completos
+  async function beforeSubmitAdvanced() {
+    try {
+      if (selectsApi && selectsApi.resolveHidden) {
+        await selectsApi.resolveHidden();
+      }
+      return true;
+    } catch (e) {
+      alert(e.message || e);
+      return false;
+    }
+  }
+</script>
+{% endif %}
 {% endblock %}
