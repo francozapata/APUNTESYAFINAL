@@ -1429,6 +1429,40 @@ def update_academics():
     return redirect(url_for("profile"))
 
 
+@app.get("/update_academics")
+@login_required
+def update_academics_get():
+    """Muestra el mismo formulario que /complete_profile pero para actualizar."""
+    return render_template(
+        "complete_profile.html",
+        name=current_user.name,
+        mode="update"  # para diferenciar visualmente
+    )
+
+@app.post("/update_academics")
+@login_required
+def update_academics_post():
+    """Procesa los nuevos datos académicos."""
+    university = (request.form.get("university") or "").strip()
+    faculty = (request.form.get("faculty") or "").strip()
+    career = (request.form.get("career") or "").strip()
+
+    if not (university and faculty and career):
+        flash("Completá todos los campos antes de guardar.", "warning")
+        return redirect(url_for("update_academics_get"))
+
+    with Session() as s:
+        u = s.get(User, current_user.id)
+        u.university = university
+        u.faculty = faculty
+        u.career = career
+        s.commit()
+
+    flash("✅ Datos académicos actualizados correctamente.", "success")
+    return redirect(url_for("profile"))
+
+
+
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
