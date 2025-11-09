@@ -4,11 +4,11 @@
     <h2>{{ 'Actualizar datos académicos' if mode == 'update' else 'Completá tu perfil' }}</h2>
     {% if name %}<p class="lead">¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>{% endif %}
 
-    {# 🔁 Acción correcta según el modo #}
+    <!-- 🔧 Acción correcta según modo -->
     <form action="{{ url_for('update_academics_post') if mode == 'update' else url_for('complete_profile_post') }}"
         method="post" id="complete-profile-form">
 
-        {# El componente de selects dependientes #}
+        {# Selects dependientes reutilizando el mismo componente #}
         {% set prefix = 'cp' %}
         {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
         {% include 'components/academics_selects.html' %}
@@ -23,7 +23,7 @@
 <script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=2"></script>
 <script>
     document.addEventListener('DOMContentLoaded', async () => {
-        // Valores iniciales si estamos en modo actualización
+        // Si estás actualizando, precargamos textos visibles y hidden
         const initial = {
             university: {{ (current_user.university | tojson) if mode == 'update' else '""'
     }},
@@ -31,32 +31,30 @@
     career: { { (current_user.career | tojson) if mode == 'update' else '""' } }
     };
 
-    // Inicializa los selects dependientes
     const api = await window.initAcademicsSelects({
         prefix: 'cp',
         enableCreate: true,
-        // Si tu helper soporta initialText, esto los precarga visualmente
         initialText: initial
     });
 
-    // Fallback por si el helper no soporta initialText:
-    const hUni = document.getElementById('cp-hidden-university');
-    const hFac = document.getElementById('cp-hidden-faculty');
-    const hCar = document.getElementById('cp-hidden-career');
-    if (hUni && initial.university) hUni.value = initial.university;
-    if (hFac && initial.faculty) hFac.value = initial.faculty;
-    if (hCar && initial.career) hCar.value = initial.career;
+    // Fallback para asegurar que los hidden queden con valor en update
+    const hU = document.getElementById('cp-hidden-university');
+    const hF = document.getElementById('cp-hidden-faculty');
+    const hC = document.getElementById('cp-hidden-career');
+    if ({{ 'true' if mode == 'update' else 'false' }}) {
+        if (hU && initial.university) hU.value = initial.university;
+        if (hF && initial.faculty) hF.value = initial.faculty;
+        if (hC && initial.career) hC.value = initial.career;
+    }
 
+    // Al enviar, resolvemos hidden; solo cancelamos si hay error
     const form = document.getElementById('complete-profile-form');
     form.addEventListener('submit', async (e) => {
-        // Completa los hidden antes de enviar
         try {
-            if (api && api.resolveHidden) {
-                await api.resolveHidden();
-            }
+            if (api && api.resolveHidden) { await api.resolveHidden(); }
         } catch (err) {
             e.preventDefault();
-            alert(err && err.message ? err.message : 'Revisá los campos seleccionados.');
+            alert(err?.message || 'Revisá los campos seleccionados.');
         }
     });
   });
