@@ -16,6 +16,19 @@
   </div>
   <p><strong>{{ current_user.name }}</strong> — <strong> {{ current_user.email }}</strong></p>
   <p>{{ current_user.university }} • {{ current_user.faculty }} • {{ current_user.career }}</p>
+  <div class="card">
+    <h3>Actualizar datos académicos</h3>
+    <form action="{{ url_for('update_academics') }}" method="post"
+      style="display:flex;flex-direction:column;gap:10px;max-width:400px;">
+      <input class="input" type="text" name="university" placeholder="Universidad" value="{{ current_user.university }}"
+        required>
+      <input class="input" type="text" name="faculty" placeholder="Facultad" value="{{ current_user.faculty }}"
+        required>
+      <input class="input" type="text" name="career" placeholder="Carrera" value="{{ current_user.career }}" required>
+      <button class="btn">Guardar cambios</button>
+    </form>
+  </div>
+
 </div>
 
 <div class="card">

@@ -1407,6 +1407,28 @@ def admin_api_notes_delete(note_id):
         s.commit()
     return jsonify({"ok": True})
 
+@app.post("/profile/update_academics")
+@login_required
+def update_academics():
+    university = (request.form.get("university") or "").strip()
+    faculty = (request.form.get("faculty") or "").strip()
+    career = (request.form.get("career") or "").strip()
+
+    if not (university and faculty and career):
+        flash("Completá todos los campos para actualizar tus datos académicos.", "warning")
+        return redirect(url_for("profile"))
+
+    with Session() as s:
+        u = s.get(User, current_user.id)
+        u.university = university
+        u.faculty = faculty
+        u.career = career
+        s.commit()
+
+    flash("✅ Datos académicos actualizados correctamente.", "success")
+    return redirect(url_for("profile"))
+
+
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
