@@ -2,7 +2,9 @@
 {% block content %}
 <div class="card" style="max-width:900px;margin:32px auto">
     <h2>{{ 'Actualizar datos académicos' if mode == 'update' else 'Completá tu perfil' }}</h2>
-    {% if name %}<p class="lead">¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>{% endif %}
+    {% if name %}
+    <p class="lead">¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>
+    {% endif %}
 
     <form action="{{ url_for('update_academics_post') if mode == 'update' else url_for('complete_profile') }}"
         method="post" id="complete-profile-form">
@@ -11,7 +13,6 @@
         <label for="cp-uni">Universidad</label>
         <select id="cp-uni" class="input" required>
             <option value="" disabled selected>Elegí tu Universidad</option>
-            <!-- opciones dinámicas -->
             <option value="__other__">Otra…</option>
         </select>
         <input id="cp-uni-other" class="input" placeholder="Escribí el nombre de la Universidad"
@@ -35,7 +36,7 @@
         <input id="cp-car-other" class="input" placeholder="Escribí el nombre de la Carrera"
             style="display:none;margin-top:8px;">
 
-        <!-- Estos 3 hidden son lo que llega a Flask y se guarda en User -->
+        <!-- Hidden inputs -->
         <input type="hidden" id="cp-hidden-university" name="university">
         <input type="hidden" id="cp-hidden-faculty" name="faculty">
         <input type="hidden" id="cp-hidden-career" name="career">
@@ -48,14 +49,11 @@
 </div>
 
 <script>
-    // Helpers de DOM
     const $ = (id) => document.getElementById(id);
 
-    // Cargar listas
     async function loadUniversities() {
         const r = await fetch('/api/academics/universities');
         const list = await r.json();
-        // Insertar antes de "Otra…"
         const sel = $('cp-uni');
         const other = Array.from(sel.options).find(o => o.value === '__other__');
         list.forEach(u => {
@@ -67,53 +65,51 @@
     }
 
     async function loadFaculties(universityId) {
-        $('cp-fac').innerHTML = `
+        const facSel = $('cp-fac');
+        facSel.innerHTML = `
       <option value="" disabled selected>Elegí tu Facultad</option>
       <option value="__other__">Otra…</option>`;
-        $('cp-fac').disabled = !universityId;
+        facSel.disabled = !universityId;
 
         if (!universityId) return;
         const r = await fetch('/api/academics/faculties?university_id=' + encodeURIComponent(universityId));
         const list = await r.json();
-        const sel = $('cp-fac');
-        const other = Array.from(sel.options).find(o => o.value === '__other__');
+        const other = Array.from(facSel.options).find(o => o.value === '__other__');
         list.forEach(f => {
             const opt = document.createElement('option');
             opt.value = String(f.id);
             opt.textContent = f.name;
-            sel.insertBefore(opt, other);
+            facSel.insertBefore(opt, other);
         });
     }
 
     async function loadCareers(facultyId) {
-        $('cp-car').innerHTML = `
+        const carSel = $('cp-car');
+        carSel.innerHTML = `
       <option value="" disabled selected>Elegí tu Carrera</option>
       <option value="__other__">Otra…</option>`;
-        $('cp-car').disabled = !facultyId;
+        carSel.disabled = !facultyId;
 
         if (!facultyId) return;
         const r = await fetch('/api/academics/careers?faculty_id=' + encodeURIComponent(facultyId));
         const list = await r.json();
-        const sel = $('cp-car');
-        const other = Array.from(sel.options).find(o => o.value === '__other__');
+        const other = Array.from(carSel.options).find(o => o.value === '__other__');
         list.forEach(c => {
             const opt = document.createElement('option');
             opt.value = String(c.id);
             opt.textContent = c.name;
-            sel.insertBefore(opt, other);
+            carSel.insertBefore(opt, other);
         });
     }
 
-    // Mostrar/ocultar inputs "Otra…"
     function toggleOther(selectEl, otherInputId) {
         const show = selectEl.value === '__other__';
         const input = $(otherInputId);
         input.style.display = show ? '' : 'none';
         if (show) input.focus();
-        if (!show) input.value = '';
+        else input.value = '';
     }
 
-    // Copiar al hidden lo elegido (texto final que guarda User)
     function setHiddenFromSelect(selectEl, otherInputEl, hiddenEl) {
         if (!selectEl.value) return false;
         if (selectEl.value === '__other__') {
@@ -127,7 +123,6 @@
         }
     }
 
-    // Crear “Otra…” si corresponde
     async function createUniversityIfOther() {
         if ($('cp-uni').value !== '__other__') return { id: Number($('cp-uni').value) || null };
         const name = ($('cp-uni-other').value || '').trim();
@@ -164,36 +159,68 @@
         return { id: Number(js.id) };
     }
 
-    // Eventos
     document.addEventListener('DOMContentLoaded', async () => {
         await loadUniversities();
 
+        // Cambio de Universidad
         $('cp-uni').addEventListener('change', async (e) => {
             toggleOther(e.target, 'cp-uni-other');
-            const uniId = e.target.value === '__other__' ? null : Number(e.target.value);
+            const isOther = e.target.value === '__other__';
+            const uniId = isOther ? null : Number(e.target.value);
+
             $('cp-fac-other').style.display = 'none';
             $('cp-car-other').style.display = 'none';
-            await loadFaculties(uniId);
-            $('cp-car').innerHTML = '<option value="" disabled selected>Elegí tu Carrera</option><option value="__other__">Otra…</option>';
-            $('cp-car').disabled = true;
+
+            if (isOther) {
+                const facSel = $('cp-fac');
+                facSel.disabled = false;
+                facSel.innerHTML = `
+          <option value="" disabled selected>Elegí tu Facultad</option>
+          <option value="__other__">Otra…</option>`;
+                const carSel = $('cp-car');
+                carSel.disabled = true;
+                carSel.innerHTML = `
+          <option value="" disabled selected>Elegí tu Carrera</option>
+          <option value="__other__">Otra…</option>`;
+            } else {
+                await loadFaculties(uniId);
+                const carSel = $('cp-car');
+                carSel.disabled = true;
+                carSel.innerHTML = `
+          <option value="" disabled selected>Elegí tu Carrera</option>
+          <option value="__other__">Otra…</option>`;
+            }
         });
 
+        // Cambio de Facultad
         $('cp-fac').addEventListener('change', async (e) => {
             toggleOther(e.target, 'cp-fac-other');
-            const facId = e.target.value === '__other__' ? null : Number(e.target.value);
-            $('cp-car-other').style.display = 'none';
-            await loadCareers(facId);
+            const isOther = e.target.value === '__other__';
+            const facId = isOther ? null : Number(e.target.value);
+
+            if (isOther) {
+                const carSel = $('cp-car');
+                carSel.disabled = false;
+                carSel.innerHTML = `
+          <option value="" disabled>Elegí tu Carrera</option>
+          <option value="__other__" selected>Otra…</option>`;
+                $('cp-car-other').style.display = '';
+                $('cp-car-other').focus();
+            } else {
+                $('cp-car-other').style.display = 'none';
+                await loadCareers(facId);
+            }
         });
 
+        // Cambio de Carrera
         $('cp-car').addEventListener('change', (e) => {
             toggleOther(e.target, 'cp-car-other');
         });
 
-        // Submit con aprendizaje
+        // Envío del formulario
         $('complete-profile-form').addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            // Validación y carga de hidden (texto final para User)
             const okU = setHiddenFromSelect($('cp-uni'), $('cp-uni-other'), $('cp-hidden-university'));
             const okF = setHiddenFromSelect($('cp-fac'), $('cp-fac-other'), $('cp-hidden-faculty'));
             const okC = setHiddenFromSelect($('cp-car'), $('cp-car-other'), $('cp-hidden-career'));
@@ -203,12 +230,9 @@
             }
 
             try {
-                // Crear lo que sea "Otra…" para que quede guardado en catálogos
                 const uni = await createUniversityIfOther();
                 const fac = await createFacultyIfOther(uni.id);
                 await createCareerIfOther(fac.id);
-
-                // Enviar al backend
                 e.target.submit();
             } catch (err) {
                 alert(err.message || 'Ocurrió un error guardando tus datos.');
