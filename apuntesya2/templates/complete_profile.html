@@ -4,59 +4,154 @@
     <h2>{{ 'Actualizar datos académicos' if mode == 'update' else 'Completá tu perfil' }}</h2>
     {% if name %}<p class="lead">¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>{% endif %}
 
-    <!-- 🔧 Acción correcta según modo -->
     <form action="{{ url_for('update_academics_post') if mode == 'update' else url_for('complete_profile_post') }}"
         method="post" id="complete-profile-form">
 
-        {# Selects dependientes reutilizando el mismo componente #}
-        {% set prefix = 'cp' %}
-        {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
-        {% include 'components/academics_selects.html' %}
+        <!-- Universidad -->
+        <div class="field">
+            <label>Universidad</label>
+            <select id="cp-uni" class="input">
+                <option value="" disabled selected>Elegí tu Universidad</option>
+                <option value="__other__">Otra…</option>
+            </select>
+            <input id="cp-uni-other" class="input" type="text" placeholder="Escribí tu Universidad"
+                style="display:none;margin-top:8px;">
+            <input type="hidden" name="university" id="cp-hidden-university">
+        </div>
 
-        <button type="submit" class="btn primary">
+        <!-- Facultad -->
+        <div class="field" style="margin-top:12px;">
+            <label>Facultad</label>
+            <select id="cp-fac" class="input" disabled>
+                <option value="" disabled selected>Elegí tu Facultad</option>
+                <option value="__other__">Otra…</option>
+            </select>
+            <input id="cp-fac-other" class="input" type="text" placeholder="Escribí tu Facultad"
+                style="display:none;margin-top:8px;">
+            <input type="hidden" name="faculty" id="cp-hidden-faculty">
+        </div>
+
+        <!-- Carrera -->
+        <div class="field" style="margin-top:12px;">
+            <label>Carrera</label>
+            <select id="cp-car" class="input" disabled>
+                <option value="" disabled selected>Elegí tu Carrera</option>
+                <option value="__other__">Otra…</option>
+            </select>
+            <input id="cp-car-other" class="input" type="text" placeholder="Escribí tu Carrera"
+                style="display:none;margin-top:8px;">
+            <input type="hidden" name="career" id="cp-hidden-career">
+        </div>
+
+        <button type="submit" class="btn primary" style="margin-top:16px;">
             {{ 'Guardar cambios' if mode == 'update' else 'Guardar y continuar' }}
         </button>
         <p class="muted" style="margin-top:10px">Podrás editar esta información luego desde tu perfil.</p>
     </form>
 </div>
 
-<script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=2"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', async () => {
-        // Si estás actualizando, precargamos textos visibles y hidden
-        const initial = {
-            university: {{ (current_user.university | tojson) if mode == 'update' else '""'
-    }},
-        faculty: {{ (current_user.faculty | tojson) if mode == 'update' else '""' }},
-    career: { { (current_user.career | tojson) if mode == 'update' else '""' } }
+    // Helpers
+    const $ = (id) => document.getElementById(id);
+    const setHiddenFromSelect = (selectEl, otherInputEl, hiddenEl) => {
+        if (selectEl.value === '__other__') {
+            const v = (otherInputEl.value || '').trim();
+            hiddenEl.value = v;
+            return !!v;
+        } else {
+            const text = selectEl.options[selectEl.selectedIndex]?.text || '';
+            hiddenEl.value = text.trim();
+            return !!hiddenEl.value;
+        }
+    };
+    const toggleOther = (selectEl, otherInputEl) => {
+        const isOther = (selectEl.value === '__other__');
+        otherInputEl.style.display = isOther ? '' : 'none';
     };
 
-    const api = await window.initAcademicsSelects({
-        prefix: 'cp',
-        enableCreate: true,
-        initialText: initial
-    });
-
-    // Fallback para asegurar que los hidden queden con valor en update
-    const hU = document.getElementById('cp-hidden-university');
-    const hF = document.getElementById('cp-hidden-faculty');
-    const hC = document.getElementById('cp-hidden-career');
-    if ({{ 'true' if mode == 'update' else 'false' }}) {
-        if (hU && initial.university) hU.value = initial.university;
-        if (hF && initial.faculty) hF.value = initial.faculty;
-        if (hC && initial.career) hC.value = initial.career;
+    // Carga datos
+    async function loadUniversities() {
+        const r = await fetch('/api/academics/universities');
+        const items = await r.json();
+        const sel = $('cp-uni');
+        // conserva las dos primeras opciones
+        items.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = String(u.id);
+            opt.textContent = u.name;
+            sel.appendChild(opt);
+        });
+    }
+    async function loadFaculties(universityId) {
+        const sel = $('cp-fac');
+        sel.innerHTML = '<option value="" disabled selected>Elegí tu Facultad</option><option value="__other__">Otra…</option>';
+        $('cp-car').innerHTML = '<option value="" disabled selected>Elegí tu Carrera</option><option value="__other__">Otra…</option>';
+        $('cp-fac').disabled = false;
+        $('cp-car').disabled = true;
+        if (!universityId || universityId === '__other__') return;
+        const r = await fetch(`/api/academics/faculties?university_id=${encodeURIComponent(universityId)}`);
+        const items = await r.json();
+        items.forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = String(f.id);
+            opt.textContent = f.name;
+            sel.appendChild(opt);
+        });
+    }
+    async function loadCareers(facultyId) {
+        const sel = $('cp-car');
+        sel.innerHTML = '<option value="" disabled selected>Elegí tu Carrera</option><option value="__other__">Otra…</option>';
+        $('cp-car').disabled = false;
+        if (!facultyId || facultyId === '__other__') return;
+        const r = await fetch(`/api/academics/careers?faculty_id=${encodeURIComponent(facultyId)}`);
+        const items = await r.json();
+        items.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = String(c.id);
+            opt.textContent = c.name;
+            sel.appendChild(opt);
+        });
     }
 
-    // Al enviar, resolvemos hidden; solo cancelamos si hay error
-    const form = document.getElementById('complete-profile-form');
-    form.addEventListener('submit', async (e) => {
-        try {
-            if (api && api.resolveHidden) { await api.resolveHidden(); }
-        } catch (err) {
-            e.preventDefault();
-            alert(err?.message || 'Revisá los campos seleccionados.');
-        }
-    });
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Cargar universidades
+        await loadUniversities();
+
+        // Handlers "Otra…"
+        $('cp-uni').addEventListener('change', async (e) => {
+            toggleOther($('cp-uni'), $('cp-uni-other'));
+            await loadFaculties(e.target.value);
+        });
+        $('cp-fac').addEventListener('change', async (e) => {
+            toggleOther($('cp-fac'), $('cp-fac-other'));
+            await loadCareers(e.target.value);
+        });
+        $('cp-car').addEventListener('change', () => {
+            toggleOther($('cp-car'), $('cp-car-other'));
+        });
+
+        // Envío
+        $('complete-profile-form').addEventListener('submit', (e) => {
+            const okU = setHiddenFromSelect($('cp-uni'), $('cp-uni-other'), $('cp-hidden-university'));
+            const okF = setHiddenFromSelect($('cp-fac'), $('cp-fac-other'), $('cp-hidden-faculty'));
+            const okC = setHiddenFromSelect($('cp-car'), $('cp-car-other'), $('cp-hidden-career'));
+            if (!okU || !okF || !okC) {
+                e.preventDefault();
+                alert('Completá Universidad, Facultad y Carrera (si elegís "Otra…", escribí el nombre).');
+            }
+        });
+
+        // Prefill en modo actualización
+        {% if mode == 'update' %}
+        const iu = {{ (current_user.university | tojson) or '""'
+    }};
+    const ifa = {{ (current_user.faculty | tojson) or '""' }};
+    const ic = {{ (current_user.career | tojson) or '""' }};
+    // Si hay textos, colócalos en los "other" y deja selects en __other__
+    if (iu) { $('cp-uni').value = '__other__'; $('cp-uni-other').style.display = ''; $('cp-uni-other').value = iu; }
+    if (ifa) { $('cp-fac').disabled = false; $('cp-fac').value = '__other__'; $('cp-fac-other').style.display = ''; $('cp-fac-other').value = ifa; }
+    if (ic) { $('cp-car').disabled = false; $('cp-car').value = '__other__'; $('cp-car-other').style.display = ''; $('cp-car-other').value = ic; }
+    {% endif %}
   });
 </script>
 {% endblock %}
