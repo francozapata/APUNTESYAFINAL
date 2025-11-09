@@ -36,6 +36,12 @@
   {% else %}
   <a class="btn" href="{{ url_for('download_note', note_id=note.id) }}">Descargar gratis</a>
   {% endif %}
+  {% if seller_contact_url %}
+  <a class="btn secondary" href="{{ seller_contact_url }}" target="_blank" rel="noopener">
+    Contactar al vendedor
+  </a>
+  {% endif %}
+
 
   {% if can_review %}
   <hr>
