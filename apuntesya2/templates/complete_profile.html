@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card" style="max-width:900px;margin:32px auto">
-    <h2>Completá tu perfil</h2>
+    <h2>{{ 'Actualizar datos académicos' if mode == 'update' else 'Completá tu perfil' }}</h2>
     {% if name %}<p class="lead">¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>{% endif %}
 
     <form method="POST" action="{{ url_for('complete_profile') }}" id="completeProfileForm">
@@ -9,7 +9,9 @@
         {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
         {% include 'components/academics_selects.html' %}
 
-        <button class="btn" type="submit" style="margin-top:16px">Guardar y continuar</button>
+        <button class="btn primary" type="submit">
+            {{ 'Guardar cambios' if mode == 'update' else 'Guardar y continuar' }}
+        </button>
         <p class="muted" style="margin-top:10px">Podrás editar esta información luego desde tu perfil.</p>
     </form>
 </div>
