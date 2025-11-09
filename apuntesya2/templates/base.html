@@ -20,15 +20,10 @@
   <style>
     .nav-profile-pic {
       display: block;
-      /* Debe ser un elemento de bloque para usar margin: auto */
       width: fit-content;
-      /* O un ancho fijo (e.g., width: 150px) */
       margin: 0 auto;
-      /* El truco del centrado horizontal */
 
-      /* Mantienes tus estilos originales para el contenido: */
       display: inline-flex;
-      /* Esto se aplica al contenido interno, pero se ignora por el display:block */
       align-items: center;
       gap: 8px;
     }
@@ -52,7 +47,6 @@
       <a href="{{ url_for('upload_note') }}" class="btn">Subir apunte</a>
       <a href="{{ url_for('profile') }}" class="btn secondary">Perfil</a>
 
-      {# 👉 Unificamos en un solo botón cuando es admin #}
       {% if current_user.is_authenticated and current_user.is_admin %}
       <a href="{{ url_for('admin_hub') }}" class="btn ghost">Administrar</a>
       {% endif %}
@@ -134,9 +128,10 @@
     </div>
   </div>
 
-  <!--<script src="{{ url_for('static', filename='js/contact_widget.js') }}"></script>  -->
+  {# Bloque para inyectar JS específicos de cada página (p.ej. selects) #}
+  {% block extra_js %}{% endblock %}
 
-
+  <!-- <script src="{{ url_for('static', filename='js/contact_widget.js') }}"></script>  -->
 </body>
 
 </html>

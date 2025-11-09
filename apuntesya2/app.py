@@ -308,13 +308,19 @@ def index():
         notes = s.execute(
             select(Note).where(Note.is_active == True).order_by(Note.created_at.desc()).limit(30)
         ).scalars().all()
-    return render_template("index.html", notes=notes, include_dynamic_selects=True)
+    # Siempre mandamos q y filters para no romper el template
+    return render_template(
+        "index.html",
+        notes=notes,
+        include_dynamic_selects=True,
+        q="",
+        filters={},
+        show_tab="quick"
+    )
 
 # ------------------------------
 # BÚSQUEDA
 # ------------------------------
-from sqlalchemy import or_, desc
-
 @app.get("/search/quick", endpoint="search_quick")
 def search_quick():
     """
@@ -337,7 +343,6 @@ def search_quick():
             )
             notes = s.execute(stmt).scalars().all()
 
-    # show_tab="quick" fuerza que se vea el panel de búsqueda rápida
     return render_template(
         "index.html",
         notes=notes,
@@ -346,7 +351,6 @@ def search_quick():
         filters={"university": "", "faculty": "", "career": "", "type": ""},
         include_dynamic_selects=True
     )
-
 
 @app.get("/search/advanced", endpoint="search_advanced")
 def search_advanced():
@@ -380,7 +384,6 @@ def search_advanced():
 
         notes = s.execute(stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
 
-    # show_tab="advanced" fuerza que se vea el panel de búsqueda avanzada
     return render_template(
         "index.html",
         notes=notes,
@@ -390,11 +393,10 @@ def search_advanced():
         include_dynamic_selects=True
     )
 
-
-# --- BÚSQUEDA ---
+# Ruta de compatibilidad (si querés mantener /search genérico).
 @app.get("/search", endpoint="search")
 def search():
-    q  = (request.args.get("q") or "").strip()
+    q   = (request.args.get("q") or "").strip()
     uni = (request.args.get("university") or "").strip()
     fac = (request.args.get("faculty") or "").strip()
     car = (request.args.get("career") or "").strip()
@@ -419,17 +421,19 @@ def search():
         elif t == "paid":
             stmt = stmt.where(Note.price_cents > 0)
 
-        notes = s.execute(stmt.order_by(Note.created_at.desc()).limit(100)).scalars().all()
+        notes = s.execute(stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
+
+    # Mostramos la pestaña avanzada si vino algún filtro; si no, la rápida.
+    show_tab = "advanced" if (uni or fac or car or t) else "quick"
 
     return render_template(
         "index.html",
         notes=notes,
+        show_tab=show_tab,
         q=q,
         filters={"university": uni, "faculty": fac, "career": car, "type": t},
         include_dynamic_selects=True
     )
-
-
 
 # -----------------------------------------------------------------------------
 # Auth (sólo Google con Firebase)
@@ -1305,20 +1309,13 @@ def help_commissions():
 def admin_hub():
     return render_template("admin/hub.html")
 
-
-from functools import wraps  # asegúrate de tenerlo arriba
-from sqlalchemy import desc   # ya lo tenías
-
 # ------------------------------
 # Admin HUB - listado de usuarios (UNIFICADO)
 # ------------------------------
-from sqlalchemy import desc  # ya lo tenés importado arriba probablemente
-
 @app.route("/admin/api/users", methods=["GET", "POST"], endpoint="admin_api_users_list")
 @login_required
+@admin_required
 def admin_api_users_list():
-    _require_admin()
-
     # Soporta ?q= (GET) y JSON {q:"..."} (POST)
     q = (request.args.get("q") or "").strip()
     if request.method == "POST":
@@ -1352,10 +1349,8 @@ def admin_api_users_list():
                 "is_blocked": bool(getattr(u, "is_blocked", False)),
             })
 
-    # El tab “Usuarios” del hub esperaba lista directa o {"items":...}.
-    # Para máxima compatibilidad, devolvemos ambas formas:
+    # Compatibilidad: devolvemos ambas formas
     return jsonify({"items": items, "list": items})
-
 
 @app.get("/admin/api/notes")
 @login_required
