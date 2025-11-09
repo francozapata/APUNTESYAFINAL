@@ -4,44 +4,41 @@
     <h2>{{ 'Actualizar datos académicos' if mode == 'update' else 'Completá tu perfil' }}</h2>
     {% if name %}<p class="lead">¡Hola {{ name }}! Necesitamos estos datos para organizar los apuntes.</p>{% endif %}
 
-    <form action="{{ url_for('update_academics_post') if mode == 'update' else url_for('complete_profile_post') }}"
+    <form action="{{ url_for('update_academics_post') if mode == 'update' else url_for('complete_profile') }}"
         method="post" id="complete-profile-form">
 
         <!-- Universidad -->
-        <div class="field">
-            <label>Universidad</label>
-            <select id="cp-uni" class="input">
-                <option value="" disabled selected>Elegí tu Universidad</option>
-                <option value="__other__">Otra…</option>
-            </select>
-            <input id="cp-uni-other" class="input" type="text" placeholder="Escribí tu Universidad"
-                style="display:none;margin-top:8px;">
-            <input type="hidden" name="university" id="cp-hidden-university">
-        </div>
+        <label for="cp-uni">Universidad</label>
+        <select id="cp-uni" class="input" required>
+            <option value="" disabled selected>Elegí tu Universidad</option>
+            <!-- opciones dinámicas -->
+            <option value="__other__">Otra…</option>
+        </select>
+        <input id="cp-uni-other" class="input" placeholder="Escribí el nombre de la Universidad"
+            style="display:none;margin-top:8px;">
 
         <!-- Facultad -->
-        <div class="field" style="margin-top:12px;">
-            <label>Facultad</label>
-            <select id="cp-fac" class="input" disabled>
-                <option value="" disabled selected>Elegí tu Facultad</option>
-                <option value="__other__">Otra…</option>
-            </select>
-            <input id="cp-fac-other" class="input" type="text" placeholder="Escribí tu Facultad"
-                style="display:none;margin-top:8px;">
-            <input type="hidden" name="faculty" id="cp-hidden-faculty">
-        </div>
+        <label for="cp-fac" style="margin-top:14px;display:block;">Facultad</label>
+        <select id="cp-fac" class="input" required disabled>
+            <option value="" disabled selected>Elegí tu Facultad</option>
+            <option value="__other__">Otra…</option>
+        </select>
+        <input id="cp-fac-other" class="input" placeholder="Escribí el nombre de la Facultad"
+            style="display:none;margin-top:8px;">
 
         <!-- Carrera -->
-        <div class="field" style="margin-top:12px;">
-            <label>Carrera</label>
-            <select id="cp-car" class="input" disabled>
-                <option value="" disabled selected>Elegí tu Carrera</option>
-                <option value="__other__">Otra…</option>
-            </select>
-            <input id="cp-car-other" class="input" type="text" placeholder="Escribí tu Carrera"
-                style="display:none;margin-top:8px;">
-            <input type="hidden" name="career" id="cp-hidden-career">
-        </div>
+        <label for="cp-car" style="margin-top:14px;display:block;">Carrera</label>
+        <select id="cp-car" class="input" required disabled>
+            <option value="" disabled selected>Elegí tu Carrera</option>
+            <option value="__other__">Otra…</option>
+        </select>
+        <input id="cp-car-other" class="input" placeholder="Escribí el nombre de la Carrera"
+            style="display:none;margin-top:8px;">
+
+        <!-- Estos 3 hidden son lo que llega a Flask y se guarda en User -->
+        <input type="hidden" id="cp-hidden-university" name="university">
+        <input type="hidden" id="cp-hidden-faculty" name="faculty">
+        <input type="hidden" id="cp-hidden-career" name="career">
 
         <button type="submit" class="btn primary" style="margin-top:16px;">
             {{ 'Guardar cambios' if mode == 'update' else 'Guardar y continuar' }}
@@ -51,107 +48,172 @@
 </div>
 
 <script>
-    // Helpers
+    // Helpers de DOM
     const $ = (id) => document.getElementById(id);
-    const setHiddenFromSelect = (selectEl, otherInputEl, hiddenEl) => {
-        if (selectEl.value === '__other__') {
-            const v = (otherInputEl.value || '').trim();
-            hiddenEl.value = v;
-            return !!v;
-        } else {
-            const text = selectEl.options[selectEl.selectedIndex]?.text || '';
-            hiddenEl.value = text.trim();
-            return !!hiddenEl.value;
-        }
-    };
-    const toggleOther = (selectEl, otherInputEl) => {
-        const isOther = (selectEl.value === '__other__');
-        otherInputEl.style.display = isOther ? '' : 'none';
-    };
 
-    // Carga datos
+    // Cargar listas
     async function loadUniversities() {
         const r = await fetch('/api/academics/universities');
-        const items = await r.json();
+        const list = await r.json();
+        // Insertar antes de "Otra…"
         const sel = $('cp-uni');
-        // conserva las dos primeras opciones
-        items.forEach(u => {
+        const other = Array.from(sel.options).find(o => o.value === '__other__');
+        list.forEach(u => {
             const opt = document.createElement('option');
             opt.value = String(u.id);
             opt.textContent = u.name;
-            sel.appendChild(opt);
+            sel.insertBefore(opt, other);
         });
     }
+
     async function loadFaculties(universityId) {
+        $('cp-fac').innerHTML = `
+      <option value="" disabled selected>Elegí tu Facultad</option>
+      <option value="__other__">Otra…</option>`;
+        $('cp-fac').disabled = !universityId;
+
+        if (!universityId) return;
+        const r = await fetch('/api/academics/faculties?university_id=' + encodeURIComponent(universityId));
+        const list = await r.json();
         const sel = $('cp-fac');
-        sel.innerHTML = '<option value="" disabled selected>Elegí tu Facultad</option><option value="__other__">Otra…</option>';
-        $('cp-car').innerHTML = '<option value="" disabled selected>Elegí tu Carrera</option><option value="__other__">Otra…</option>';
-        $('cp-fac').disabled = false;
-        $('cp-car').disabled = true;
-        if (!universityId || universityId === '__other__') return;
-        const r = await fetch(`/api/academics/faculties?university_id=${encodeURIComponent(universityId)}`);
-        const items = await r.json();
-        items.forEach(f => {
+        const other = Array.from(sel.options).find(o => o.value === '__other__');
+        list.forEach(f => {
             const opt = document.createElement('option');
             opt.value = String(f.id);
             opt.textContent = f.name;
-            sel.appendChild(opt);
+            sel.insertBefore(opt, other);
         });
     }
+
     async function loadCareers(facultyId) {
+        $('cp-car').innerHTML = `
+      <option value="" disabled selected>Elegí tu Carrera</option>
+      <option value="__other__">Otra…</option>`;
+        $('cp-car').disabled = !facultyId;
+
+        if (!facultyId) return;
+        const r = await fetch('/api/academics/careers?faculty_id=' + encodeURIComponent(facultyId));
+        const list = await r.json();
         const sel = $('cp-car');
-        sel.innerHTML = '<option value="" disabled selected>Elegí tu Carrera</option><option value="__other__">Otra…</option>';
-        $('cp-car').disabled = false;
-        if (!facultyId || facultyId === '__other__') return;
-        const r = await fetch(`/api/academics/careers?faculty_id=${encodeURIComponent(facultyId)}`);
-        const items = await r.json();
-        items.forEach(c => {
+        const other = Array.from(sel.options).find(o => o.value === '__other__');
+        list.forEach(c => {
             const opt = document.createElement('option');
             opt.value = String(c.id);
             opt.textContent = c.name;
-            sel.appendChild(opt);
+            sel.insertBefore(opt, other);
         });
     }
 
+    // Mostrar/ocultar inputs "Otra…"
+    function toggleOther(selectEl, otherInputId) {
+        const show = selectEl.value === '__other__';
+        const input = $(otherInputId);
+        input.style.display = show ? '' : 'none';
+        if (show) input.focus();
+        if (!show) input.value = '';
+    }
+
+    // Copiar al hidden lo elegido (texto final que guarda User)
+    function setHiddenFromSelect(selectEl, otherInputEl, hiddenEl) {
+        if (!selectEl.value) return false;
+        if (selectEl.value === '__other__') {
+            const v = (otherInputEl.value || '').trim();
+            if (!v) return false;
+            hiddenEl.value = v;
+            return true;
+        } else {
+            hiddenEl.value = selectEl.options[selectEl.selectedIndex].textContent;
+            return true;
+        }
+    }
+
+    // Crear “Otra…” si corresponde
+    async function createUniversityIfOther() {
+        if ($('cp-uni').value !== '__other__') return { id: Number($('cp-uni').value) || null };
+        const name = ($('cp-uni-other').value || '').trim();
+        const r = await fetch('/api/academics/universities', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        const js = await r.json();
+        if (!r.ok || !js.id) throw new Error('No se pudo crear la Universidad.');
+        return { id: Number(js.id) };
+    }
+
+    async function createFacultyIfOther(universityId) {
+        if ($('cp-fac').value !== '__other__') return { id: Number($('cp-fac').value) || null };
+        const name = ($('cp-fac-other').value || '').trim();
+        const r = await fetch('/api/academics/faculties', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, university_id: universityId })
+        });
+        const js = await r.json();
+        if (!r.ok || !js.id) throw new Error('No se pudo crear la Facultad.');
+        return { id: Number(js.id) };
+    }
+
+    async function createCareerIfOther(facultyId) {
+        if ($('cp-car').value !== '__other__') return { id: Number($('cp-car').value) || null };
+        const name = ($('cp-car-other').value || '').trim();
+        const r = await fetch('/api/academics/careers', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, faculty_id: facultyId })
+        });
+        const js = await r.json();
+        if (!r.ok || !js.id) throw new Error('No se pudo crear la Carrera.');
+        return { id: Number(js.id) };
+    }
+
+    // Eventos
     document.addEventListener('DOMContentLoaded', async () => {
-        // Cargar universidades
         await loadUniversities();
 
-        // Handlers "Otra…"
         $('cp-uni').addEventListener('change', async (e) => {
-            toggleOther($('cp-uni'), $('cp-uni-other'));
-            await loadFaculties(e.target.value);
-        });
-        $('cp-fac').addEventListener('change', async (e) => {
-            toggleOther($('cp-fac'), $('cp-fac-other'));
-            await loadCareers(e.target.value);
-        });
-        $('cp-car').addEventListener('change', () => {
-            toggleOther($('cp-car'), $('cp-car-other'));
+            toggleOther(e.target, 'cp-uni-other');
+            const uniId = e.target.value === '__other__' ? null : Number(e.target.value);
+            $('cp-fac-other').style.display = 'none';
+            $('cp-car-other').style.display = 'none';
+            await loadFaculties(uniId);
+            $('cp-car').innerHTML = '<option value="" disabled selected>Elegí tu Carrera</option><option value="__other__">Otra…</option>';
+            $('cp-car').disabled = true;
         });
 
-        // Envío
-        $('complete-profile-form').addEventListener('submit', (e) => {
+        $('cp-fac').addEventListener('change', async (e) => {
+            toggleOther(e.target, 'cp-fac-other');
+            const facId = e.target.value === '__other__' ? null : Number(e.target.value);
+            $('cp-car-other').style.display = 'none';
+            await loadCareers(facId);
+        });
+
+        $('cp-car').addEventListener('change', (e) => {
+            toggleOther(e.target, 'cp-car-other');
+        });
+
+        // Submit con aprendizaje
+        $('complete-profile-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Validación y carga de hidden (texto final para User)
             const okU = setHiddenFromSelect($('cp-uni'), $('cp-uni-other'), $('cp-hidden-university'));
             const okF = setHiddenFromSelect($('cp-fac'), $('cp-fac-other'), $('cp-hidden-faculty'));
             const okC = setHiddenFromSelect($('cp-car'), $('cp-car-other'), $('cp-hidden-career'));
             if (!okU || !okF || !okC) {
-                e.preventDefault();
-                alert('Completá Universidad, Facultad y Carrera (si elegís "Otra…", escribí el nombre).');
+                alert('Completá Universidad, Facultad y Carrera. Si elegís "Otra…", escribí el nombre.');
+                return;
+            }
+
+            try {
+                // Crear lo que sea "Otra…" para que quede guardado en catálogos
+                const uni = await createUniversityIfOther();
+                const fac = await createFacultyIfOther(uni.id);
+                await createCareerIfOther(fac.id);
+
+                // Enviar al backend
+                e.target.submit();
+            } catch (err) {
+                alert(err.message || 'Ocurrió un error guardando tus datos.');
             }
         });
-
-        // Prefill en modo actualización
-        {% if mode == 'update' %}
-        const iu = {{ (current_user.university | tojson) or '""'
-    }};
-    const ifa = {{ (current_user.faculty | tojson) or '""' }};
-    const ic = {{ (current_user.career | tojson) or '""' }};
-    // Si hay textos, colócalos en los "other" y deja selects en __other__
-    if (iu) { $('cp-uni').value = '__other__'; $('cp-uni-other').style.display = ''; $('cp-uni-other').value = iu; }
-    if (ifa) { $('cp-fac').disabled = false; $('cp-fac').value = '__other__'; $('cp-fac-other').style.display = ''; $('cp-fac-other').value = ifa; }
-    if (ic) { $('cp-car').disabled = false; $('cp-car').value = '__other__'; $('cp-car-other').style.display = ''; $('cp-car-other').value = ic; }
-    {% endif %}
-  });
+    });
 </script>
 {% endblock %}
