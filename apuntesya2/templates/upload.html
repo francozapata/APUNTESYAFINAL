@@ -16,7 +16,7 @@
     <div class="card" style="margin-top:16px">
       <h3>Información importante</h3>
       <ul class="list-disc pl-6">
-        <li>La plataforma aplica una <strong>El vendedor recibirá el monto pactado (X). ApuntesYa agregará una comisión del 20% sobre el precio de venta (8% para Mercado Pago como procesador y 12% para la plataforma).</strong>.</li>
+        <li>El vendedor <strong>recibirá el monto que cargue como precio (X)</strong>. ApuntesYa agregará sobre ese valor una comisión total del <strong>20%</strong>: <strong>8%</strong> que corresponde a Mercado Pago como procesador de pagos y <strong>12%</strong> que corresponde a la plataforma ApuntesYa.</li>
         <li><strong>Mercado Pago</strong> puede aplicar costos y/o retenciones adicionales.</li>
         {% if config.IIBB_ENABLED %}
         <li>Pueden aplicarse retenciones de <strong>IIBB</strong> según jurisdicción.</li>
@@ -27,16 +27,16 @@
         <a href="{{ url_for('help_mp') }}" class="text-blue-600 hover:underline">Ver instructivo</a>.
       </p>
     </div>
-    <div class="card mt-4" id="resumen-publicacion" data-ay="{{ config.PLATFORM_FEE_PCT or 5 }}"
-      data-mp="{{ 8.0 if 8.0 is defined else 7.61 }}">
+    <div class="card mt-4" id="resumen-publicacion" data-ay="12.0" data-mp="8.0">
       <h3>Resumen de publicación</h3>
       <p class="text-sm">Este cálculo es estimativo. Usa El vendedor recibirá el monto pactado (X). ApuntesYa agregará una comisión del 20% sobre el precio de venta (8% para Mercado Pago como procesador y 12% para la plataforma).</strong>) y El vendedor recibirá el monto pactado (X). ApuntesYa agregará una comisión del 20% sobre el precio de venta (8% para Mercado Pago como procesador y 12% para la plataforma)..2f' %
           (8.0 if 8.0 is defined else 7.61) }}%</strong>).</p>
       <div class="grid">
-        <div><strong>Precio:</strong> $<span id="rp-precio">0.00</span></div>
+        <div><strong>Precio (lo que vos recibís):</strong> $<span id="rp-precio">0.00</span></div>
         <div><strong>Fee AY:</strong> $<span id="rp-ay">0.00</span></div>
         <div><strong>MP (inmediato):</strong> $<span id="rp-mp">0.00</span></div>
-        <div><strong>Neto estimado:</strong> $<span id="rp-neto">0.00</span></div>
+        <div><strong>Neto estimado (vos):</strong> $<span id="rp-neto">0.00</span></div>
+        <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.00</span></div>
       </div>
     </div>
     <div class="mt-3">
