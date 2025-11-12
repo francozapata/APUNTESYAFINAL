@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card">
+<div class="card" style="max-width:900px;margin:32px auto">
   <h2>Mi perfil</h2>
   <div style="display:flex;align-items:center;gap:16px;margin:10px 0;">
     <img
@@ -24,7 +24,7 @@
 </div>
 
 <!-- NUEVO: contacto vendedor -->
-<div class="card">
+<div class="card" style="max-width:900px;margin:32px auto">
   <h3>Contacto de vendedor (opcional)</h3>
   <p class="muted">Mostramos un botón en tus apuntes para que los compradores puedan contactarte.<br>
     Acepta WhatsApp/telefono, email o una URL.</p>
@@ -42,7 +42,7 @@
   </form>
 </div>
 
-<div class="card">
+<div class="card" style="max-width:900px;margin:32px auto">
   {% if current_user.mp_access_token %}
   <p>Mercado Pago: <span class="badge">Conectado</span></p>
   <a class="btn secondary" href="{{ url_for('disconnect_mp') }}">Desconectar</a>
@@ -52,7 +52,7 @@
   {% endif %}
 </div>
 
-<div class="card">
+<div class="card" style="max-width:900px;margin:32px auto">
   <h3>Mis apuntes</h3>
   <div class="grid">
     {% for n in my_notes %}
