@@ -900,7 +900,7 @@ def submit_review(note_id):
 @login_required
 def download_note(note_id):
     with Session() as s:
-        note = s.get(Note, note_id)
+            note = s.get(Note, note_id)
         if not note or not note.is_active:
             abort(404)
 

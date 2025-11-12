@@ -14,29 +14,65 @@
     <input class="input" name="price" id="price" type="number" min="0" step="0.01">
 
     <div class="card" style="margin-top:16px">
-      <h3>Información importante</h3>
-      <ul class="list-disc pl-6">
-        <li>El vendedor <strong>recibirá el monto que cargue como precio (X)</strong>. ApuntesYa agregará sobre ese valor una comisión total del <strong>20%</strong>: <strong>8%</strong> que corresponde a Mercado Pago como procesador de pagos y <strong>12%</strong> que corresponde a la plataforma ApuntesYa.</li>
-        <li><strong>Mercado Pago</strong> puede aplicar costos y/o retenciones adicionales.</li>
-        {% if config.IIBB_ENABLED %}
-        <li>Pueden aplicarse retenciones de <strong>IIBB</strong> según jurisdicción.</li>
-        {% endif %}
-      </ul>
+      <h2 class="explicacion-titulo">💡 Cómo Calculamos tu Ganancia</h2>
+
+      <p class="explicacion-intro">En ApuntesYa, tú decides el precio que quieres recibir, y nosotros nos encargamos de
+        agregar las comisiones al precio final del comprador.</p>
+
+      <ol class="pasos-calculo">
+        <li class="paso-item">
+          <strong>1. Fijas tu Ganancia (Precio Base):</strong> Ingresas el monto que deseas recibir por la venta de tu
+          apunte.
+        </li>
+        <li class="paso-item">
+          <strong>2. Agregamos la Comisión Total (20%):</strong> Sumamos una Comisión Total del 20% al precio de venta
+          que
+          verá el comprador.
+          <ul class="desglose-comision">
+            <li><strong>8%</strong> (aprox.) va para <strong>Mercado Pago</strong> (costo de procesamiento).</li>
+            <li><strong>12%</strong> va para <strong>ApuntesYa</strong> (nuestra ganancia por la plataforma).</li>
+          </ul>
+        </li>
+        <li class="paso-item">
+          <strong>3. Recibís lo que pediste:</strong> Al venderse el apunte, tú recibís tu <strong>Precio Base</strong>
+          completo, antes de la retención de IIBB.
+        </li>
+      </ol>
+      <hr>
+      <aside class="disclaimer-iibb">
+        <h3 class="disclaimer-titulo">⚠️ Nota Importante sobre Impuestos</h3>
+        <p class="disclaimer-texto">
+          Tu <strong>Precio Base</strong> estará sujeto a la **Retención de Ingresos Brutos (IIBB)**, un impuesto
+          provincial
+          obligatorio. Esta deducción la aplica directamente el procesador de pagos y varía según tu situación fiscal.
+          Te
+          recomendamos consultar con tu contador.
+        </p>
+      </aside>
+
       <p class="mt-2 text-sm">
         ¿Dudas con Mercado Pago?
         <a href="{{ url_for('help_mp') }}" class="text-blue-600 hover:underline">Ver instructivo</a>.
       </p>
     </div>
-    <div class="card mt-4" id="resumen-publicacion" data-ay="12.0" data-mp="8.0">
+
+
+    <div class="card mt-4" id="resumen-publicacion" data-ay="{{ config.PLATFORM_FEE_PCT or 5 }}"
+      data-mp="{{ 8.0 if 8.0 is defined else 7.61 }}">
       <h3>Resumen de publicación</h3>
-      <p class="text-sm">Este cálculo es estimativo. Usa El vendedor recibirá el monto pactado (X). ApuntesYa agregará una comisión del 20% sobre el precio de venta (8% para Mercado Pago como procesador y 12% para la plataforma).</strong>) y El vendedor recibirá el monto pactado (X). ApuntesYa agregará una comisión del 20% sobre el precio de venta (8% para Mercado Pago como procesador y 12% para la plataforma)..2f' %
-          (8.0 if 8.0 is defined else 7.61) }}%</strong>).</p>
+      <p class="text-sm">Este cálculo es estimativo. Usa El vendedor recibirá el monto pactado (X). ApuntesYa agregará
+        una
+        comisión del 20% sobre el precio de venta (8% para Mercado Pago como procesador y 12% para la
+        plataforma).</strong>)
+        y El vendedor recibirá el monto pactado (X). ApuntesYa agregará una comisión del 20% sobre el precio de venta
+        (8%
+        para Mercado Pago como procesador y 12% para la plataforma)..2f' %
+        (8.0 if 8.0 is defined else 7.61) }}%</strong>).</p>
       <div class="grid">
-        <div><strong>Precio (lo que vos recibís):</strong> $<span id="rp-precio">0.00</span></div>
+        <div><strong>Precio:</strong> $<span id="rp-precio">0.00</span></div>
         <div><strong>Fee AY:</strong> $<span id="rp-ay">0.00</span></div>
         <div><strong>MP (inmediato):</strong> $<span id="rp-mp">0.00</span></div>
-        <div><strong>Neto estimado (vos):</strong> $<span id="rp-neto">0.00</span></div>
-        <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.00</span></div>
+        <div><strong>Neto estimado:</strong> $<span id="rp-neto">0.00</span></div>
       </div>
     </div>
     <div class="mt-3">
