@@ -30,13 +30,11 @@
   {% if can_download %}
   <a class="btn" href="{{ url_for('download_note', note_id=note.id) }}">Descargar PDF</a>
   {% else %}
-  <a class="btn" href="{{ url_for('buy_note', note_id=note.id) }}">Comprar</a>
-  <a class="btn secondary" href="{{ url_for('mp_return', note_id=note.id) }}">Verificar pago</a>
-  {% endif %}
+  <a class="btn" href="{{ url_for('buy_note', note_id=note.id) }}">Comprar</a>{% endif %}
   {% else %}
   <a id="download-btn" class="btn" href="{{ url_for('download_note', note_id=note.id) }}">Descargar gratis</a>
   {% endif %}
-  {% if seller_contact_url %}
+  {% if seller_contact_url and current_user.is_authenticated and (current_user.id == note.seller_id or can_download) %}
   <a class="btn secondary" href="{{ seller_contact_url }}" target="_blank" rel="noopener">
     Contactar al vendedor
   </a>
