@@ -121,7 +121,7 @@ def verify_firebase_id_token(id_token: str):
 try:
     MP_FEE_IMMEDIATE_TOTAL_PCT = float(app.config.get("MP_FEE_IMMEDIATE_TOTAL_PCT", 7.61))
 except Exception:
-    MP_FEE_IMMEDIATE_TOTAL_PCT = 7.61
+    MP_FEE_IMMEDIATE_TOTAL_PCT = 8.0
 
 @app.context_processor
 def fees_ctx():
@@ -848,7 +848,8 @@ def submit_review(note_id):
 
     if rating < 1 or rating > 5:
         flash("La nueva puntuación debe estar entre 1 y 5.")
-        return redirect(url_for("note_detail", note_id=note_id))
+        flash("✅ Pago aprobado, ya podés descargar.")
+    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
 
     with Session() as s:
         note = s.get(Note, note_id)
@@ -857,7 +858,8 @@ def submit_review(note_id):
 
         if note.seller_id == current_user.id:
             flash("No podés calificar tu propio apunte.")
-            return redirect(url_for("note_detail", note_id=note_id))
+            flash("✅ Pago aprobado, ya podés descargar.")
+    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
 
         if note.price_cents > 0:
             has_purchase = s.execute(
@@ -872,7 +874,8 @@ def submit_review(note_id):
 
         if not has_purchase:
             flash("Necesitás haber comprado este apunte para calificarlo.")
-            return redirect(url_for("note_detail", note_id=note_id))
+            flash("✅ Pago aprobado, ya podés descargar.")
+    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
 
         exists = s.execute(
             select(Review).where(
@@ -882,14 +885,16 @@ def submit_review(note_id):
         ).scalar_one_or_none()
         if exists:
             flash("Ya enviaste una reseña para este apunte.")
-            return redirect(url_for("note_detail", note_id=note_id))
+            flash("✅ Pago aprobado, ya podés descargar.")
+    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
 
         r = Review(note_id=note.id, buyer_id=current_user.id, rating=rating, comment=comment)
         s.add(r)
         s.commit()
 
     flash("¡Gracias por tu reseña!")
-    return redirect(url_for("note_detail", note_id=note_id))
+    flash("✅ Pago aprobado, ya podés descargar.")
+    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
 
 @app.route("/download/<int:note_id>")
 @login_required
@@ -996,7 +1001,7 @@ def buy_note(note_id):
         s.add(p)
         s.commit()
 
-        price_ars = round(note.price_cents / 100, 2)
+        price_ars = round((note.price_cents/100) * GROSS_MULTIPLIER, 2)
         platform_fee_percent = (app.config["PLATFORM_FEE_PERCENT"] / 100.0)
         back_urls = {
             "success": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
@@ -1053,7 +1058,8 @@ def mp_return(note_id):
             pay = mp.get_payment(token, str(payment_id))
         except Exception as e:
             flash(f"No se pudo verificar el pago aún: {e}")
-            return redirect(url_for("note_detail", note_id=note_id))
+            flash("✅ Pago aprobado, ya podés descargar.")
+    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
     elif ext_ref:
         try:
             res = mp.search_payments_by_external_reference(token, ext_ref)
@@ -1108,7 +1114,8 @@ def mp_return(note_id):
             return redirect(url_for("download_note", note_id=note_id))
 
     flash("Pago registrado. Si ya figura aprobado, el botón de descarga estará disponible.")
-    return redirect(url_for("note_detail", note_id=note_id))
+    flash("✅ Pago aprobado, ya podés descargar.")
+    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
 
 # -----------------------------------------------------------------------------
 # Webhook único
@@ -1214,7 +1221,8 @@ def report_note(note_id):
             n.is_reported = True
             s.commit()
     flash("Gracias por tu reporte. Un administrador lo revisará.")
-    return redirect(url_for("note_detail", note_id=note_id))
+    flash("✅ Pago aprobado, ya podés descargar.")
+    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
 
 # -----------------------------------------------------------------------------
 # Taxonomías académicas (dropdowns) + creación "aprendida"
