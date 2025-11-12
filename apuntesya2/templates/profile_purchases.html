@@ -18,6 +18,10 @@
       <div class="muted">Fecha: {{ it.created_at }}</div>
       <a class="btn" href="{{ url_for('note_detail', note_id=it.note_id) }}">Ver</a>
       <a class="btn secondary" href="{{ url_for('download_note', note_id=it.note_id) }}">Descargar</a>
+      <div class="muted" style="margin-top:6px;">¿Tuviste un inconveniente? Contactate con el vendedor.</div>
+      {% if it.seller_contact_url %}
+      <a class="btn" href="{{ it.seller_contact_url }}" target="_blank" rel="noopener">Contactar al vendedor</a>
+      {% endif %}
     </div>
     {% else %}
     <div>No realizaste compras todavía.</div>
