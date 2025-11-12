@@ -858,7 +858,7 @@ def submit_review(note_id):
         if note.seller_id == current_user.id:
             flash("No podés calificar tu propio apunte.")
             flash("✅ Pago aprobado, ya podés descargar.")
-    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+        return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
 
         if note.price_cents > 0:
             has_purchase = s.execute(
@@ -874,7 +874,7 @@ def submit_review(note_id):
         if not has_purchase:
             flash("Necesitás haber comprado este apunte para calificarlo.")
             flash("✅ Pago aprobado, ya podés descargar.")
-    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+        return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
 
         exists = s.execute(
             select(Review).where(
@@ -885,7 +885,7 @@ def submit_review(note_id):
         if exists:
             flash("Ya enviaste una reseña para este apunte.")
             flash("✅ Pago aprobado, ya podés descargar.")
-    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+        return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
 
         r = Review(note_id=note.id, buyer_id=current_user.id, rating=rating, comment=comment)
         s.add(r)
@@ -1058,7 +1058,7 @@ def mp_return(note_id):
         except Exception as e:
             flash(f"No se pudo verificar el pago aún: {e}")
             flash("✅ Pago aprobado, ya podés descargar.")
-    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+        return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
     elif ext_ref:
         try:
             res = mp.search_payments_by_external_reference(token, ext_ref)
