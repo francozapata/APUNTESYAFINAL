@@ -900,27 +900,26 @@ def submit_review(note_id):
 def download_note(note_id):
     with Session() as s:
             note = s.get(Note, note_id)
-        if not note or not note.is_active:
-            abort(404)
-
-        allowed = False
-        if note.seller_id == current_user.id or note.price_cents == 0:
-            allowed = True
-        else:
-            p = s.execute(
+            if not note or not note.is_active:
+                abort(404)
+            allowed = False
+        
+            if note.seller_id == current_user.id or note.price_cents == 0:
+                allowed = True
+            else:
+                p = s.execute(
                 select(Purchase).where(
                     Purchase.buyer_id == current_user.id,
                     Purchase.note_id == note.id,
                     Purchase.status == 'approved'
                 )
             ).scalar_one_or_none()
-            allowed = p is not None
-
-        if not allowed:
-            flash("Necesitás comprar este apunte para descargarlo.")
+                allowed = p is not None
+            if not allowed:
+                flash("Necesitás comprar este apunte para descargarlo.")
             return redirect(url_for("note_detail", note_id=note.id))
 
-        return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
+            return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
 
 # -----------------------------------------------------------------------------
 # MP OAuth
