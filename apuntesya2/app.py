@@ -527,6 +527,7 @@ def complete_profile_post():
     university = (request.form.get("university") or "").strip()
     faculty    = (request.form.get("faculty") or "").strip()
     career     = (request.form.get("career") or "").strip()
+    seller_contact = (request.form.get("seller_contact") or "").strip()
 
     if not (university and faculty and career):
         flash("Completá Universidad, Facultad y Carrera.")
@@ -899,28 +900,27 @@ def submit_review(note_id):
 @login_required
 def download_note(note_id):
     with Session() as s:
-        note = s.get(Note, note_id)
-        if not note or not note.is_active:
-            abort(404)
-
-        allowed = False
-        if note.seller_id == current_user.id or note.price_cents == 0:
-            allowed = True
-        else:
-            p = s.execute(
+            note = s.get(Note, note_id)
+            if not note or not note.is_active:
+                abort(404)
+            allowed = False
+        
+            if note.seller_id == current_user.id or note.price_cents == 0:
+                allowed = True
+            else:
+                p = s.execute(
                 select(Purchase).where(
                     Purchase.buyer_id == current_user.id,
                     Purchase.note_id == note.id,
                     Purchase.status == 'approved'
                 )
             ).scalar_one_or_none()
-            allowed = p is not None
-
-        if not allowed:
-            flash("Necesitás comprar este apunte para descargarlo.")
+                allowed = p is not None
+            if not allowed:
+                flash("Necesitás comprar este apunte para descargarlo.")
             return redirect(url_for("note_detail", note_id=note.id))
 
-        return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
+            return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
 
 # -----------------------------------------------------------------------------
 # MP OAuth
@@ -1538,6 +1538,8 @@ def update_academics():
         u.university = university
         u.faculty = faculty
         u.career = career
+        if seller_contact:
+            u.seller_contact = seller_contact
         s.commit()
 
     flash("✅ Datos académicos actualizados correctamente.", "success")
@@ -1559,6 +1561,7 @@ def update_academics_post():
     university = (request.form.get("university") or "").strip()
     faculty    = (request.form.get("faculty") or "").strip()
     career     = (request.form.get("career") or "").strip()
+    seller_contact = (request.form.get("seller_contact") or "").strip()
 
     if not (university and faculty and career):
         flash("Completá todos los campos antes de guardar.", "warning")
@@ -1569,6 +1572,8 @@ def update_academics_post():
         u.university = university
         u.faculty = faculty
         u.career = career
+        if seller_contact:
+            u.seller_contact = seller_contact
         s.commit()
 
     flash("✅ Datos académicos actualizados.", "success")
@@ -1579,3 +1584,4 @@ def update_academics_post():
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True)
+

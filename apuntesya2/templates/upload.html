@@ -14,14 +14,42 @@
     <input class="input" name="price" id="price" id="price" type="number" min="0" step="0.01">
 
     <div class="card" style="margin-top:16px">
-      <h3>Información importante</h3>
-      <ul class="list-disc pl-6">
-        <li>La plataforma aplica una <strong>El vendedor recibirá el monto pactado (X). ApuntesYa agregará una comisión del 20% sobre el precio de venta (8% para Mercado Pago como procesador y 12% para la plataforma).</strong>.</li>
-        <li><strong>Mercado Pago</strong> puede aplicar costos y/o retenciones adicionales.</li>
-        {% if config.IIBB_ENABLED %}
-        <li>Pueden aplicarse retenciones de <strong>IIBB</strong> según jurisdicción.</li>
-        {% endif %}
-      </ul>
+      <h2 class="explicacion-titulo">💡 Cómo Calculamos tu Ganancia</h2>
+
+      <p class="explicacion-intro">En ApuntesYa, tú decides el precio que quieres recibir, y nosotros nos encargamos de
+        agregar las comisiones al precio final del comprador.</p>
+
+      <ol class="pasos-calculo">
+        <li class="paso-item">
+          <strong>1. Fijas tu Ganancia (Precio Base):</strong> Ingresas el monto que deseas recibir por la venta de tu
+          apunte.
+        </li>
+        <li class="paso-item">
+          <strong>2. Agregamos la Comisión Total (20%):</strong> Sumamos una Comisión Total del 20% al precio de venta
+          que
+          verá el comprador.
+          <ul class="desglose-comision">
+            <li><strong>8%</strong> (aprox.) va para <strong>Mercado Pago</strong> (costo de procesamiento).</li>
+            <li><strong>12%</strong> va para <strong>ApuntesYa</strong> (nuestra ganancia por la plataforma).</li>
+          </ul>
+        </li>
+        <li class="paso-item">
+          <strong>3. Recibís lo que pediste:</strong> Al venderse el apunte, tú recibís tu <strong>Precio Base</strong>
+          completo, antes de la retención de IIBB.
+        </li>
+      </ol>
+      <hr>
+      <aside class="disclaimer-iibb">
+        <h3 class="disclaimer-titulo">⚠️ Nota Importante sobre Impuestos</h3>
+        <p class="disclaimer-texto">
+          Tu <strong>Precio Base</strong> estará sujeto a la **Retención de Ingresos Brutos (IIBB)**, un impuesto
+          provincial
+          obligatorio. Esta deducción la aplica directamente el procesador de pagos y varía según tu situación fiscal.
+          Te
+          recomendamos consultar con tu contador.
+        </p>
+      </aside>
+
       <p class="mt-2 text-sm">
         ¿Dudas con Mercado Pago?
         <a href="{{ url_for('help_mp') }}" class="text-blue-600 hover:underline">Ver instructivo</a>.
@@ -63,20 +91,41 @@
         var precioInput = document.querySelector('input[name="price" id="price" id="price"]');
         var box = document.getElementById('resumen-publicacion');
         if (!box) return;
-        var ayPct = parseFloat(box.getAttribute('data-ay') || '5');
-        var mpPct = parseFloat(box.getAttribute('data-mp') || '7.61');
+
+        // Campo de precio: lo que quiere recibir el vendedor (X)
+        var precioInput = document.getElementById('price');
+
+        function toNum(v) {
+          var x = parseFloat((v || '').replace(',', '.'));
+          return isNaN(x) ? 0 : x;
+        }
+
+        var ayPct = 12.0; // plataforma
+        var mpPct = 8.0;  // MP
+        var totalPct = ayPct + mpPct; // 20%
+
+        function fmt(n) {
+          return n.toFixed(2);
+        }
 
         function recalc() {
-          var p = toNum(precioInput && precioInput.value);
-          var feeAY = +(p * (ayPct / 100)).toFixed(2);
-          var feeMP = +(p * (mpPct / 100)).toFixed(2);
-          var neto = +(p - feeAY - feeMP).toFixed(2);
-          var $ = function (id) { return document.getElementById(id) };
-          $('rp-precio').textContent = p.toFixed(2);
-          $('rp-ay').textContent = feeAY.toFixed(2);
-          $('rp-mp').textContent = feeMP.toFixed(2);
-          $('rp-neto').textContent = neto.toFixed(2);
+          if (!precioInput) return;
+          var x = toNum(precioInput.value);  // X = lo que vos querés recibir
+
+          var feeMP = x * (mpPct / 100);
+          var feeAY = x * (ayPct / 100);
+          var totalBuyer = x * (1 + totalPct / 100);
+          var netoVendedor = x;  // por diseño, X es lo que recibís
+
+          var $ = function (id) { return document.getElementById(id); };
+
+          if ($('rp-precio')) $('rp-precio').textContent = fmt(x);
+          if ($('rp-mp')) $('rp-mp').textContent = fmt(feeMP);
+          if ($('rp-ay')) $('rp-ay').textContent = fmt(feeAY);
+          if ($('rp-neto')) $('rp-neto').textContent = fmt(netoVendedor);
+          if ($('rp-buyer')) $('rp-buyer').textContent = fmt(totalBuyer);
         }
+
         if (precioInput) {
           precioInput.addEventListener('input', recalc);
           recalc();
