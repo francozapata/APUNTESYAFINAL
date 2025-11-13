@@ -11,7 +11,7 @@
     {% include 'components/academics_selects.html' %}
 
     <label style="margin-top:14px">Precio (ARS). Dejar en blanco para gratis</label>
-    <input class="input" name="price" id="price" type="number" min="0" step="0.01">
+    <input class="input" name="price" id="price" id="price" type="number" min="0" step="0.01">
 
     <div class="card" style="margin-top:16px">
       <h2 class="explicacion-titulo">💡 Cómo Calculamos tu Ganancia</h2>
@@ -55,18 +55,18 @@
         <a href="{{ url_for('help_mp') }}" class="text-blue-600 hover:underline">Ver instructivo</a>.
       </p>
     </div>
-
-    <div class="card mt-4" id="resumen-publicacion" data-ay="12.0" data-mp="8.0">
+    
+    <div class="card mt-4" id="resumen-publicacion">
       <h3>Resumen de publicación</h3>
       <p class="text-sm">
         Este cálculo es estimativo. Tomamos como base el precio que cargues arriba
         (lo que vos querés recibir) y calculamos cuánto se suma en comisiones
-        (<strong>8% Mercado Pago</strong> + <strong>12% plataforma</strong>) y
+        (<strong>8% Mercado Pago</strong> + <strong>12% plataforma ApuntesYa</strong>) y
         cuál sería el total aproximado que pagará la persona que compra.
       </p>
 
       <div class="grid">
-        <div><strong>Lo que querés recibir:</strong> $<span id="rp-precio">0.00</span></div>
+        <div><strong>Lo que querés recibir (X):</strong> $<span id="rp-precio">0.00</span></div>
         <div><strong>Comisión Mercado Pago (8%):</strong> $<span id="rp-mp">0.00</span></div>
         <div><strong>Comisión ApuntesYa (12%):</strong> $<span id="rp-ay">0.00</span></div>
         <div><strong>Neto estimado para vos:</strong> $<span id="rp-neto">0.00</span></div>
@@ -74,8 +74,8 @@
       </div>
     </div>
 
-
     <div class="mt-3">
+
       <label class="inline-flex items-center">
         <input type="checkbox" name="accept_commissions" required>
         <span class="ml-2 text-sm">
@@ -87,6 +87,8 @@
 
     <script>
       (function () {
+        function toNum(x) { var n = parseFloat(x); return isNaN(n) ? 0 : n; }
+        var precioInput = document.querySelector('input[name="price" id="price" id="price"]');
         var box = document.getElementById('resumen-publicacion');
         if (!box) return;
 
@@ -131,6 +133,49 @@
       })();
     </script>
 
+    
+    <script>
+      (function () {
+        var box = document.getElementById('resumen-publicacion');
+        if (!box) return;
+
+        var precioInput = document.getElementById('price');
+
+        function toNum(v) {
+          var x = parseFloat((v || '').replace(',', '.'));
+          return isNaN(x) ? 0 : x;
+        }
+
+        var ayPct = 12.0; // plataforma
+        var mpPct = 8.0;  // MP
+        var totalPct = ayPct + mpPct; // 20%
+
+        function fmt(n) { return n.toFixed(2); }
+
+        function recalc() {
+          if (!precioInput) return;
+          var x = toNum(precioInput.value);  // X = lo que vos querés recibir
+
+          var feeMP = x * (mpPct / 100);
+          var feeAY = x * (ayPct / 100);
+          var totalBuyer = x * (1 + totalPct / 100);
+          var netoVendedor = x;  // X es lo que recibís
+
+          var $ = function (id) { return document.getElementById(id); };
+
+          if ($('rp-precio')) $('rp-precio').textContent = fmt(x);
+          if ($('rp-mp'))     $('rp-mp').textContent     = fmt(feeMP);
+          if ($('rp-ay'))     $('rp-ay').textContent     = fmt(feeAY);
+          if ($('rp-neto'))   $('rp-neto').textContent   = fmt(netoVendedor);
+          if ($('rp-buyer'))  $('rp-buyer').textContent  = fmt(totalBuyer);
+        }
+
+        if (precioInput) {
+          precioInput.addEventListener('input', recalc);
+          recalc();
+        }
+      })();
+    </script>
 
     <label style="margin-top:14px">Archivo PDF</label>
     <input class="input" type="file" name="file" accept="application/pdf" required>

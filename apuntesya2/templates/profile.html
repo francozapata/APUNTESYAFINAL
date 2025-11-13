@@ -23,25 +23,6 @@
   </div>
 </div>
 
-<!-- NUEVO: contacto vendedor -->
-<div class="card" style="max-width:900px;margin:32px auto">
-  <h3>Contacto de vendedor (opcional)</h3>
-  <p class="muted">Mostramos un botón en tus apuntes para que los compradores puedan contactarte.<br>
-    Acepta WhatsApp/telefono, email o una URL.</p>
-  <form action="{{ url_for('profile_update_contact') }}" method="post" class="stack" style="gap:8px;">
-    <input type="text" class="input" name="seller_contact"
-      placeholder="+549351xxxxxxx, alguien@dominio.com o https://..." value="{{ seller_contact or '' }}">
-    <div class="actions" style="display:flex;gap:8px;align-items:center;">
-      <button class="btn">Guardar contacto</button>
-      {% if seller_contact_url %}
-      <a class="btn ghost" href="{{ seller_contact_url }}" target="_blank" rel="noopener">
-        {{ seller_contact_label }}
-      </a>
-      {% endif %}
-    </div>
-  </form>
-</div>
-
 <div class="card" style="max-width:900px;margin:32px auto">
   {% if current_user.mp_access_token %}
   <p>Mercado Pago: <span class="badge">Conectado</span></p>

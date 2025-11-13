@@ -1000,8 +1000,9 @@ def buy_note(note_id):
         s.add(p)
         s.commit()
 
-        price_ars = round((note.price_cents/100) * GROSS_MULTIPLIER, 2)
-        platform_fee_percent = (app.config["PLATFORM_FEE_PERCENT"] / 100.0)
+        price_base = note.price_cents / 100  # lo que quiere recibir el vendedor (X)
+        price_ars = round(price_base * GROSS_MULTIPLIER, 2)
+        platform_fee_percent = 0.12  # 12% de la ganancia del vendedor
         back_urls = {
             "success": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
             "failure": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
