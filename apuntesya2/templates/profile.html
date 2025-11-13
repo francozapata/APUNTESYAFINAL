@@ -16,7 +16,15 @@
   </div>
 
   <p><strong>{{ current_user.name }}</strong> — <strong>{{ current_user.email }}</strong></p>
-  <p>{{ current_user.university }} • {{ current_user.faculty }} • {{ current_user.career }}</p>
+  <div class="text-gray-700 mt-1">
+    {{ user.university }} • {{ user.faculty }} • {{ user.career }}
+  </div>
+
+  {% if user.seller_contact %}
+  <div class="text-gray-700 mt-1">
+    📞 <strong>Contacto:</strong> {{ user.seller_contact }}
+  </div>
+  {% endif %}
 
   <div class="actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
     <a class="btn secondary" href="{{ url_for('update_academics_get') }}">¿Querés actualizar tus datos académicos?</a>
