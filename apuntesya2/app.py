@@ -848,27 +848,28 @@ def submit_review(note_id):
     rating = int(request.form.get("rating", "0") or 0)
     comment = (request.form.get("comment") or "").strip()
 
+    # Validar rango de puntuación
     if rating < 1 or rating > 5:
-        flash("La nueva puntuación debe estar entre 1 y 5.")
-        flash("✅ Pago aprobado, ya podés descargar.")
-    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+        flash("La puntuación debe estar entre 1 y 5.")
+        return redirect(url_for("note_detail", note_id=note_id, _anchor="reviews"))
 
     with Session() as s:
         note = s.get(Note, note_id)
         if not note or not note.is_active:
             abort(404)
 
+        # No puede calificar su propio apunte
         if note.seller_id == current_user.id:
             flash("No podés calificar tu propio apunte.")
-            flash("✅ Pago aprobado, ya podés descargar.")
-        return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+            return redirect(url_for("note_detail", note_id=note_id, _anchor="reviews"))
 
+        # Debe haber comprado el apunte si es pago
         if note.price_cents > 0:
             has_purchase = s.execute(
                 select(Purchase).where(
                     Purchase.buyer_id == current_user.id,
                     Purchase.note_id == note.id,
-                    Purchase.status == 'approved'
+                    Purchase.status == "approved"
                 )
             ).scalar_one_or_none() is not None
         else:
@@ -876,53 +877,64 @@ def submit_review(note_id):
 
         if not has_purchase:
             flash("Necesitás haber comprado este apunte para calificarlo.")
-            flash("✅ Pago aprobado, ya podés descargar.")
-        return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+            return redirect(url_for("note_detail", note_id=note_id, _anchor="reviews"))
 
+        # Evitar reseñas duplicadas
         exists = s.execute(
             select(Review).where(
                 Review.note_id == note.id,
                 Review.buyer_id == current_user.id
             )
         ).scalar_one_or_none()
+
         if exists:
             flash("Ya enviaste una reseña para este apunte.")
-            flash("✅ Pago aprobado, ya podés descargar.")
-        return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+            return redirect(url_for("note_detail", note_id=note_id, _anchor="reviews"))
 
-        r = Review(note_id=note.id, buyer_id=current_user.id, rating=rating, comment=comment)
+        # Crear la reseña
+        r = Review(
+            note_id=note.id,
+            buyer_id=current_user.id,
+            rating=rating,
+            comment=comment
+        )
         s.add(r)
         s.commit()
 
     flash("¡Gracias por tu reseña!")
-    flash("✅ Pago aprobado, ya podés descargar.")
-    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+    # Si querés seguir mostrando el mensaje de pago aprobado, podrías agregar otro flash acá
+    # flash("✅ Pago aprobado, ya podés descargar.")
+    return redirect(url_for("note_detail", note_id=note_id, _anchor="reviews"))
+
 
 @app.route("/download/<int:note_id>")
 @login_required
 def download_note(note_id):
     with Session() as s:
-            note = s.get(Note, note_id)
-            if not note or not note.is_active:
-                abort(404)
-            allowed = False
-        
-            if note.seller_id == current_user.id or note.price_cents == 0:
-                allowed = True
-            else:
-                p = s.execute(
+        note = s.get(Note, note_id)
+        if not note or not note.is_active:
+            abort(404)
+
+        # ¿Está autorizado a descargar?
+        if note.seller_id == current_user.id or note.price_cents == 0:
+            allowed = True
+        else:
+            p = s.execute(
                 select(Purchase).where(
                     Purchase.buyer_id == current_user.id,
                     Purchase.note_id == note.id,
                     Purchase.status == 'approved'
                 )
             ).scalar_one_or_none()
-                allowed = p is not None
-            if not allowed:
-                flash("Necesitás comprar este apunte para descargarlo.")
+            allowed = p is not None
+
+        if not allowed:
+            flash("Necesitás comprar este apunte para descargarlo.")
             return redirect(url_for("note_detail", note_id=note.id))
 
-            return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
+        # ✅ Si está permitido, ahora sí devolvemos el archivo
+        return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
+
 
 # -----------------------------------------------------------------------------
 # MP OAuth
