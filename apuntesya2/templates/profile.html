@@ -1,68 +1,181 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card" style="max-width:900px;margin:32px auto">
-  <h2>Mi perfil</h2>
-  <div style="display:flex;align-items:center;gap:16px;margin:10px 0;">
-    <img
-      src="{% if (current_user.imagen_de_perfil or current_user.profile_image) %}{{ url_for('static', filename='uploads/profile_images/' ~ (current_user.imagen_de_perfil or current_user.profile_image)) }}{% else %}{{ url_for('static', filename='img/default_profile.png') }}{% endif %}"
-      alt="Foto de perfil"
-      style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:2px solid #fff;box-shadow:0 0 6px rgba(0,0,0,0.2)">
+<style>
+  .profile-card {
+    max-width: 980px;
+    margin: 32px auto;
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .04);
+  }
 
-    <form action="{{ url_for('upload_profile_image') }}" method="post" enctype="multipart/form-data">
-      <input class="input" type="file" name="file" accept="image/png, image/jpeg" required>
-      <button class="btn">Cambiar foto de perfil</button>
-    </form>
-  </div>
+  .profile-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 20px;
+    flex-wrap: wrap;
+  }
 
-  <p><strong>{{ current_user.name }}</strong> — <strong>{{ current_user.email }}</strong></p>
+  .profile-tab {
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid #d9d9e3;
+    background: #f7f9ff;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    color: #334;
+  }
 
-  <div class="text-gray-700 mt-1">
-    {{ current_user.university }} • {{ current_user.faculty }} • {{ current_user.career }}
-  </div>
+  .profile-tab.active {
+    background: #4478ff;
+    color: #fff;
+    border-color: #4478ff;
+  }
 
-  {% if current_user.seller_contact %}
-  <div class="text-gray-700 mt-1">
-    📞 <strong>Contacto:</strong> {{ current_user.seller_contact }}
-  </div>
-  {% endif %}
+  .profile-header {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
 
-  <div class="actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-    <a class="btn secondary" href="{{ url_for('update_academics_get') }}">¿Querés actualizar tus datos académicos?</a>
-  </div>
-</div>
+  .profile-sub {
+    color: #666;
+    font-size: 14px;
+  }
 
-<div class="card" style="max-width:900px;margin:32px auto">
-  {% if current_user.mp_access_token %}
-  <p>Mercado Pago: <span class="badge">Conectado</span></p>
-  <a class="btn secondary" href="{{ url_for('disconnect_mp') }}">Desconectar</a>
-  {% else %}
-  <p>Mercado Pago: <span class="badge">No conectado</span></p>
-  <a class="btn" href="{{ url_for('connect_mp') }}">Conectar con Mercado Pago</a>
-  {% endif %}
-</div>
+  .btn-pill {
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 0;
+    background: #4478ff;
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: none;
+  }
 
-<div class="card" style="max-width:900px;margin:32px auto">
-  <h3>Mis apuntes</h3>
-  <div class="grid">
-    {% for n in my_notes %}
-    <div class="note">
-      <div class="title">{{ n.title }}</div>
-      {% if n.price_cents>0 %}
-      <div class="badge">Pago</div>
-      {% else %}
-      <div class="badge">Gratis</div>
-      {% endif %}
-      <a class="btn" href="{{ url_for('note_detail', note_id=n.id) }}">Ver</a>
+  .note-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #eee;
+    margin-top: 10px;
+  }
+
+  .note-meta {
+    color: #666;
+    font-size: 13px;
+  }
+
+  .note-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .badge-free {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #e7f9ee;
+    color: #13713c;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .badge-paid {
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #eef3ff;
+    color: #1f3c8f;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .muted {
+    color: #666;
+    font-size: 13px;
+  }
+</style>
+
+<div class="profile-card">
+  <div class="profile-header">
+    <div>
+      <h2 style="margin:0;">Mi perfil</h2>
+      <p class="profile-sub">Hola {{ current_user.name }} 👋. Acá podés ver tus apuntes, compras y ventas.</p>
     </div>
-    {% else %}
-    <div>No subiste apuntes aún.</div>
-    {% endfor %}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a href="{{ url_for('update_academics_get') }}" class="btn-pill">Actualizar datos académicos</a>
+    </div>
   </div>
-  <div class="actions" style="margin: 12px 0; display:flex; gap:8px; flex-wrap:wrap;">
-    <a class="btn" href="{{ url_for('profile_balance') }}">Ver balance</a>
-    <a class="btn secondary" href="{{ url_for('profile_purchases') }}">Mis compras</a>
+
+  <!-- Pestañas -->
+  <div class="profile-tabs">
+    <a href="{{ url_for('profile_purchases') }}" class="profile-tab">
+      Mis compras / descargas
+    </a>
+    <a href="{{ url_for('profile') }}" class="profile-tab active">
+      Mis apuntes subidos
+    </a>
+    <a href="{{ url_for('profile_balance') }}" class="profile-tab">
+      Mis ventas y balance
+    </a>
   </div>
+
+  <!-- Bloque contacto vendedor -->
+  <div style="margin-bottom:18px;">
+    <p class="muted" style="margin-bottom:6px;">
+      Datos de contacto para quienes compren tus apuntes:
+    </p>
+    <form method="post" action="{{ url_for('profile_update_contact') }}" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input type="text" name="seller_contact" value="{{ seller_contact or '' }}" placeholder="WhatsApp, email o link"
+        style="flex:1;min-width:200px;padding:8px 10px;border-radius:10px;border:1px solid #d9d9e3;">
+      <button type="submit" class="btn-pill">Guardar contacto</button>
+    </form>
+    {% if seller_contact_url %}
+    <p class="muted" style="margin-top:6px;">
+      Vista para el comprador: <a href="{{ seller_contact_url }}" target="_blank">{{ seller_contact_label }}</a>
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- Lista de apuntes subidos -->
+  <h3 style="margin:8px 0 4px;">Mis apuntes subidos</h3>
+  {% if not my_notes %}
+  <p class="muted">Todavía no subiste ningún apunte. Probá con el botón “Subir apunte” del menú 😊</p>
+  {% else %}
+  {% for n in my_notes %}
+  <div class="note-row">
+    <div>
+      <div>
+        <strong>{{ n.title }}</strong>
+      </div>
+      <div class="note-meta">
+        {{ n.university }} • {{ n.faculty }} • {{ n.career }}
+      </div>
+    </div>
+    <div class="note-actions">
+      {% if n.price_cents == 0 %}
+      <span class="badge-free">Gratis</span>
+      {% else %}
+      <span class="badge-paid">${{ '%.2f' % (n.price_cents / 100) }}</span>
+      {% endif %}
+      <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill" style="background:#f3f6ff;color:#335;">
+        Ver
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
 </div>
 
 {% endblock %}

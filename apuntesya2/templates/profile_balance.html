@@ -1,121 +1,195 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card mb-3">
-  <h3>Comisiones y neto estimado</h3>
-  <p class="text-sm">
-    El <strong>neto estimado</strong> incluye la comisión de ApuntesYa (<strong>{{ config.PLATFORM_FEE_PCT or 5
-      }}%</strong>)
-    y una <strong>estimación</strong> de la comisión de Mercado Pago para <strong>acreditación inmediata</strong> (≈
-    <strong>{{ '%.2f' % MP_FEE_IMMEDIATE_TOTAL_PCT }}%</strong>).
-    Este valor es orientativo y puede variar según el medio de pago, la configuración de acreditación, tu condición
-    fiscal y la provincia.
+<style>
+  .profile-card {
+    max-width: 980px;
+    margin: 32px auto;
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .04);
+  }
+
+  .profile-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0 20px;
+    flex-wrap: wrap;
+  }
+
+  .profile-tab {
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid #d9d9e3;
+    background: #f7f9ff;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    color: #334;
+  }
+
+  .profile-tab.active {
+    background: #4478ff;
+    color: #fff;
+    border-color: #4478ff;
+  }
+
+  .muted {
+    color: #666;
+    font-size: 13px;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .summary-card {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #eee;
+    background: #f8f9ff;
+  }
+
+  .summary-label {
+    font-size: 12px;
+    color: #666;
+  }
+
+  .summary-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #223;
+  }
+
+  .filters-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .input-date {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #d9d9e3;
+    font-size: 14px;
+  }
+
+  .btn-pill {
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 0;
+    background: #4478ff;
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .note-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #eee;
+    margin-top: 10px;
+  }
+
+  .note-meta {
+    color: #666;
+    font-size: 12px;
+  }
+</style>
+
+<div class="profile-card">
+  <h2 style="margin:0;">Mis ventas y balance</h2>
+  <p class="muted" style="margin-top:4px;">Resumen de tus ventas, comisiones y ganancia neta en el período seleccionado.
   </p>
+
+  <!-- Pestañas -->
+  <div class="profile-tabs">
+    <a href="{{ url_for('profile_purchases') }}" class="profile-tab">
+      Mis compras / descargas
+    </a>
+    <a href="{{ url_for('profile') }}" class="profile-tab">
+      Mis apuntes subidos
+    </a>
+    <a href="{{ url_for('profile_balance') }}" class="profile-tab active">
+      Mis ventas y balance
+    </a>
+  </div>
+
+  <!-- Filtros de fecha -->
+  <form method="get" action="{{ url_for('profile_balance') }}" class="filters-row">
+    <label class="muted">
+      Desde:
+      <input class="input-date" type="date" name="start" value="{{ start }}">
+    </label>
+    <label class="muted">
+      Hasta:
+      <input class="input-date" type="date" name="end" value="{{ end }}">
+    </label>
+    <button type="submit" class="btn-pill">Aplicar</button>
+  </form>
+
+  <!-- Resumen general -->
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="summary-label">Ventas aprobadas</div>
+      <div class="summary-value">{{ sold_count }}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Monto bruto</div>
+      <div class="summary-value">${{ '%.2f' % (total_cents / 100) }}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Comisión MP aprox.</div>
+      <div class="summary-value">${{ '%.2f' % (mp_commission_cents / 100) }}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Comisión plataforma</div>
+      <div class="summary-value">${{ '%.2f' % (apy_commission_cents / 100) }}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">Ingreso neto estimado</div>
+      <div class="summary-value">${{ '%.2f' % (net_cents / 100) }}</div>
+    </div>
+  </div>
+
+  <!-- Detalle por apunte -->
+  <h3 style="margin:8px 0 4px;">Detalle por apunte</h3>
+  {% if not per_note %}
+  <p class="muted">No hubo ventas en este período.</p>
+  {% else %}
+  {% for row in per_note %}
+  <div class="note-row">
+    <div>
+      <div><strong>{{ row.title }}</strong></div>
+      <div class="note-meta">
+        Ventas: {{ row.sold_count }} • Bruto: ${{ '%.2f' % (row.gross_cents / 100) }} • Neto: ${{ '%.2f' %
+        (row.net_cents / 100) }}
+        {% if row.views is not none %}
+        • Vistas: {{ row.views }}{% if row.conversion %} • Conv: {{ '%.1f' % row.conversion }}%{% endif %}
+        {% endif %}
+      </div>
+    </div>
+    <div>
+      <a href="{{ url_for('note_detail', note_id=row.id) }}" class="btn-pill" style="background:#f3f6ff;color:#335;">
+        Ver apunte
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
 </div>
 
-
-<form method="get" class="row g-2 mb-3">
-  <div class="col-md-3">
-    <label class="form-label">Desde</label>
-    <input type="date" class="form-control" name="start" value="{{ start }}">
-  </div>
-  <div class="col-md-3">
-    <label class="form-label">Hasta</label>
-    <input type="date" class="form-control" name="end" value="{{ end }}">
-  </div>
-  <div class="col-md-3 d-flex align-items-end gap-2">
-    <button class="btn btn-primary">Filtrar</button>
-  </div>
-</form>
-
-<div class="row g-3 mb-4">
-  <div class="col-md-3">
-    <div class="card p-3">
-      <div class="muted">Ventas</div>
-      <div class="h4">{{ sold_count }}</div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card p-3">
-      <div class="muted">Ingresos brutos</div>
-      <div class="h4">${{ '%.2f' % (total_cents/100) }}</div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card p-3">
-      <div class="muted">Comisión MP ({{ (MP_COMMISSION_RATE*100)|round(2) }}%)</div>
-      <div class="h4">${{ '%.2f' % (mp_commission_cents/100) }}</div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card p-3">
-      <div class="muted">Comisión ApuntesYa ({{ (APY_COMMISSION_RATE*100)|round(2) }}%)</div>
-      <div class="h4">${{ '%.2f' % (apy_commission_cents/100) }}</div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-3 mb-4">
-  <div class="col-md-3">
-    <div class="card p-3 border-success">
-      <div class="muted">Total a recibir</div>
-      <div class="h4">${{ '%.2f' % (net_cents/100) }}</div>
-    </div>
-  </div>
-</div>
-
-<div class="alert alert-info">
-  <small>La comisión de <b>ApuntesYa</b> se utiliza únicamente para la vinculación y mantenimiento con Mercado Pago.
-    Actualmente es de <b>{{ (APY_COMMISSION_RATE*100)|round(2) }}%</b>.</small>
-
-  <div class="alert alert-warning mt-3">
-    <small>
-      <b>Importante:</b> ApuntesYa no cobra retenciones de Ingresos Brutos (IIBB) actualmente.
-      Dependiendo de la situación fiscal del usuario o del comprador, <b>Mercado Pago</b> podría
-      aplicar percepciones o retenciones automáticas según normativa vigente.
-      {% if IIBB_ENABLED %}
-      <br>Actualmente tenés activa una retención de IIBB en la plataforma: {{ (IIBB_RATE*100)|round(2) }}%.
-      {% endif %}
-    </small>
-  </div>
-
-
-  <div class="card">
-    <h3 class="p-3">Detalle por apunte</h3>
-    <div class="table">
-      <div class="thead">
-        <div>Título</div>
-        <div class="right">Vendidos</div>
-        <div class="right">Bruto</div>
-        <div class="right">MP</div>
-        <div class="right">ApY</div>
-        <div class="right">Neto</div>
-        <div class="right">Views</div>
-        <div class="right">% Conv.</div>
-        <div></div>
-      </div>
-      {% for r in per_note %}
-      <div class="row">
-        <div>{{ r.title }}</div>
-        <div class="right">{{ r.sold_count }}</div>
-        <div class="right">${{ '%.2f' % (r.gross_cents/100) }}</div>
-        <div class="right">${{ '%.2f' % (r.mp_commission_cents/100) }}</div>
-        <div class="right">${{ '%.2f' % (r.apy_commission_cents/100) }}</div>
-        <div class="right">${{ '%.2f' % (r.net_cents/100) }}</div>
-        <div class="right">{{ r.views if r.views is not none else '—' }}</div>
-        <div class="right">
-          {% if r.conversion is not none %}
-          {{ '%.1f' % r.conversion }}%
-          {% else %}
-          —
-          {% endif %}
-        </div>
-        <div><a class="btn small" href="{{ url_for('note_detail', note_id=r.id) }}">Ver</a></div>
-      </div>
-      {% else %}
-      <div class="p-3">No hay resultados para este período. <a href="{{ url_for('upload_note') }}">Subir apunte</a>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endblock %}
+{% endblock %}
