@@ -1,55 +1,96 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
+
+<div class="card" style="max-width:900px;margin:32px auto;">
   <h2>Comisiones y acreditaciones</h2>
-  <p class="mb-2">
-    En cada venta, ApuntesYa aplica una <strong>comisión del {{ config.PLATFORM_FEE_PCT or 5 }}%</strong> por gestión y vinculación con Mercado Pago.
-    Adicionalmente, <strong>Mercado Pago</strong> puede aplicar <strong>comisiones o retenciones impositivas</strong> (IIBB, IVA, etc.) según tu cuenta y jurisdicción.
-  </p>
-  <p class="text-sm mb-4">Como referencia, MP puede cobrar entre <strong>~0,8% y ~6,3% + IVA</strong> según el medio de pago y el <strong>tiempo de acreditación</strong> que elijas (inmediata vs. a 7/10 días, etc.).</p>
 
-  <h3 class="mt-4">Ejemplo: venta de $1.000</h3>
-  <div class="overflow-x-auto">
-    <table class="table w-full">
-      <thead>
-        <tr>
-          <th>Escenario</th>
-          <th>ApuntesYa ({{ config.PLATFORM_FEE_PCT or 5 }}%)</th>
-          <th>Mercado Pago</th>
-          <th>Vendedor recibe</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Acreditación inmediata (MP ~6,29% + IVA ≈ 7,61%)</td>
-          <td>$50,00</td>
-          <td>$76,10</td>
-          <td><strong>$873,90</strong></td>
-        </tr>
-        <tr>
-          <td>Acreditación en 10 días (MP ~4,39% + IVA ≈ 5,31%)</td>
-          <td>$50,00</td>
-          <td>$53,10</td>
-          <td><strong>$896,90</strong></td>
-        </tr>
-        <tr>
-          <td>QR / Dinero en cuenta MP (MP ~0,8% + IVA ≈ 0,97%)</td>
-          <td>$50,00</td>
-          <td>$9,70</td>
-          <td><strong>$940,30</strong></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <p class="text-sm mt-3">
-    ⚠️ <strong>Aclaración:</strong> los porcentajes de MP son <em>orientativos</em> y pueden variar según el medio de pago,
-    la configuración de acreditación, la categoría fiscal y la provincia. Si aplican <strong>IIBB/IVA/Ganancias</strong>,
-    el neto puede ser menor.
+  <p>
+    En cada venta, <strong>vos elegís el monto que querés recibir por tu apunte</strong> (por ej. $1.000).
+    Ese valor es tu <strong>precio base</strong>.
   </p>
 
-  <p class="mt-4">
-    ¿Tenés dudas? Revisá también <a class="text-blue-600 hover:underline" href="{{ url_for('help_mp') }}">cómo vincular tu cuenta de Mercado Pago</a>.
+  <p>
+    ApuntesYa <strong>no descuenta comisión de ese monto base</strong>. En lugar de eso, suma un recargo
+    sobre el precio que ve la persona compradora para cubrir:
+  </p>
+
+  <ul>
+    <li>La comisión de ApuntesYa por gestión y mantenimiento de la plataforma (hoy, aprox. <strong>12,8%</strong> del
+      valor base).</li>
+    <li>Las comisiones de Mercado Pago, que pueden variar según el medio de pago y el plazo de acreditación.</li>
+  </ul>
+
+  <p>
+    Por eso, el precio final que ve quien compra es un poco más alto que el valor que vos definís, pero
+    <strong>tu monto base se mantiene</strong> (antes de impuestos como IIBB/IVA/Ganancias que pueda aplicar AFIP
+    según tu situación fiscal).
+  </p>
+
+  <hr>
+
+  <h3>Ejemplo: querés recibir $1.000 por un apunte</h3>
+
+  <p style="margin-bottom:8px;">
+    Supongamos que configurás tu apunte para recibir <strong>$1.000 netos</strong>.
+    A continuación se muestran distintos escenarios según la comisión de Mercado Pago.
+  </p>
+
+  <table class="table" style="width:100%;border-collapse:collapse;font-size:14px;">
+    <thead>
+      <tr>
+        <th style="text-align:left;border-bottom:1px solid #eee;padding:6px 4px;">Escenario</th>
+        <th style="text-align:right;border-bottom:1px solid #eee;padding:6px 4px;">Precio al comprador</th>
+        <th style="text-align:right;border-bottom:1px solid #eee;padding:6px 4px;">Comisión ApuntesYa<br><span
+            style="font-weight:normal;">(~12,8% sobre $1.000)</span></th>
+        <th style="text-align:right;border-bottom:1px solid #eee;padding:6px 4px;">Comisión Mercado Pago<br><span
+            style="font-weight:normal;">(aprox.)</span></th>
+        <th style="text-align:right;border-bottom:1px solid #eee;padding:6px 4px;">Vos recibís</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:6px 4px;">
+          Acreditación inmediata<br>
+          <span style="color:#666;font-size:12px;">MP ~7,6% aprox.</span>
+        </td>
+        <td style="padding:6px 4px;text-align:right;">$1.256,44</td>
+        <td style="padding:6px 4px;text-align:right;">$160,82</td>
+        <td style="padding:6px 4px;text-align:right;">$95,62</td>
+        <td style="padding:6px 4px;text-align:right;"><strong>$1.000,00</strong></td>
+      </tr>
+      <tr>
+        <td style="padding:6px 4px;">
+          Acreditación en 10 días<br>
+          <span style="color:#666;font-size:12px;">MP ~5,3% aprox.</span>
+        </td>
+        <td style="padding:6px 4px;text-align:right;">$1.221,15</td>
+        <td style="padding:6px 4px;text-align:right;">$156,31</td>
+        <td style="padding:6px 4px;text-align:right;">$64,84</td>
+        <td style="padding:6px 4px;text-align:right;"><strong>$1.000,00</strong></td>
+      </tr>
+      <tr>
+        <td style="padding:6px 4px;">
+          Pago con QR / Dinero en MP<br>
+          <span style="color:#666;font-size:12px;">MP ~1,0% aprox.</span>
+        </td>
+        <td style="padding:6px 4px;text-align:right;">$1.159,69</td>
+        <td style="padding:6px 4px;text-align:right;">$148,44</td>
+        <td style="padding:6px 4px;text-align:right;">$11,25</td>
+        <td style="padding:6px 4px;text-align:right;"><strong>$1.000,00</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p style="margin-top:10px;font-size:13px;color:#666;">
+    🔎 <strong>Importante:</strong> los porcentajes de Mercado Pago son orientativos y pueden variar según el medio
+    de pago, la configuración de acreditación, tu categoría fiscal y la provincia. Si tenés IIBB/IVA/Ganancias,
+    el neto final que recibís en tu cuenta de MP puede ser menor.
+  </p>
+
+  <p style="margin-top:8px;">
+    ¿Tenés dudas? Revisá también
+    <a href="{{ url_for('help_mp') }}">cómo vincular tu cuenta de Mercado Pago</a>.
   </p>
 </div>
+
 {% endblock %}
