@@ -1393,7 +1393,7 @@ def admin_api_users_list():
     limit = request.args.get("limit", type=int) or 100
 
     with Session() as s:
-        stmt = select(User).order_by(desc(User.created_at)).limit(limit)
+        stmt = select(User).order_by(desc(User.id)).limit(limit)
         if q:
             like = f"%{q}%"
             stmt = select(User).where(
