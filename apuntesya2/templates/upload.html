@@ -21,11 +21,11 @@
 
       <ol class="pasos-calculo">
         <li class="paso-item">
-          <strong>1. Fijas tu Ganancia (Precio Base):</strong> Ingresas el monto que deseas recibir por la venta de tu
+          <strong>Fijas tu Ganancia (Precio Base):</strong> Ingresas el monto que deseas recibir por la venta de tu
           apunte.
         </li>
         <li class="paso-item">
-          <strong>2. Agregamos la Comisión Total (20%):</strong> Sumamos una Comisión Total del 20% al precio de venta
+          <strong>Agregamos la Comisión Total (20%):</strong> Sumamos una Comisión Total del 20% al precio de venta
           que
           verá el comprador.
           <ul class="desglose-comision">
@@ -34,7 +34,7 @@
           </ul>
         </li>
         <li class="paso-item">
-          <strong>3. Recibís lo que pediste:</strong> Al venderse el apunte, tú recibís tu <strong>Precio Base</strong>
+          <strong>Recibís lo que pediste:</strong> Al venderse el apunte, tú recibís tu <strong>Precio Base</strong>
           completo, antes de la retención de IIBB.
         </li>
       </ol>
@@ -55,7 +55,7 @@
         <a href="{{ url_for('help_mp') }}" class="text-blue-600 hover:underline">Ver instructivo</a>.
       </p>
     </div>
-    
+
     <div class="card mt-4" id="resumen-publicacion">
       <h3>Resumen de publicación</h3>
       <p class="text-sm">
@@ -133,7 +133,7 @@
       })();
     </script>
 
-    
+
     <script>
       (function () {
         var box = document.getElementById('resumen-publicacion');
@@ -164,10 +164,10 @@
           var $ = function (id) { return document.getElementById(id); };
 
           if ($('rp-precio')) $('rp-precio').textContent = fmt(x);
-          if ($('rp-mp'))     $('rp-mp').textContent     = fmt(feeMP);
-          if ($('rp-ay'))     $('rp-ay').textContent     = fmt(feeAY);
-          if ($('rp-neto'))   $('rp-neto').textContent   = fmt(netoVendedor);
-          if ($('rp-buyer'))  $('rp-buyer').textContent  = fmt(totalBuyer);
+          if ($('rp-mp')) $('rp-mp').textContent = fmt(feeMP);
+          if ($('rp-ay')) $('rp-ay').textContent = fmt(feeAY);
+          if ($('rp-neto')) $('rp-neto').textContent = fmt(netoVendedor);
+          if ($('rp-buyer')) $('rp-buyer').textContent = fmt(totalBuyer);
         }
 
         if (precioInput) {
