@@ -497,8 +497,17 @@ def auth_session_login():
         with Session() as s:
             u = s.execute(select(User).where(User.email == email)).scalar_one_or_none()
             if u:
+                # 🚫 Si está bloqueado o inactivo, no lo dejamos entrar
+                if getattr(u, "is_blocked", False) or not getattr(u, "is_active", True):
+                    return {
+                        "ok": False,
+                        "error": "account_blocked",
+                        "message": "Tu cuenta está bloqueada. Escribinos a soporte.apuntesya@gmail.com"
+                    }, 403
+
                 login_user(u)
                 return {"ok": True, "next": url_for("index")}, 200
+
 
         session["pending_google"] = {
             "email": email,
@@ -1430,6 +1439,75 @@ def admin_api_users_list():
             })
 
     return jsonify({"items": items, "list": items})
+
+
+# ----------------------------------------------------------------------
+# Admin HUB - gestión de usuarios (bloquear / desbloquear / eliminar)
+# ----------------------------------------------------------------------
+@app.post("/admin/api/users/<int:user_id>/block")
+@login_required
+@admin_required
+def admin_api_users_block(user_id):
+    with Session() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        # No permitir bloquearse a uno mismo
+        if u.id == current_user.id:
+            return jsonify({"ok": False, "error": "cannot_block_self"}), 400
+
+        u.is_active = False
+        if hasattr(u, "is_blocked"):
+            u.is_blocked = True
+        s.commit()
+
+    return jsonify({"ok": True, "status": "blocked"})
+
+
+@app.post("/admin/api/users/<int:user_id>/unblock")
+@login_required
+@admin_required
+def admin_api_users_unblock(user_id):
+    with Session() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        u.is_active = True
+        if hasattr(u, "is_blocked"):
+            u.is_blocked = False
+        s.commit()
+
+    return jsonify({"ok": True, "status": "unblocked"})
+
+
+@app.post("/admin/api/users/<int:user_id>/delete")
+@login_required
+@admin_required
+def admin_api_users_delete(user_id):
+    with Session() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        # No permitir borrarse a uno mismo ni borrar admins
+        if u.id == current_user.id:
+            return jsonify({"ok": False, "error": "cannot_delete_self"}), 400
+        if getattr(u, "is_admin", False):
+            return jsonify({"ok": False, "error": "cannot_delete_admin"}), 400
+
+        # Si tiene apuntes o compras asociadas, mejor bloquear en vez de borrar
+        has_notes = bool(getattr(u, "notes", []) or [])
+        has_purchases = bool(getattr(u, "purchases", []) or [])
+        if has_notes or has_purchases:
+            return jsonify({"ok": False, "error": "has_related_data"}), 400
+
+        s.delete(u)
+        s.commit()
+
+    return jsonify({"ok": True, "status": "deleted"})
+
 
 # Admin HUB - apuntes (info general)
 @app.get("/admin/api/notes")

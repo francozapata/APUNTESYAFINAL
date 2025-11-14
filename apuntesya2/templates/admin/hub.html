@@ -157,19 +157,45 @@
         }
 
         function renderUsers(items) {
-            if (!items.length) { usersPane.innerHTML = '<div class="muted">Sin resultados.</div>'; return; }
-            usersPane.innerHTML = items.map(u => `
+            if (!items.length) {
+                usersPane.innerHTML = '<div class="muted">Sin resultados.</div>';
+                return;
+            }
+
+            usersPane.innerHTML = items.map(u => {
+                const statusText = u.is_admin
+                    ? 'Admin'
+                    : ((u.is_blocked || !u.is_active) ? 'Bloqueado' : 'Activo');
+
+                // Botones de acción (no mostramos acciones extra si es admin)
+                let actionsHtml = `<span class="muted">${escapeHtml(statusText)}</span>`;
+                if (!u.is_admin) {
+                    if (u.is_blocked || !u.is_active) {
+                        actionsHtml += `
+                            <button class="btn" onclick="unblockUser(${u.id})">Desbloquear</button>
+                        `;
+                    } else {
+                        actionsHtml += `
+                            <button class="btn ghost" onclick="blockUser(${u.id})">Bloquear</button>
+                        `;
+                    }
+                    actionsHtml += `
+                        <button class="btn ghost" onclick="deleteUser(${u.id})">Eliminar</button>
+                    `;
+                }
+
+                return `
           <div class="row">
             <div>
               <div><strong>${escapeHtml(u.name || '(sin nombre)')}</strong> <span class="muted">— ${escapeHtml(u.email || '')}</span></div>
               <div class="muted">${escapeHtml(u.university || '')} • ${escapeHtml(u.faculty || '')} • ${escapeHtml(u.career || '')}</div>
             </div>
             <div class="right">
-              ${u.is_admin ? '<span class="muted">Admin</span>' : ''}
-              ${u.is_active ? '<span class="muted">Activo</span>' : '<span class="muted">Inactivo</span>'}
+              ${actionsHtml}
             </div>
           </div>
-        `).join('');
+        `;
+            }).join('');
         }
 
         function renderNotes(items) {
@@ -203,6 +229,7 @@
         `).join('');
         }
 
+        // ---------- Acciones de apuntes ----------
         window.deleteNote = async function (id) {
             if (!confirm('¿Eliminar este apunte?')) return;
             const r = await fetch(`/admin/api/notes/${id}/delete`, { method: 'POST' });
@@ -210,8 +237,53 @@
             if (js.ok) { load(); } else { alert('No se pudo eliminar.'); }
         }
 
+        // ---------- Acciones de usuarios ----------
+        window.blockUser = async function (id) {
+            if (!confirm('¿Bloquear este usuario? No podrá iniciar sesión.')) return;
+            const r = await fetch(`/admin/api/users/${id}/block`, { method: 'POST' });
+            const js = await r.json().catch(() => ({ ok: false }));
+            if (js.ok) {
+                load();
+            } else {
+                alert('No se pudo bloquear el usuario: ' + (js.error || ''));
+            }
+        }
+
+        window.unblockUser = async function (id) {
+            const r = await fetch(`/admin/api/users/${id}/unblock`, { method: 'POST' });
+            const js = await r.json().catch(() => ({ ok: false }));
+            if (js.ok) {
+                load();
+            } else {
+                alert('No se pudo desbloquear el usuario: ' + (js.error || ''));
+            }
+        }
+
+        window.deleteUser = async function (id) {
+            if (!confirm('¿Eliminar este usuario de forma permanente?')) return;
+            const r = await fetch(`/admin/api/users/${id}/delete`, { method: 'POST' });
+            const js = await r.json().catch(() => ({ ok: false }));
+            if (js.ok) {
+                load();
+            } else if (js.error === 'has_related_data') {
+                alert('No se puede eliminar un usuario con apuntes o compras. Bloquealo en su lugar.');
+            } else if (js.error === 'cannot_delete_admin') {
+                alert('No podés eliminar un administrador.');
+            } else if (js.error === 'cannot_delete_self') {
+                alert('No podés eliminar tu propio usuario.');
+            } else {
+                alert('No se pudo eliminar el usuario.');
+            }
+        }
+
         function escapeHtml(s) {
-            return (s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+            return (s || '').replace(/[&<>"']/g, m => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[m]));
         }
 
         // primera carga
