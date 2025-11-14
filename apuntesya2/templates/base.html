@@ -77,7 +77,7 @@
   <div class="footer">
     <div class="footer">
       Hecho con ♥ — Comisión plataforma: {{ config.get('PLATFORM_FEE_PERCENT', 5.0) }}%
-      <a class="btn ghost" href="/terms">Términos y condiciones</a>
+      <a class="btn ghost" href="{{ url_for('terms') }}">Términos y condiciones</a>
     </div>
   </div>
 
@@ -132,29 +132,31 @@
 
   <!-- <script src="{{ url_for('static', filename='js/contact_widget.js') }}"></script>  -->
 
-<!-- Toast simple -->
-<div id="apy-toast" style="position:fixed;right:16px;bottom:16px;z-index:9999;display:none;background:#111827;color:#fff;padding:12px 16px;border-radius:10px;box-shadow:0 10px 20px rgba(0,0,0,.2)"></div>
-<script>
-  (function(){
-    function showToast(msg){
-      var t = document.getElementById('apy-toast');
-      if(!t) return;
-      t.textContent = msg;
-      t.style.display='block';
-      setTimeout(function(){ t.style.display='none'; }, 3500);
-    }
-    // lee flashes si están en DOM
-    var el = document.querySelector('.flash-success, .flash'); // depende de tu render
-    // fallback por query param
-    var usp = new URLSearchParams(location.search);
-    if (usp.get('paid') === '1'){
-      showToast('✅ Pago aprobado, ya podés descargar.');
-      // scroll al botón de descarga si existe
-      var btn = document.getElementById('download-btn');
-      if(btn){ btn.scrollIntoView({behavior:'smooth', block:'center'}); }
-    }
-  })();
-</script>
+  <!-- Toast simple -->
+  <div id="apy-toast"
+    style="position:fixed;right:16px;bottom:16px;z-index:9999;display:none;background:#111827;color:#fff;padding:12px 16px;border-radius:10px;box-shadow:0 10px 20px rgba(0,0,0,.2)">
+  </div>
+  <script>
+    (function () {
+      function showToast(msg) {
+        var t = document.getElementById('apy-toast');
+        if (!t) return;
+        t.textContent = msg;
+        t.style.display = 'block';
+        setTimeout(function () { t.style.display = 'none'; }, 3500);
+      }
+      // lee flashes si están en DOM
+      var el = document.querySelector('.flash-success, .flash'); // depende de tu render
+      // fallback por query param
+      var usp = new URLSearchParams(location.search);
+      if (usp.get('paid') === '1') {
+        showToast('✅ Pago aprobado, ya podés descargar.');
+        // scroll al botón de descarga si existe
+        var btn = document.getElementById('download-btn');
+        if (btn) { btn.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      }
+    })();
+  </script>
 
 </body>
 

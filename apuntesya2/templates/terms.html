@@ -1,9 +1,164 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container" style="max-width:800px;margin:40px auto">
-  <h1>Términos y condiciones</h1>
-  <p>Este sitio utiliza autenticación de Google para el acceso. Al continuar, aceptás las políticas de privacidad y uso
-    del servicio.</p>
-  <p>Podés volver al <a href="{{ url_for('static', filename='js/firebase_google_auth.js') }}">inicio de sesión</a>.</p>
+<div class="container" style="max-width:900px;margin:40px auto 80px auto;">
+  <h1 style="margin-bottom:16px;">Términos y Condiciones de Uso</h1>
+  <p style="color:#555;margin-bottom:24px;">
+    Estos Términos y Condiciones regulan el acceso y uso de la plataforma <strong>ApuntesYa</strong>
+    (en adelante, la “Plataforma”), a través de la cual las personas usuarias pueden comprar y vender
+    apuntes y materiales de estudio.
+  </p>
+  <p style="color:#555;margin-bottom:24px;">
+    Al registrarte, iniciar sesión o utilizar la Plataforma, aceptás estos Términos y Condiciones.
+    Si no estás de acuerdo con alguno de los puntos, te recomendamos no utilizar el servicio.
+  </p>
+
+  <hr style="margin:32px 0;">
+
+  <h2>1. Titular de la plataforma</h2>
+  <p style="color:#555;">
+    ApuntesYa es una plataforma digital que funciona como intermediaria entre personas que ofrecen
+    apuntes y materiales de estudio (en adelante, “Vendedores”) y personas que los adquieren
+    (en adelante, “Compradores”). La Plataforma no es responsable por el contenido de los apuntes
+    ni por el uso que se haga de ellos.
+  </p>
+
+  <h2>2. Registro y acceso</h2>
+  <ul style="color:#555;">
+    <li>El acceso se realiza mediante autenticación con <strong>Google</strong>.</li>
+    <li>Al iniciar sesión, garantizás que los datos asociados a tu cuenta son veraces y actuales.</li>
+    <li>Es tu responsabilidad mantener la confidencialidad de tu cuenta y evitar compartir el acceso con terceros.</li>
+  </ul>
+
+  <h2>3. Funcionamiento de la Plataforma</h2>
+  <p style="color:#555;">
+    ApuntesYa permite que los Vendedores publiquen apuntes y materiales de estudio en formato digital
+    para que los Compradores puedan adquirirlos.
+  </p>
+  <ul style="color:#555;">
+    <li>Los Vendedores son responsables de la descripción, calidad y actualización de los apuntes.</li>
+    <li>Los Compradores son responsables de verificar que el material se adecúa a lo que necesitan antes de comprar.
+    </li>
+    <li>La Plataforma sólo gestiona la exposición de los productos, el cobro y el acceso a la descarga.</li>
+  </ul>
+
+  <h2>4. Precios, comisiones y pagos</h2>
+  <ul style="color:#555;">
+    <li>El Vendedor define un <strong>precio base</strong> por sus apuntes.</li>
+    <li>La Plataforma puede sumar una <strong>comisión de servicio</strong> sobre ese precio, que se mostrará al
+      Comprador
+      como parte del precio final.</li>
+    <li>Los pagos se procesan a través de un proveedor de pagos externo (por ejemplo, Mercado Pago u otros similares),
+      por lo que las condiciones y eventuales cargos adicionales que éste aplique son ajenos a ApuntesYa.</li>
+    <li>El Vendedor recibirá el importe que le corresponda según el esquema de comisiones vigente al momento de la
+      venta.</li>
+  </ul>
+
+  <h2>5. Propiedad intelectual</h2>
+  <ul style="color:#555;">
+    <li>Al publicar apuntes o materiales de estudio, el Vendedor declara que:
+      <ul>
+        <li>Es autor/a del contenido, o</li>
+        <li>Cuenta con los derechos y autorizaciones necesarias para su publicación y comercialización.</li>
+      </ul>
+    </li>
+    <li>Está prohibida la venta o distribución de libros escaneados, fotocopias de textos protegidos u otros contenidos
+      que infrinjan derechos de autor.</li>
+    <li>El Comprador adquiere una licencia de uso personal y no exclusiva del material descargado. No puede revender,
+      redistribuir públicamente ni compartir masivamente el contenido adquirido.</li>
+  </ul>
+
+  <h2>6. Uso permitido y contenido prohibido</h2>
+  <p style="color:#555;">
+    El uso de la Plataforma debe respetar la legislación vigente y las normas de convivencia.
+    Queda prohibido:
+  </p>
+  <ul style="color:#555;">
+    <li>Publicar contenido que infrinja derechos de autor o de terceros.</li>
+    <li>Publicar materiales que promuevan delitos, discriminación, violencia o discursos de odio.</li>
+    <li>Utilizar la Plataforma para enviar spam, mensajes engañosos o fraudes.</li>
+    <li>Intentar vulnerar la seguridad de la Plataforma o acceder a cuentas ajenas.</li>
+  </ul>
+
+  <h2>7. Devoluciones y reclamos</h2>
+  <p style="color:#555;">
+    Dado que los productos ofrecidos son <strong>contenidos digitales</strong> que se pueden descargar de inmediato:
+  </p>
+  <ul style="color:#555;">
+    <li>En principio, no se realizan devoluciones una vez concretada la compra y habilitado el acceso al material.</li>
+    <li>Si hubiera un error técnico atribuible a la Plataforma (por ejemplo, el archivo no se puede descargar o está
+      dañado),
+      ApuntesYa podrá evaluar caso por caso y ofrecer soluciones como:
+      <ul>
+        <li>Reenvío del archivo correcto.</li>
+        <li>Reposición del acceso a la descarga.</li>
+        <li>Otras alternativas razonables según la situación.</li>
+      </ul>
+    </li>
+    <li>Por diferencias de criterio sobre el contenido, calidad, extensión o utilidad del apunte,
+      la responsabilidad corresponde al Vendedor que lo publicó.</li>
+  </ul>
+
+  <h2>8. Responsabilidad de la Plataforma</h2>
+  <ul style="color:#555;">
+    <li>ApuntesYa no garantiza que los apuntes reflejen la totalidad o exactitud de los programas académicos.</li>
+    <li>La Plataforma no se responsabiliza por:
+      <ul>
+        <li>Resultados académicos del Comprador.</li>
+        <li>Errores conceptuales, omisiones o desactualización en los apuntes.</li>
+        <li>Actos u omisiones de los Vendedores o Compradores dentro o fuera de la Plataforma.</li>
+      </ul>
+    </li>
+    <li>La Plataforma se compromete a tomar medidas razonables de seguridad para proteger la información de las cuentas,
+      pero no puede garantizar un sistema 100% libre de vulneraciones.</li>
+  </ul>
+
+  <h2>9. Datos personales y privacidad</h2>
+  <p style="color:#555;">
+    Los datos personales utilizados para el acceso (por ejemplo, correo asociado a Google) y para las operaciones
+    (por ejemplo, datos necesarios para el pago) se tratan con el único fin de:
+  </p>
+  <ul style="color:#555;">
+    <li>Permitir el acceso a la Plataforma.</li>
+    <li>Gestionar compras, ventas y pagos.</li>
+    <li>Mejorar la experiencia de uso y la seguridad del servicio.</li>
+  </ul>
+  <p style="color:#555;">
+    No se venderán tus datos personales a terceros. Podrán compartirse únicamente con proveedores de servicios
+    necesarios para el funcionamiento de la Plataforma (por ejemplo, procesadores de pago),
+    siempre bajo condiciones de confidencialidad.
+  </p>
+
+  <h2>10. Suspensión y cierre de cuentas</h2>
+  <p style="color:#555;">
+    La Plataforma podrá suspender o cerrar cuentas de usuarios que:
+  </p>
+  <ul style="color:#555;">
+    <li>Incurran en conductas fraudulentas o ilegales.</li>
+    <li>Infrinjan reiteradamente estos Términos y Condiciones.</li>
+    <li>Publiquen contenidos prohibidos o que generen riesgos para otros usuarios o para la Plataforma.</li>
+  </ul>
+
+  <h2>11. Modificaciones a los Términos</h2>
+  <p style="color:#555;">
+    ApuntesYa podrá actualizar estos Términos y Condiciones en cualquier momento, por ejemplo, para reflejar cambios
+    en el servicio, en la normativa vigente o en la forma de operar de la Plataforma.
+  </p>
+  <p style="color:#555;">
+    Cuando se realicen cambios relevantes, se procurará informar a las personas usuarias por medios visibles dentro
+    de la Plataforma. El uso continuado del servicio después de las modificaciones implicará la aceptación de los
+    nuevos términos.
+  </p>
+
+  <h2>12. Contacto</h2>
+  <p style="color:#555;">
+    Si tenés dudas o comentarios sobre estos Términos y Condiciones, podés contactarte a través de los medios
+    de contacto indicados en la Plataforma.
+  </p>
+
+  <hr style="margin:32px 0;">
+
+  <p style="color:#555;">
+    Podés volver al <a href="{{ url_for('login') }}">inicio de sesión</a>.
+  </p>
 </div>
 {% endblock %}
