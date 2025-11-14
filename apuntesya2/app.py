@@ -551,6 +551,7 @@ def complete_profile_post():
             university=university,
             faculty=faculty,
             career=career,
+            seller_contact=seller_contact or None,
             is_active=True,
         )
         s.add(u)
@@ -559,6 +560,7 @@ def complete_profile_post():
 
     session.pop("pending_google", None)
     return redirect(url_for("index"))
+
 
 # -----------------------------------------------------------------------------
 # Perfil
@@ -1526,8 +1528,9 @@ def admin_download_note(note_id):
 @login_required
 def update_academics():
     university = (request.form.get("university") or "").strip()
-    faculty = (request.form.get("faculty") or "").strip()
-    career = (request.form.get("career") or "").strip()
+    faculty    = (request.form.get("faculty") or "").strip()
+    career     = (request.form.get("career") or "").strip()
+    seller_contact = (request.form.get("seller_contact") or "").strip()
 
     if not (university and faculty and career):
         flash("Completá todos los campos para actualizar tus datos académicos.", "warning")
@@ -1536,14 +1539,15 @@ def update_academics():
     with Session() as s:
         u = s.get(User, current_user.id)
         u.university = university
-        u.faculty = faculty
-        u.career = career
+        u.faculty    = faculty
+        u.career     = career
         if seller_contact:
             u.seller_contact = seller_contact
         s.commit()
 
     flash("✅ Datos académicos actualizados correctamente.", "success")
     return redirect(url_for("profile"))
+
 
 @app.get("/update_academics")
 @login_required
@@ -1570,14 +1574,15 @@ def update_academics_post():
     with Session() as s:
         u = s.get(User, current_user.id)
         u.university = university
-        u.faculty = faculty
-        u.career = career
+        u.faculty    = faculty
+        u.career     = career
         if seller_contact:
             u.seller_contact = seller_contact
         s.commit()
 
     flash("✅ Datos académicos actualizados.", "success")
     return redirect(url_for("profile"))
+
 
 # -----------------------------------------------------------------------------
 # Main

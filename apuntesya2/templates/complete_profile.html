@@ -41,13 +41,16 @@
         <input type="hidden" id="cp-hidden-faculty" name="faculty">
         <input type="hidden" id="cp-hidden-career" name="career">
 
-        <label for="cp-contact" style="margin-top:14px;display:block;">Contacto de vendedor (opcional)</label>
-<input id="cp-contact" class="input" name="seller_contact" placeholder="+549351xxxxxxx, alguien@dominio.com o https://...">
-<p class="muted" style="margin-top:6px">Mostramos un botón para que tus compradores te contacten. Acepta teléfono/WhatsApp, email o URL.</p>
-<button type="submit" class="btn primary" style="margin-top:16px;">
-            {{ 'Guardar cambios' if mode == 'update' else 'Guardar y continuar' }}
-        </button>
-        <p class="muted" style="margin-top:10px">Podrás editar esta información luego desde tu perfil.</p>
+        <!-- Medio de contacto para tus compradores -->
+        <label for="cp-contact" style="margin-top:14px;display:block;">Medio de contacto para tus compradores</label>
+        <input id="cp-contact" class="input" name="seller_contact"
+            placeholder="Ej: +549351..., mail o link a red social"
+            value="{{ current_user.seller_contact or '' if current_user.is_authenticated else '' }}">
+        <p class="muted" style="margin-top:4px;">
+            Este dato se mostrará a las personas que compren o descarguen tus apuntes para que puedan contactarte si
+            tienen
+            alguna duda.
+        </p>
     </form>
 </div>
 
