@@ -130,7 +130,6 @@
   {# Bloque para inyectar JS específicos de cada página (p.ej. selects) #}
   {% block extra_js %}{% endblock %}
 
-  <!-- <script src="{{ url_for('static', filename='js/contact_widget.js') }}"></script>  -->
 
   <!-- Toast simple -->
   <div id="apy-toast"
@@ -157,6 +156,45 @@
       }
     })();
   </script>
+  <script>
+    // Widget de contacto: abre/cierra el panel
+    document.addEventListener('DOMContentLoaded', function () {
+      const btn = document.getElementById('contact-widget-button');
+      const overlay = document.getElementById('contact-widget-overlay');
+      const panel = document.getElementById('contact-widget-panel');
+      const closeBtn = document.getElementById('contact-widget-close');
+
+      if (!btn || !overlay || !panel) return;
+
+      function openWidget() {
+        panel.classList.remove('hidden');
+        overlay.classList.remove('hidden');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+
+      function closeWidget() {
+        panel.classList.add('hidden');
+        overlay.classList.add('hidden');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+
+      btn.addEventListener('click', function () {
+        const isOpen = btn.getAttribute('aria-expanded') === 'true';
+        if (isOpen) {
+          closeWidget();
+        } else {
+          openWidget();
+        }
+      });
+
+      if (closeBtn) {
+        closeBtn.addEventListener('click', closeWidget);
+      }
+
+      overlay.addEventListener('click', closeWidget);
+    });
+  </script>
+
 
 </body>
 
