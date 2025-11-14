@@ -61,6 +61,11 @@
     text-decoration: none;
   }
 
+  .btn-pill.ghost {
+    background: #f3f6ff;
+    color: #335;
+  }
+
   .note-row {
     display: flex;
     justify-content: space-between;
@@ -105,6 +110,74 @@
     color: #666;
     font-size: 13px;
   }
+
+  /* Bloque superior con foto + datos académicos + MP */
+  .profile-top {
+    display: grid;
+    grid-template-columns: minmax(0, 2.3fr) minmax(0, 2fr);
+    gap: 18px;
+    margin: 12px 0 20px;
+  }
+
+  @media (max-width: 768px) {
+    .profile-top {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .profile-top-left {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+
+  .avatar-wrap {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: #eef3ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #334;
+    flex-shrink: 0;
+  }
+
+  .avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .profile-top-right {
+    border-left: 1px solid #f0f0f5;
+    padding-left: 16px;
+  }
+
+  @media (max-width: 768px) {
+    .profile-top-right {
+      border-left: 0;
+      border-top: 1px solid #f0f0f5;
+      padding-left: 0;
+      padding-top: 12px;
+    }
+  }
+
+  .mp-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid #d9d9e3;
+    background: #f7f9ff;
+    color: #334;
+    margin-bottom: 8px;
+  }
 </style>
 
 <div class="profile-card">
@@ -113,10 +186,86 @@
       <h2 style="margin:0;">Mi perfil</h2>
       <p class="profile-sub">Hola {{ current_user.name }} 👋. Acá podés ver tus apuntes, compras y ventas.</p>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a href="{{ url_for('update_academics_get') }}" class="btn-pill">Actualizar datos académicos</a>
+  </div>
+
+  <!-- BLOQUE SUPERIOR: foto + datos académicos + MP -->
+  {% if current_user.is_authenticated %}
+  {# Determinar imagen de perfil si existe #}
+  {% set profile_image = None %}
+  {% if current_user.imagen_de_perfil is defined and current_user.imagen_de_perfil %}
+  {% set profile_image = url_for('static', filename='uploads/profile_images/' ~ current_user.imagen_de_perfil) %}
+  {% elif current_user.profile_image is defined and current_user.profile_image %}
+  {% set profile_image = url_for('static', filename='uploads/profile_images/' ~ current_user.profile_image) %}
+  {% endif %}
+
+  <div class="profile-top">
+    <!-- Izquierda: foto + datos académicos -->
+    <div class="profile-top-left">
+      <div>
+        <div class="avatar-wrap">
+          {% if profile_image %}
+          <img src="{{ profile_image }}" alt="Foto de perfil" class="avatar-img">
+          {% else %}
+          {{ current_user.name[0]|upper }}
+          {% endif %}
+        </div>
+
+        <!-- Form para subir nueva foto -->
+        <form method="post" action="{{ url_for('upload_profile_image') }}" enctype="multipart/form-data"
+          style="margin-top:8px;">
+          <label class="muted" style="font-size:12px;display:block;margin-bottom:4px;">Cambiar foto de perfil</label>
+          <input type="file" name="file" accept=".jpg,.jpeg,.png" style="font-size:12px;margin-bottom:4px;">
+          <button type="submit" class="btn-pill ghost" style="padding:5px 10px;font-size:12px;">
+            Guardar foto
+          </button>
+        </form>
+      </div>
+
+      <div>
+        <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
+        <p style="margin:0;font-weight:600;">
+          {{ current_user.university or 'Universidad no indicada' }}<br>
+          <span class="muted">
+            {{ current_user.faculty or 'Facultad no indicada' }} •
+            {{ current_user.career or 'Carrera no indicada' }}
+          </span>
+        </p>
+        <div style="margin-top:8px;">
+          <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
+            Actualizar datos académicos
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Derecha: vinculación con Mercado Pago -->
+    <div class="profile-top-right">
+      <p class="muted" style="margin:0 0 4px;">Vinculación con Mercado Pago</p>
+
+      {% if current_user.mp_user_id or current_user.mp_access_token %}
+      <div class="mp-status">
+        <span>✅ Cuenta vinculada</span>
+      </div>
+      <p class="muted" style="margin:4px 0 8px;">
+        Ya estás recibiendo los pagos en tu cuenta de Mercado Pago vinculada.
+      </p>
+      <a href="{{ url_for('disconnect_mp') }}" class="btn-pill ghost">
+        Desvincular Mercado Pago
+      </a>
+      {% else %}
+      <div class="mp-status">
+        <span>⚠️ No vinculada</span>
+      </div>
+      <p class="muted" style="margin:4px 0 8px;">
+        Para poder cobrar tus ventas automáticamente, vinculá tu cuenta de Mercado Pago.
+      </p>
+      <a href="{{ url_for('connect_mp') }}" class="btn-pill">
+        Vincular Mercado Pago
+      </a>
+      {% endif %}
     </div>
   </div>
+  {% endif %}
 
   <!-- Pestañas -->
   <div class="profile-tabs">
@@ -143,7 +292,8 @@
     </form>
     {% if seller_contact_url %}
     <p class="muted" style="margin-top:6px;">
-      Vista para el comprador: <a href="{{ seller_contact_url }}" target="_blank">{{ seller_contact_label }}</a>
+      Vista para el comprador:
+      <a href="{{ seller_contact_url }}" target="_blank">{{ seller_contact_label }}</a>
     </p>
     {% endif %}
   </div>
