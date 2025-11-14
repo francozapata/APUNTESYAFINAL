@@ -196,7 +196,7 @@ app.config["BASE_URL"] = os.getenv("BASE_URL", "")
 
 app.config["PLATFORM_FEE_PERCENT"] = float(os.getenv("MP_PLATFORM_FEE_PERCENT", "5.0"))
 app.config["MP_COMMISSION_RATE"] = float(os.getenv("MP_COMMISSION_RATE", "0.0774"))
-app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.05"))
+app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.128"))
 app.config["IIBB_ENABLED"] = os.getenv("IIBB_ENABLED", "false").lower() in ("1", "true", "yes")
 app.config["IIBB_RATE"] = float(os.getenv("IIBB_RATE", "0.0"))
 
@@ -204,6 +204,7 @@ MP_COMMISSION_RATE = app.config["MP_COMMISSION_RATE"]
 APY_COMMISSION_RATE = app.config["APY_COMMISSION_RATE"]
 IIBB_ENABLED = app.config["IIBB_ENABLED"]
 IIBB_RATE = app.config["IIBB_RATE"]
+GROSS_MULTIPLIER = 1 + APY_COMMISSION_RATE + (1 + APY_COMMISSION_RATE) * MP_COMMISSION_RATE
 
 app.config["MP_ACCESS_TOKEN_PLATFORM"] = os.getenv("MP_ACCESS_TOKEN", "")
 app.config["MP_OAUTH_REDIRECT_URL"] = os.getenv("MP_OAUTH_REDIRECT_URL")
