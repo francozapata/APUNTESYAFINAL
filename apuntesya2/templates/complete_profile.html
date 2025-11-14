@@ -51,7 +51,12 @@
             tienen
             alguna duda.
         </p>
+        <button type="submit" class="btn primary" style="margin-top:16px;">
+            {{ 'Guardar cambios' if mode == 'update' else 'Guardar y continuar' }}
+        </button>
+        <p class="muted" style="margin-top:10px">Podrás editar esta información luego desde tu perfil.</p>
     </form>
+
 </div>
 
 <script>
