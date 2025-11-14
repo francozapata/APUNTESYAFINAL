@@ -194,9 +194,15 @@ app.config["MP_ACCESS_TOKEN"] = os.getenv("MP_ACCESS_TOKEN", "")
 app.config["MP_WEBHOOK_SECRET"] = os.getenv("MP_WEBHOOK_SECRET", "")
 app.config["BASE_URL"] = os.getenv("BASE_URL", "")
 
-app.config["PLATFORM_FEE_PERCENT"] = float(os.getenv("MP_PLATFORM_FEE_PERCENT", "5.0"))
+# Porcentaje que mostramos en el footer y usamos como base de la comisión de plataforma
+app.config["PLATFORM_FEE_PERCENT"] = float(os.getenv("MP_PLATFORM_FEE_PERCENT", "12.8"))
+
+# Comisión estimada de MP (ej: 7,74% para acreditación inmediata)
 app.config["MP_COMMISSION_RATE"] = float(os.getenv("MP_COMMISSION_RATE", "0.0774"))
+
+# Comisión real de ApuntesYa sobre el monto base que quiere recibir el vendedor (12,8% = 0.128)
 app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.128"))
+
 app.config["IIBB_ENABLED"] = os.getenv("IIBB_ENABLED", "false").lower() in ("1", "true", "yes")
 app.config["IIBB_RATE"] = float(os.getenv("IIBB_RATE", "0.0"))
 
