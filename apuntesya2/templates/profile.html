@@ -16,6 +16,7 @@
   </div>
 
   <p><strong>{{ current_user.name }}</strong> — <strong>{{ current_user.email }}</strong></p>
+
   <div class="text-gray-700 mt-1">
     {{ current_user.university }} • {{ current_user.faculty }} • {{ current_user.career }}
   </div>
@@ -24,6 +25,7 @@
   <div class="text-gray-700 mt-1">
     📞 <strong>Contacto:</strong> {{ current_user.seller_contact }}
   </div>
+  {% endif %}
 
   <div class="actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
     <a class="btn secondary" href="{{ url_for('update_academics_get') }}">¿Querés actualizar tus datos académicos?</a>
@@ -46,7 +48,11 @@
     {% for n in my_notes %}
     <div class="note">
       <div class="title">{{ n.title }}</div>
-      {% if n.price_cents>0 %}<div class="badge">Pago</div>{% else %}<div class="badge">Gratis</div>{% endif %}
+      {% if n.price_cents>0 %}
+      <div class="badge">Pago</div>
+      {% else %}
+      <div class="badge">Gratis</div>
+      {% endif %}
       <a class="btn" href="{{ url_for('note_detail', note_id=n.id) }}">Ver</a>
     </div>
     {% else %}
@@ -58,4 +64,5 @@
     <a class="btn secondary" href="{{ url_for('profile_purchases') }}">Mis compras</a>
   </div>
 </div>
+
 {% endblock %}
