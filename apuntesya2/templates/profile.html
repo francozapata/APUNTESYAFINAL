@@ -178,6 +178,20 @@
     color: #334;
     margin-bottom: 8px;
   }
+
+  /* Bloque separado para el botón de actualizar datos académicos */
+  .academic-update {
+    margin: -8px 0 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #f8f9ff;
+    border: 1px solid #eef0ff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
 </style>
 
 <div class="profile-card">
@@ -223,18 +237,13 @@
 
       <div>
         <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
-        <p style="margin:0;font-weight:600;">
+        <p style="margin:0;font-weight:700;font-size:18px;">
           {{ current_user.university or 'Universidad no indicada' }}<br>
-          <span class="muted">
+          <span class="muted" style="font-size:15px;">
             {{ current_user.faculty or 'Facultad no indicada' }} •
             {{ current_user.career or 'Carrera no indicada' }}
           </span>
         </p>
-        <div style="margin-top:8px;">
-          <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
-            Actualizar datos académicos
-          </a>
-        </div>
       </div>
     </div>
 
@@ -266,6 +275,16 @@
     </div>
   </div>
   {% endif %}
+
+  <!-- Bloque separado para actualizar datos académicos -->
+  <div class="academic-update">
+    <p class="muted" style="margin:0;">
+      ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo necesites.
+    </p>
+    <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
+      Actualizar datos académicos
+    </a>
+  </div>
 
   <!-- Pestañas -->
   <div class="profile-tabs">
