@@ -799,7 +799,7 @@ def note_detail(note_id):
                 ).scalar_one_or_none()
                 can_download = p is not None
 
-        # Reseñas + promedio
+        # Reseñas y nombres de usuarios
         rows = s.execute(
             select(Review, User.name)
             .join(User, User.id == Review.buyer_id)
@@ -808,15 +808,17 @@ def note_detail(note_id):
         ).all()
         reviews = rows
 
+        # Promedio de estrellas
         if reviews:
             avg_rating = round(sum(r.rating for r, _ in reviews) / len(reviews), 2)
         else:
             avg_rating = None
 
-        # ¿Puede calificar?
+        # ¿Puede calificar este usuario?
         can_review = False
         already_reviewed = False
         if current_user.is_authenticated and current_user.id != note.seller_id:
+
             if note.price_cents > 0:
                 has_purchase = s.execute(
                     select(Purchase).where(
@@ -826,7 +828,7 @@ def note_detail(note_id):
                     )
                 ).scalar_one_or_none() is not None
             else:
-                has_purchase = True
+                has_purchase = True  # Gratis → puede reseñar
 
             if has_purchase:
                 already_reviewed = s.execute(
@@ -835,6 +837,7 @@ def note_detail(note_id):
                         Review.buyer_id == current_user.id
                     )
                 ).scalar_one_or_none() is not None
+
                 can_review = not already_reviewed
 
         # Contacto del vendedor
@@ -846,6 +849,17 @@ def note_detail(note_id):
             if seller_contact_raw:
                 seller_contact_url, seller_contact_label = _build_contact_link(seller_contact_raw)
 
+        # -----------------------------------------------------
+        # 👉 PRECIOS
+        # -----------------------------------------------------
+        # Lo que recibe el vendedor
+        base_price = note.price_cents / 100.0 if note.price_cents else 0.0
+
+        # Precio final al comprador (con comisiones)
+        buyer_price = None
+        if base_price > 0:
+            buyer_price = round(base_price * GROSS_MULTIPLIER, 2)
+
     return render_template(
         "note_detail.html",
         note=note,
@@ -855,8 +869,11 @@ def note_detail(note_id):
         can_review=can_review,
         already_reviewed=already_reviewed,
         seller_contact_url=seller_contact_url,
-        seller_contact_label=seller_contact_label
+        seller_contact_label=seller_contact_label,
+        base_price=base_price,
+        buyer_price=buyer_price,
     )
+
 
 @app.post("/note/<int:note_id>/review")
 @login_required

@@ -1,86 +1,177 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
-  {% if current_user.is_authenticated and current_user.id == note.seller_id and not current_user.mp_access_token %}
-  <div class="card" style="background:#161a22;border-color:#2a3446;margin-bottom:12px;">
-    Para vender este apunte y cobrar directo, conectá tu cuenta de Mercado Pago desde tu <a
-      href='{{ url_for("profile") }}'>perfil</a>.
-  </div>
-  {% endif %}
+
+<style>
+  .note-card {
+    max-width: 900px;
+    margin: 32px auto;
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #eee;
+    padding: 24px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+  }
+
+  .muted {
+    color: #666;
+    font-size: 14px;
+  }
+
+  .btn-primary {
+    display: inline-block;
+    padding: 10px 18px;
+    background: #4478ff;
+    color: #fff;
+    border-radius: 10px;
+    border: none;
+    text-decoration: none;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .btn-pill {
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: #4478ff;
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+  }
+
+  .review-block {
+    border-top: 1px solid #eee;
+    margin-top: 20px;
+    padding-top: 20px;
+  }
+
+  .review-item {
+    border-bottom: 1px solid #f0f0f0;
+    padding: 12px 0;
+  }
+
+  .review-stars {
+    color: #ffb400;
+    font-size: 16px;
+    margin-bottom: 4px;
+  }
+
+  .note-meta {
+    color: #555;
+    font-size: 14px;
+  }
+</style>
+
+
+<div class="note-card">
 
   <h2>{{ note.title }}</h2>
 
-  {% if avg_rating %}
-  <p><strong>⭐ Calificación promedio:</strong>
-    {% for i in range(1,6) %}
-    {% if i <= avg_rating|round(0, 'floor' ) %}<span style="color:#ffcc00;">★</span>{% else %}<span
-        style="color:#ccc;">☆</span>{% endif %}
-      {% endfor %}
-      ({{ avg_rating }})
+  {% if not reviews %}
+  <p class="muted">
+    Este apunte todavía no tiene reseñas.
   </p>
-  {% else %}
-  <p><em>Este apunte todavía no tiene reseñas.</em></p>
   {% endif %}
 
   <p>{{ note.description }}</p>
-  <p class="muted">{{ note.university }} • {{ note.faculty }} • {{ note.career }}</p>
 
-  {% if note.price_cents and note.price_cents>0 %}
-  <p><strong>Precio:</strong> ${{ '%.2f'|format(note.price_cents/100) }}</p>
-  {% if can_download %}
-  <a class="btn" href="{{ url_for('download_note', note_id=note.id) }}">Descargar PDF</a>
+  <p class="note-meta">
+    {{ note.university }} • {{ note.faculty }} • {{ note.career }}
+  </p>
+
+  <!-- ============================
+       PRECIO (con comisiones)
+  ============================= -->
+  {% if note.price_cents == 0 %}
+  <p><strong>Precio:</strong> Gratis</p>
   {% else %}
-  <a class="btn" href="{{ url_for('buy_note', note_id=note.id) }}">Comprar</a>{% endif %}
-  {% else %}
-  <a id="download-btn" class="btn" href="{{ url_for('download_note', note_id=note.id) }}">Descargar gratis</a>
+  <p>
+    <strong>Precio:</strong>
+    ${{ '%.2f' % buyer_price }}
+    <span class="muted" style="font-size:13px;">
+      (el vendedor recibe ${{ '%.2f' % base_price }})
+    </span>
+  </p>
   {% endif %}
-  {% if seller_contact_url and current_user.is_authenticated and (current_user.id == note.seller_id or can_download) %}
-  <a class="btn secondary" href="{{ seller_contact_url }}" target="_blank" rel="noopener">
-    Contactar al vendedor
+
+  <!-- ============================
+       ACCIONES: comprar o descargar
+  ============================= -->
+  {% if can_download %}
+  <a href="{{ url_for('download_note', note_id=note.id) }}" class="btn-primary">
+    Descargar PDF
+  </a>
+  {% elif note.price_cents > 0 %}
+  <a href="{{ url_for('buy_note', note_id=note.id) }}" class="btn-primary">
+    Comprar
   </a>
   {% endif %}
 
-
-  {% if can_review %}
-  <hr>
-  <h3>Dejar una reseña</h3>
-  <form action="{{ url_for('submit_review', note_id=note.id) }}" method="post">
-    <label>Puntuación:</label>
-    <select name="rating" required>
-      <option value="" disabled selected>Elegí…</option>
-      <option value="5">★★★★★ (5)</option>
-      <option value="4">★★★★ (4)</option>
-      <option value="3">★★★ (3)</option>
-      <option value="2">★★ (2)</option>
-      <option value="1">★ (1)</option>
-    </select>
-    <br>
-    <label>Comentario (opcional):</label><br>
-    <textarea name="comment" rows="3" style="width:100%;" placeholder="¿Qué te pareció el apunte?"></textarea>
-    <br>
-    <button type="submit" class="btn">Enviar reseña</button>
-  </form>
-  {% elif already_reviewed %}
-  <p><em>Ya enviaste una reseña para este apunte.</em></p>
+  <!-- ============================
+       CONTACTO DEL VENDEDOR
+  ============================= -->
+  {% if seller_contact_url %}
+  <p class="muted" style="margin-top:16px;">
+    Contactar vendedor:
+    <a href="{{ seller_contact_url }}" target="_blank">
+      {{ seller_contact_label }}
+    </a>
+  </p>
   {% endif %}
 
-  {% if reviews and reviews|length > 0 %}
-  <hr>
-  <h3>Reseñas de otros usuarios</h3>
-  <ul style="list-style:none;padding:0;">
+  <!-- ============================
+       RESEÑAS
+  ============================= -->
+  <div class="review-block">
+    <h3>Reseñas</h3>
+
+    {% if avg_rating %}
+    <p>
+      ⭐ <strong>{{ avg_rating }}</strong>/5
+      <span class="muted">({{ reviews|length }} reseñas)</span>
+    </p>
+    {% endif %}
+
+    {% if can_review %}
+    <form method="post" action="{{ url_for('review_note', note_id=note.id) }}" style="margin-bottom:16px;">
+
+      <label class="muted">Tu calificación:</label>
+      <select name="rating" required style="padding:6px;border-radius:8px;border:1px solid #ccc;">
+        <option value="">Elegir…</option>
+        <option value="5">5 ⭐</option>
+        <option value="4">4 ⭐</option>
+        <option value="3">3 ⭐</option>
+        <option value="2">2 ⭐</option>
+        <option value="1">1 ⭐</option>
+      </select>
+
+      <textarea name="comment" placeholder="Escribí tu reseña…" rows="3"
+        style="width:100%;margin-top:8px;padding:10px;border-radius:10px;border:1px solid #ccc;"></textarea>
+
+      <button class="btn-primary" style="margin-top:8px;">
+        Enviar reseña
+      </button>
+    </form>
+    {% endif %}
+
+    {% if reviews %}
     {% for r, buyer_name in reviews %}
-    <li style="background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:8px;">
-      <strong>{{ buyer_name }}</strong> —
-      {% for i in range(1,6) %}
-      {% if i <= r.rating %}<span style="color:#ffcc00;">★</span>{% else %}<span style="color:#ccc;">☆</span>{% endif %}
-        {% endfor %}
-        <br>
-        {% if r.comment %}<span>{{ r.comment }}</span><br>{% endif %}
-        <small style="color:#777;">{{ r.created_at.strftime("%Y-%m-%d %H:%M") }}</small>
-    </li>
+    <div class="review-item">
+      <div class="review-stars">
+        {% for i in range(r.rating) %}⭐{% endfor %}
+      </div>
+      <p style="margin:0;"><strong>{{ buyer_name }}</strong></p>
+      {% if r.comment %}
+      <p style="margin:4px 0;">{{ r.comment }}</p>
+      {% endif %}
+      <p class="muted" style="font-size:12px;margin:0;">
+        {{ r.created_at.strftime('%d/%m/%Y') }}
+      </p>
+    </div>
     {% endfor %}
-  </ul>
-  {% endif %}
+    {% endif %}
+  </div>
 </div>
 
 {% endblock %}
