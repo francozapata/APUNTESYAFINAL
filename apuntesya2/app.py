@@ -785,6 +785,8 @@ def upload_note():
 
 @app.route("/note/<int:note_id>")
 def note_detail(note_id):
+    paid_param = request.args.get("paid", "0")  # "1" si viene de MP
+
     with Session() as s:
         note = s.get(Note, note_id)
         if not note or not note.is_active:
@@ -878,6 +880,7 @@ def note_detail(note_id):
         seller_contact_label=seller_contact_label,
         base_price=base_price,
         buyer_price=buyer_price,
+        paid=(paid_param == "1"),
     )
 
 
@@ -1211,8 +1214,12 @@ def mp_return(note_id):
 
         # Si está aprobado: vamos directo a descargar
         if status == "approved":
-            flash("✅ Pago aprobado, iniciando descarga del apunte…")
-            return redirect(url_for("download_note", note_id=note_id))
+            flash("✅ Pago aprobado, ya podés descargar el apunte.")
+            # Volvemos al detalle, marcando que viene de un pago
+            return redirect(
+                url_for("note_detail", note_id=note_id, paid=1, _anchor="download")
+            )
+
 
     # Si llegamos acá, no pudimos confirmar “approved”
     flash("Registramos tu intento de pago. Si ya figura aprobado en Mercado Pago, el botón de descarga se habilitará en unos instantes.")

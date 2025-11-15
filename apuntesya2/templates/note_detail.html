@@ -188,4 +188,17 @@
   </div>
 </div>
 
+{% if paid and can_download %}
+<script>
+  (function () {
+    // Dispara la descarga del PDF en segundo plano,
+    // pero la página visible sigue siendo el detalle del apunte.
+    var iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = "{{ url_for('download_note', note_id=note.id) }}";
+    document.body.appendChild(iframe);
+  })();
+</script>
+{% endif %}
+
 {% endblock %}
