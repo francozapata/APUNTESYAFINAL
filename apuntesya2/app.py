@@ -642,12 +642,19 @@ def profile_balance():
                 func.coalesce(func.sum(Purchase.amount_cents), 0)
             ).join(Note, Note.id == Purchase.note_id).where(base_filter)
         ).one()
+
         sold_count = int(totals[0] or 0)
+
+        # 💰 Lo que realmente recibe el vendedor (precio que cargó en el apunte)
         gross_cents = int(totals[1] or 0)
 
+        # Estas comisiones son solo referencias / estimaciones.
         mp_commission_cents  = int(round(gross_cents * float(MP_COMMISSION_RATE)))
         apy_commission_cents = int(round(gross_cents * float(APY_COMMISSION_RATE)))
-        net_cents = gross_cents - mp_commission_cents - apy_commission_cents
+
+        # ✅ Neto para el vendedor = lo que pidió cobrar (sin restar comisiones)
+        net_cents = gross_cents
+
 
         has_views = hasattr(Note, "views")
         if has_views:
@@ -694,13 +701,14 @@ def profile_balance():
                 "id": _id,
                 "title": _title,
                 "sold_count": sold,
-                "gross_cents": gross,
-                "mp_commission_cents": mp_c,
-                "apy_commission_cents": apy_c,
-                "net_cents": gross - mp_c - apy_c,
+                "gross_cents": gross,              # total configurado por vos
+                "mp_commission_cents": mp_c,       # solo referencia
+                "apy_commission_cents": apy_c,     # solo referencia
+                "net_cents": gross,                # ✅ lo que vos recibís
                 "views": views,
                 "conversion": (sold / views * 100.0) if (views and views > 0) else None
             })
+
 
     return render_template(
         "profile_balance.html",
@@ -1686,6 +1694,92 @@ def admin_api_files():
                 "price_cents": n.price_cents
             })
     return jsonify({"items": data})
+
+@app.get("/admin/user/<int:user_id>")
+@login_required
+@admin_required
+def admin_user_detail(user_id):
+    with Session() as s:
+        u = s.get(User, user_id)
+        if not u:
+            abort(404)
+
+        # --- Compras como comprador (apuntes pagos) ---
+        purchases_rows = s.execute(
+            select(Purchase, Note)
+            .join(Note, Note.id == Purchase.note_id)
+            .where(
+                Purchase.buyer_id == user_id,
+                Purchase.status == "approved"
+            )
+            .order_by(Purchase.created_at.desc())
+        ).all()
+        buyer_paid_count = len(purchases_rows)
+        buyer_total_cents = sum(int(p.amount_cents or 0) for p, n in purchases_rows)
+
+        # Por ahora no llevamos registro de descargas gratuitas → 0
+        free_downloads_count = 0
+
+        # --- Ventas como vendedor ---
+        sales_rows = s.execute(
+            select(Purchase, Note)
+            .join(Note, Note.id == Purchase.note_id)
+            .where(
+                Note.seller_id == user_id,
+                Purchase.status == "approved"
+            )
+            .order_by(Purchase.created_at.desc())
+        ).all()
+        seller_sales_count = len(sales_rows)
+        seller_total_cents = sum(int(p.amount_cents or 0) for p, n in sales_rows)
+
+        # ¿Tiene apuntes publicados?
+        notes_count = s.execute(
+            select(func.count(Note.id)).where(Note.seller_id == user_id)
+        ).scalar() or 0
+        is_seller = notes_count > 0
+
+        # 💸 Ingresos de ApuntesYa asociados a este usuario
+        # - desde sus ventas (comisión sobre lo que él quiso cobrar)
+        platform_from_seller_cents = int(round(seller_total_cents * float(APY_COMMISSION_RATE)))
+        # - desde sus compras (comisión sobre lo que pagó a otros vendedores)
+        platform_from_buyer_cents = int(round(buyer_total_cents * float(APY_COMMISSION_RATE)))
+
+        # Listas simples para mostrar tablas
+        purchases = []
+        for p, n in purchases_rows:
+            purchases.append({
+                "id": p.id,
+                "note_title": n.title,
+                "amount_cents": int(p.amount_cents or 0),
+                "created_at": p.created_at,
+            })
+
+        sales = []
+        for p, n in sales_rows:
+            sales.append({
+                "id": p.id,
+                "note_title": n.title,
+                "amount_cents": int(p.amount_cents or 0),
+                "created_at": p.created_at,
+            })
+
+    return render_template(
+        "admin/user_detail.html",
+        user=u,
+        is_seller=is_seller,
+        notes_count=notes_count,
+        buyer_paid_count=buyer_paid_count,
+        free_downloads_count=free_downloads_count,
+        buyer_total_cents=buyer_total_cents,
+        seller_sales_count=seller_sales_count,
+        seller_total_cents=seller_total_cents,
+        platform_from_seller_cents=platform_from_seller_cents,
+        platform_from_buyer_cents=platform_from_buyer_cents,
+        purchases=purchases,
+        sales=sales,
+    )
+
 
 @app.get("/admin/download/<int:note_id>")
 @login_required

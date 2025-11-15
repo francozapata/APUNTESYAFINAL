@@ -184,6 +184,13 @@
                     `;
                 }
 
+                // 🔍 Nuevo botón: Ver detalle del usuario
+                actionsHtml += `
+                    <button class="btn ghost" onclick="window.location='/admin/user/${u.id}'">
+                        Ver detalle
+                    </button>
+                `;
+
                 return `
           <div class="row">
             <div>
