@@ -729,14 +729,20 @@ def profile_purchases():
 
         items = []
         for p, n in purchases:
+            # lo que quería recibir el vendedor (base X)
+            base_price = (p.amount_cents or 0) / 100.0
+            # lo que realmente pagó el comprador (con comisión)
+            buyer_price_cents = int(round(base_price * GROSS_MULTIPLIER * 100))
+
             items.append(dict(
                 id=p.id,
                 note_id=n.id,
                 title=n.title,
-                price_cents=p.amount_cents,
+                price_cents=buyer_price_cents,
                 created_at=p.created_at.strftime("%Y-%m-%d %H:%M")
             ))
     return render_template("profile_purchases.html", items=items)
+
 
 # -----------------------------------------------------------------------------
 # Upload / Detail / Download
@@ -1093,76 +1099,125 @@ def buy_note(note_id):
 # -----------------------------------------------------------------------------
 @app.route("/mp/return/<int:note_id>")
 def mp_return(note_id):
-    payment_id = request.args.get("payment_id") or request.args.get("collection_id") or request.args.get("id")
-    ext_ref = request.args.get("external_reference", "")
-    pref_id = request.args.get("preference_id", "")
+    """
+    Callback de retorno desde Mercado Pago.
+    - Busca el pago (por payment_id o external_reference).
+    - Actualiza la Purchase (status, payment_id).
+    - Si está aprobado => redirige directo a la descarga.
+    - Si no se puede verificar => vuelve al detalle con mensaje.
+    """
+    # Parámetros que puede mandar MP
+    payment_id = (
+        request.args.get("payment_id")
+        or request.args.get("collection_id")
+        or request.args.get("id")
+    )
+    ext_ref = request.args.get("external_reference", "") or ""
+    pref_id = request.args.get("preference_id", "") or ""
+
+    # A veces MP manda el status como query (por las dudas lo usamos de fallback)
+    status_query = (
+        request.args.get("status")
+        or request.args.get("collection_status")
+        or ""
+    )
 
     token = app.config["MP_ACCESS_TOKEN_PLATFORM"]
     pay = None
 
+    # 1) Si viene payment_id, intentamos leer el pago directo
     if payment_id:
         try:
             pay = mp.get_payment(token, str(payment_id))
         except Exception as e:
-            flash(f"No se pudo verificar el pago aún: {e}")
-            flash("✅ Pago aprobado, ya podés descargar.")
-        return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
-    elif ext_ref:
+            app.logger.warning(f"mp_return: error get_payment({payment_id}): {e}")
+
+    # 2) Si no tenemos pago aún, probamos con external_reference
+    if not pay and ext_ref:
         try:
             res = mp.search_payments_by_external_reference(token, ext_ref)
             results = (res or {}).get("results") or []
             if results:
                 pay = results[0].get("payment") or results[0]
-                payment_id = str(pay.get("id")) if pay else None
-        except Exception:
-            pass
+        except Exception as e:
+            app.logger.warning(f"mp_return: error search by ext_ref {ext_ref}: {e}")
 
+    # 3) Último intento: buscar el último Purchase de este note_id
     if not pay:
-        with Session() as s:
-            p_last = s.execute(
-                select(Purchase).where(Purchase.note_id == note_id).order_by(Purchase.created_at.desc())
-            ).scalars().first()
-            if p_last:
-                try:
-                    res = mp.search_payments_by_external_reference(token, f"purchase:{p_last.id}")
+        try:
+            with Session() as s:
+                p_last = s.execute(
+                    select(Purchase)
+                    .where(Purchase.note_id == note_id)
+                    .order_by(Purchase.created_at.desc())
+                ).scalars().first()
+                if p_last:
+                    ext_ref_fallback = f"purchase:{p_last.id}"
+                    res = mp.search_payments_by_external_reference(token, ext_ref_fallback)
                     results = (res or {}).get("results") or []
                     if results:
                         pay = results[0].get("payment") or results[0]
-                        payment_id = str(pay.get("id")) if pay else None
-                        ext_ref = f"purchase:{p_last.id}"
-                except Exception:
-                    pass
+                        ext_ref = ext_ref_fallback
+        except Exception as e:
+            app.logger.warning(f"mp_return: fallback search error: {e}")
 
-    status = (pay or {}).get("status")
-    external_reference = (pay or {}).get("external_reference") or ext_ref or ""
+    # ------------------------------------------------------------------
+    # Interpretar el resultado
+    # ------------------------------------------------------------------
+    status = None
+    external_reference = ext_ref
+
+    if isinstance(pay, dict):
+        status = (pay.get("status") or "").lower()
+        external_reference = (
+            pay.get("external_reference")
+            or external_reference
+            or ""
+        )
+        payment_id = str(pay.get("id") or payment_id or "")
+    else:
+        # Si no pudimos obtener el pago desde la API, usamos lo que venga en la URL
+        status = (status_query or "").lower()
+
+    # Identificar purchase_id desde external_reference
     purchase_id = None
     if external_reference and external_reference.startswith("purchase:"):
         try:
-            purchase_id = int(external_reference.split(":")[1])
+            purchase_id = int(external_reference.split(":", 1)[1])
         except Exception:
             purchase_id = None
 
+    # ------------------------------------------------------------------
+    # Actualizar la Purchase en la base
+    # ------------------------------------------------------------------
     with Session() as s:
+        p = None
         if purchase_id:
             p = s.get(Purchase, purchase_id)
         else:
+            # Fallback: última compra de ese apunte
             p = s.execute(
-                select(Purchase).where(Purchase.note_id == note_id).order_by(Purchase.created_at.desc())
+                select(Purchase)
+                .where(Purchase.note_id == note_id)
+                .order_by(Purchase.created_at.desc())
             ).scalars().first()
 
         if p:
-            p.payment_id = str((pay or {}).get("id") or "")
+            if payment_id:
+                p.payment_id = str(payment_id)
             if status:
                 p.status = status
             s.commit()
 
+        # Si está aprobado: vamos directo a descargar
         if status == "approved":
-            flash("¡Pago verificado! Descargando el apunte...")
+            flash("✅ Pago aprobado, iniciando descarga del apunte…")
             return redirect(url_for("download_note", note_id=note_id))
 
-    flash("Pago registrado. Si ya figura aprobado, el botón de descarga estará disponible.")
-    flash("✅ Pago aprobado, ya podés descargar.")
-    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+    # Si llegamos acá, no pudimos confirmar “approved”
+    flash("Registramos tu intento de pago. Si ya figura aprobado en Mercado Pago, el botón de descarga se habilitará en unos instantes.")
+    return redirect(url_for("note_detail", note_id=note_id, _anchor="download"))
+
 
 # -----------------------------------------------------------------------------
 # Webhook único
