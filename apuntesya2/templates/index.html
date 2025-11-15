@@ -109,7 +109,7 @@
       <footer class="note-card__footer">
         <span class="price-tag">
           {% if (n.price_cents or 0) > 0 %}
-          ${{ ('%.2f' % (n.price_cents / 100.0)) }}
+          ${{ '%.2f' % gross_price(n.price_cents) }}
           {% else %}
           Gratis
           {% endif %}

@@ -232,6 +232,34 @@ def inject_contacts():
                 CONTACT_WHATSAPP=app.config.get("CONTACT_WHATSAPP"),
                 SUGGESTIONS_URL=app.config.get("SUGGESTIONS_URL"))
 
+@app.context_processor
+def pricing_ctx():
+    """
+    Helpers para mostrar siempre el precio final al comprador
+    (monto base que quiere recibir el vendedor * GROSS_MULTIPLIER).
+    """
+    def gross_price(price_cents: int | float | None) -> float:
+        """
+        Recibe price_cents (lo que quiere recibir el vendedor) y
+        devuelve el precio final al comprador en ARS (float).
+        """
+        if not price_cents or price_cents <= 0:
+            return 0.0
+        base_price = float(price_cents) / 100.0
+        return round(base_price * GROSS_MULTIPLIER, 2)
+
+    def gross_price_cents(price_cents: int | float | None) -> int:
+        """
+        Igual que gross_price, pero devuelve centavos.
+        """
+        return int(round(gross_price(price_cents) * 100))
+
+    return dict(
+        gross_price=gross_price,
+        gross_price_cents=gross_price_cents,
+    )
+
+
 def get_valid_seller_token(seller: User) -> str | None:
     return seller.mp_access_token if (seller and seller.mp_access_token) else None
 
@@ -1695,90 +1723,6 @@ def admin_api_files():
             })
     return jsonify({"items": data})
 
-@app.get("/admin/user/<int:user_id>")
-@login_required
-@admin_required
-def admin_user_detail(user_id):
-    with Session() as s:
-        u = s.get(User, user_id)
-        if not u:
-            abort(404)
-
-        # --- Compras como comprador (apuntes pagos) ---
-        purchases_rows = s.execute(
-            select(Purchase, Note)
-            .join(Note, Note.id == Purchase.note_id)
-            .where(
-                Purchase.buyer_id == user_id,
-                Purchase.status == "approved"
-            )
-            .order_by(Purchase.created_at.desc())
-        ).all()
-        buyer_paid_count = len(purchases_rows)
-        buyer_total_cents = sum(int(p.amount_cents or 0) for p, n in purchases_rows)
-
-        # Por ahora no llevamos registro de descargas gratuitas → 0
-        free_downloads_count = 0
-
-        # --- Ventas como vendedor ---
-        sales_rows = s.execute(
-            select(Purchase, Note)
-            .join(Note, Note.id == Purchase.note_id)
-            .where(
-                Note.seller_id == user_id,
-                Purchase.status == "approved"
-            )
-            .order_by(Purchase.created_at.desc())
-        ).all()
-        seller_sales_count = len(sales_rows)
-        seller_total_cents = sum(int(p.amount_cents or 0) for p, n in sales_rows)
-
-        # ¿Tiene apuntes publicados?
-        notes_count = s.execute(
-            select(func.count(Note.id)).where(Note.seller_id == user_id)
-        ).scalar() or 0
-        is_seller = notes_count > 0
-
-        # 💸 Ingresos de ApuntesYa asociados a este usuario
-        # - desde sus ventas (comisión sobre lo que él quiso cobrar)
-        platform_from_seller_cents = int(round(seller_total_cents * float(APY_COMMISSION_RATE)))
-        # - desde sus compras (comisión sobre lo que pagó a otros vendedores)
-        platform_from_buyer_cents = int(round(buyer_total_cents * float(APY_COMMISSION_RATE)))
-
-        # Listas simples para mostrar tablas
-        purchases = []
-        for p, n in purchases_rows:
-            purchases.append({
-                "id": p.id,
-                "note_title": n.title,
-                "amount_cents": int(p.amount_cents or 0),
-                "created_at": p.created_at,
-            })
-
-        sales = []
-        for p, n in sales_rows:
-            sales.append({
-                "id": p.id,
-                "note_title": n.title,
-                "amount_cents": int(p.amount_cents or 0),
-                "created_at": p.created_at,
-            })
-
-    return render_template(
-        "admin/user_detail.html",
-        user=u,
-        is_seller=is_seller,
-        notes_count=notes_count,
-        buyer_paid_count=buyer_paid_count,
-        free_downloads_count=free_downloads_count,
-        buyer_total_cents=buyer_total_cents,
-        seller_sales_count=seller_sales_count,
-        seller_total_cents=seller_total_cents,
-        platform_from_seller_cents=platform_from_seller_cents,
-        platform_from_buyer_cents=platform_from_buyer_cents,
-        purchases=purchases,
-        sales=sales,
-    )
 
 
 @app.get("/admin/download/<int:note_id>")
