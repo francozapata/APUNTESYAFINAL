@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block content %}
-
 <style>
     .admin-card {
         max-width: 980px;
@@ -14,215 +13,222 @@
 
     .muted {
         color: #666;
-        font-size: 13px;
+        font-size: 14px;
     }
 
-    .section-title {
-        margin: 18px 0 8px;
-        font-size: 16px;
-    }
-
-    .pill {
-        display: inline-block;
-        padding: 3px 8px;
-        border-radius: 999px;
-        font-size: 12px;
-        border: 1px solid #d9d9e3;
-        background: #f7f9ff;
-        margin-right: 4px;
-    }
-
-    .grid-2 {
+    .stat-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 12px;
+        margin-top: 14px;
     }
 
-    .kpi-box {
-        border-radius: 10px;
-        border: 1px solid #f0f0f5;
+    .stat-card {
         padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #eee;
+        background: #fafbff;
     }
 
-    .kpi-label {
-        font-size: 12px;
-        color: #888;
+    .stat-label {
+        font-size: 13px;
+        color: #777;
     }
 
-    .kpi-value {
+    .stat-value {
         font-size: 18px;
-        font-weight: 600;
+        font-weight: 700;
+        margin-top: 2px;
     }
 
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 8px;
+    .stat-extra {
         font-size: 13px;
+        color: #666;
+        margin-top: 2px;
     }
 
-    th,
-    td {
-        padding: 6px 4px;
-        border-bottom: 1px solid #f3f3f3;
-        text-align: left;
-    }
-
-    .btn-pill {
-        display: inline-block;
-        padding: 7px 12px;
-        border-radius: 999px;
-        border: 0;
-        background: #f3f6ff;
-        color: #335;
-        font-weight: 600;
-        font-size: 13px;
-        text-decoration: none;
+    .summary-box {
+        margin-top: 18px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px dashed #d0d4ff;
+        background: #f6f7ff;
+        font-size: 14px;
+        line-height: 1.5;
     }
 </style>
 
-<div class="admin-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-        <div>
-            <h2 style="margin:0 0 4px;">Detalle de usuario</h2>
-            <p class="muted" style="margin:0;">
-                {{ user.name or '(sin nombre)' }} — {{ user.email }}
-            </p>
-            <p class="muted" style="margin:4px 0 0;">
-                {{ user.university or 'Universidad no indicada' }} •
-                {{ user.faculty or 'Facultad no indicada' }} •
-                {{ user.career or 'Carrera no indicada' }}
-            </p>
-        </div>
-        <div>
-            {% if user.is_admin %}
-            <span class="pill">Admin</span>
-            {% endif %}
-            {% if user.is_active %}
-            <span class="pill">Activo</span>
-            {% else %}
-            <span class="pill">Inactivo / bloqueado</span>
-            {% endif %}
-            {% if is_seller %}
-            <span class="pill">Vendedor ({{ notes_count }} apuntes)</span>
-            {% else %}
-            <span class="pill">Solo comprador</span>
-            {% endif %}
-        </div>
-    </div>
+<div class="admin-card" id="userDetailRoot" data-user-id="{{ user_id|int }}">
+    <h2 style="margin:0 0 6px;">Detalle de usuario #{{ user_id }}</h2>
+    <p class="muted" id="userBasic">Cargando datos…</p>
 
-    <hr style="margin:16px 0; border:none; border-top:1px solid #f0f0f5;">
+    <div class="stat-grid" id="userStats" style="display:none;">
+        <!-- Apuntes subidos -->
+        <div class="stat-card">
+            <div class="stat-label">Apuntes subidos</div>
+            <div class="stat-value" id="st-notes-uploaded">-</div>
+            <div class="stat-extra" id="st-notes-extra"></div>
+        </div>
 
-    <!-- Resumen global -->
-    <h3 class="section-title">Resumen del impacto en la plataforma</h3>
-    <div class="grid-2">
-        <div class="kpi-box">
-            <div class="kpi-label">Total vendido por este usuario</div>
-            <div class="kpi-value">
-                ${{ '%.2f' % (seller_total_cents / 100.0) }}
-            </div>
-            <div class="muted" style="margin-top:4px;">
-                (Monto que él/ella efectivamente recibe por sus ventas)
-            </div>
+        <!-- Compras pagas -->
+        <div class="stat-card">
+            <div class="stat-label">Compras pagas</div>
+            <div class="stat-value" id="st-paid-count">-</div>
+            <div class="stat-extra" id="st-paid-amount"></div>
         </div>
-        <div class="kpi-box">
-            <div class="kpi-label">Ingresos ApuntesYa por sus ventas</div>
-            <div class="kpi-value">
-                ${{ '%.2f' % (platform_from_seller_cents / 100.0) }}
-            </div>
-            <div class="muted" style="margin-top:4px;">
-                Comisión sobre las ventas de este usuario.
-            </div>
+
+        <!-- Descargas gratuitas -->
+        <div class="stat-card">
+            <div class="stat-label">Descargas gratuitas</div>
+            <div class="stat-value" id="st-free-count">-</div>
         </div>
-        <div class="kpi-box">
-            <div class="kpi-label">Total comprado por este usuario (base vendedores)</div>
-            <div class="kpi-value">
-                ${{ '%.2f' % (buyer_total_cents / 100.0) }}
-            </div>
-            <div class="muted" style="margin-top:4px;">
-                Suma de los precios configurados por los vendedores en los apuntes que compró.
-            </div>
+
+        <!-- Ventas como vendedor -->
+        <div class="stat-card">
+            <div class="stat-label">Ventas realizadas</div>
+            <div class="stat-value" id="st-sold-count">-</div>
+            <div class="stat-extra" id="st-sold-amount"></div>
         </div>
-        <div class="kpi-box">
-            <div class="kpi-label">Ingresos ApuntesYa por sus compras</div>
-            <div class="kpi-value">
-                ${{ '%.2f' % (platform_from_buyer_cents / 100.0) }}
-            </div>
-            <div class="muted" style="margin-top:4px;">
-                Comisión de ApuntesYa asociada a las compras que hizo.
-            </div>
+
+        <!-- Ganancia neta del usuario -->
+        <div class="stat-card">
+            <div class="stat-label">Ganancia recibida (neto)</div>
+            <div class="stat-value" id="st-net-seller">$0.00</div>
+            <div class="stat-extra" id="st-net-extra"></div>
+        </div>
+
+        <!-- Ingresos ApuntesYa por este usuario -->
+        <div class="stat-card">
+            <div class="stat-label">Ingreso ApuntesYa (ventas de este usuario)</div>
+            <div class="stat-value" id="st-apy-income">$0.00</div>
+            <div class="stat-extra" id="st-apy-extra"></div>
         </div>
     </div>
 
-    <!-- Actividad como comprador -->
-    <h3 class="section-title" style="margin-top:22px;">Actividad como comprador</h3>
-    <p class="muted" style="margin:0 0 6px;">
-        Apuntes pagos comprados: <strong>{{ buyer_paid_count }}</strong> <br>
-        Descargas gratuitas (no registradas aún): <strong>{{ free_downloads_count }}</strong>
-    </p>
-
-    {% if purchases %}
-    <table>
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Apunte</th>
-                <th>Monto base ($)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for p in purchases %}
-            <tr>
-                <td>{{ p.created_at.strftime('%d/%m/%Y %H:%M') if p.created_at else '' }}</td>
-                <td>{{ p.note_title }}</td>
-                <td>{{ '%.2f' % (p.amount_cents / 100.0) }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="muted">Todavía no registramos compras pagas de este usuario.</p>
-    {% endif %}
-
-    <!-- Actividad como vendedor -->
-    <h3 class="section-title" style="margin-top:22px;">Actividad como vendedor</h3>
-
-    {% if is_seller %}
-    <p class="muted" style="margin:0 0 6px;">
-        Apuntes vendidos: <strong>{{ seller_sales_count }}</strong><br>
-        Total recibido: <strong>${{ '%.2f' % (seller_total_cents / 100.0) }}</strong>
-    </p>
-
-    {% if sales %}
-    <table>
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>Apunte</th>
-                <th>Monto recibido ($)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for s_item in sales %}
-            <tr>
-                <td>{{ s_item.created_at.strftime('%d/%m/%Y %H:%M') if s_item.created_at else '' }}</td>
-                <td>{{ s_item.note_title }}</td>
-                <td>{{ '%.2f' % (s_item.amount_cents / 100.0) }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="muted">Aún no registramos ventas para este usuario.</p>
-    {% endif %}
-
-    {% else %}
-    <p class="muted">Este usuario aún no tiene apuntes publicados ni ventas registradas.</p>
-    {% endif %}
-
-    <div style="margin-top:20px;">
-        <a href="{{ url_for('admin_hub') }}" class="btn-pill">Volver al Hub</a>
-    </div>
+    <div id="userSummary" class="summary-box" style="display:none;"></div>
 </div>
 
+<script>
+    (async function () {
+        const root = document.getElementById('userDetailRoot');
+        const userId = parseInt(root.dataset.userId, 10);
+
+        try {
+            const r = await fetch(`/admin/api/users/${userId}/detail`);
+            const js = await r.json();
+            if (!js.ok) {
+                document.getElementById('userBasic').innerText = 'No se pudo cargar el usuario.';
+                return;
+            }
+
+            const u = js.user;
+            const st = js.stats || {};
+
+            const created = u.created_at ? new Date(u.created_at).toLocaleString() : 'N/D';
+            const statusParts = [];
+            if (u.is_admin) statusParts.push('Admin');
+            if (u.is_blocked || !u.is_active) statusParts.push('Bloqueado');
+            if (!statusParts.length) statusParts.push('Activo');
+
+            // Cabecera básica
+            document.getElementById('userBasic').innerHTML =
+                `<strong>${escapeHtml(u.name || '(sin nombre)')}</strong> — ${escapeHtml(u.email || '')}<br>` +
+                `<span class="muted">${escapeHtml(u.university || '')} • ${escapeHtml(u.faculty || '')} • ${escapeHtml(u.career || '')}</span><br>` +
+                `<span class="muted">Creado: ${created} — Estado: ${statusParts.join(', ')}</span>`;
+
+            document.getElementById('userStats').style.display = '';
+            document.getElementById('userSummary').style.display = '';
+
+            // ---- Stats numéricos ----
+            const notesUploaded = st.notes_uploaded_count ?? 0;
+            document.getElementById('st-notes-uploaded').innerText = notesUploaded;
+            document.getElementById('st-notes-extra').innerText =
+                notesUploaded > 0 ? 'Apuntes activos subidos a la plataforma.' : 'Todavía no subió apuntes.';
+
+            // Compras pagas
+            const paidCount = st.paid_purchases_count ?? 0;
+            const paidAmt = (st.paid_purchases_cents || 0) / 100;
+            document.getElementById('st-paid-count').innerText = paidCount;
+            document.getElementById('st-paid-amount').innerText =
+                paidAmt > 0
+                    ? `Total pagado: $${paidAmt.toFixed(2)}`
+                    : 'Sin compras pagas.';
+
+            // Descargas gratuitas
+            const freeCount = st.free_downloads_count ?? 0;
+            document.getElementById('st-free-count').innerText = freeCount;
+
+            // Ventas como vendedor
+            const soldCount = st.sold_notes_count ?? 0;
+            const soldGross = (st.sold_gross_cents || 0) / 100;
+            document.getElementById('st-sold-count').innerText = soldCount;
+            document.getElementById('st-sold-amount').innerText =
+                soldGross > 0
+                    ? `Total vendido (bruto): $${soldGross.toFixed(2)}`
+                    : 'Sin ventas registradas.';
+
+            // Comisiones y neto
+            const mp = (st.mp_commission_cents || 0) / 100;
+            const apy = (st.apy_commission_cents || 0) / 100;
+            const net = (st.net_cents_for_seller || 0) / 100;
+
+            document.getElementById('st-net-seller').innerText = `$${net.toFixed(2)}`;
+            document.getElementById('st-net-extra').innerText =
+                soldGross > 0
+                    ? `Sobre $${soldGross.toFixed(2)} vendidos, recibió en su cuenta $${net.toFixed(2)}.`
+                    : 'Sin ingresos como vendedor.';
+
+            document.getElementById('st-apy-income').innerText = `$${apy.toFixed(2)}`;
+            document.getElementById('st-apy-extra').innerText =
+                soldGross > 0
+                    ? `Comisión total de ApuntesYa sobre sus ventas.`
+                    : 'Aún no generó ingresos para ApuntesYa como vendedor.';
+
+            // ---- Resumen textual general ----
+            const totalMovido = soldGross + paidAmt;
+            const summaryLines = [];
+
+            summaryLines.push(
+                `• Movió en total $${totalMovido.toFixed(2)} en la plataforma `
+                + `(compras pagas + ventas brutas).`
+            );
+
+            summaryLines.push(
+                `• Pagó $${paidAmt.toFixed(2)} en apuntes de otros usuarios.`
+            );
+
+            summaryLines.push(
+                `• Vendió $${soldGross.toFixed(2)} en apuntes propios y recibió `
+                + `$${net.toFixed(2)} netos.`
+            );
+
+            summaryLines.push(
+                `• ApuntesYa obtuvo $${apy.toFixed(2)} en comisiones por sus ventas.`
+            );
+
+            if (freeCount > 0) {
+                summaryLines.push(
+                    `• Además realizó ${freeCount} descarga(s) de apuntes gratuitos.`
+                );
+            }
+
+            document.getElementById('userSummary').innerHTML =
+                `<strong>Resumen de actividad:</strong><br>${summaryLines.join('<br>')}`;
+
+        } catch (e) {
+            console.error(e);
+            document.getElementById('userBasic').innerText = 'Error al cargar el detalle.';
+        }
+
+        function escapeHtml(s) {
+            return (s || '').replace(/[&<>"']/g, m => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[m]));
+        }
+    })();
+</script>
 {% endblock %}

@@ -1585,7 +1585,7 @@ def admin_api_user_detail(user_id):
     Devuelve resumen de movimientos del usuario:
     - compras pagas (cantidad y total)
     - descargas gratuitas
-    - si es vendedor
+    - si es vendedor y cuántos apuntes subió
     - ventas realizadas y distribución de comisiones
     """
     with Session() as s:
@@ -1593,7 +1593,9 @@ def admin_api_user_detail(user_id):
         if not u:
             return jsonify({"ok": False, "error": "not_found"}), 404
 
+        # ----------------------------------------
         # Compras pagas aprobadas como comprador
+        # ----------------------------------------
         paid_count, paid_cents = s.execute(
             select(
                 func.count(Purchase.id),
@@ -1607,7 +1609,9 @@ def admin_api_user_detail(user_id):
         paid_count = int(paid_count or 0)
         paid_cents = int(paid_cents or 0)
 
+        # ----------------------------------------
         # Descargas gratuitas (compras en 0 aprobadas)
+        # ----------------------------------------
         free_count = s.execute(
             select(func.count(Purchase.id)).where(
                 Purchase.buyer_id == user_id,
@@ -1617,7 +1621,9 @@ def admin_api_user_detail(user_id):
         ).scalar_one_or_none() or 0
         free_count = int(free_count)
 
+        # ----------------------------------------
         # Ventas como vendedor (compras aprobadas de sus apuntes)
+        # ----------------------------------------
         sold_count, sold_gross_cents = s.execute(
             select(
                 func.count(Purchase.id),
@@ -1630,13 +1636,18 @@ def admin_api_user_detail(user_id):
         sold_count = int(sold_count or 0)
         sold_gross_cents = int(sold_gross_cents or 0)
 
-        # ¿Tiene al menos un apunte subido?
-        is_seller = s.execute(
+        # ----------------------------------------
+        # Apuntes subidos (para saber cuántos tiene como vendedor)
+        # ----------------------------------------
+        notes_uploaded_count = s.execute(
             select(func.count(Note.id)).where(Note.seller_id == user_id)
         ).scalar_one_or_none() or 0
-        is_seller = bool(is_seller)
+        notes_uploaded_count = int(notes_uploaded_count)
+        is_seller = notes_uploaded_count > 0
 
+        # ----------------------------------------
         # Distribución de comisiones sobre lo vendido
+        # ----------------------------------------
         mp_commission_cents  = int(round(sold_gross_cents * float(MP_COMMISSION_RATE)))
         apy_commission_cents = int(round(sold_gross_cents * float(APY_COMMISSION_RATE)))
         net_cents_for_seller = sold_gross_cents - mp_commission_cents - apy_commission_cents
@@ -1661,6 +1672,7 @@ def admin_api_user_detail(user_id):
                 "free_downloads_count": free_count,
                 "sold_notes_count": sold_count,
                 "sold_gross_cents": sold_gross_cents,
+                "notes_uploaded_count": notes_uploaded_count,  # 👈 nuevo
                 "is_seller": is_seller,
                 "mp_commission_cents": mp_commission_cents,
                 "apy_commission_cents": apy_commission_cents,
