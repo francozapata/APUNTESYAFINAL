@@ -1564,6 +1564,112 @@ def admin_api_users_list():
 
 
 # ----------------------------------------------------------------------
+# Admin HUB - detalle de usuario (panel con movimientos)
+# ----------------------------------------------------------------------
+@app.get("/admin/user/<int:user_id>")
+@login_required
+@admin_required
+def admin_user_detail_page(user_id):
+    """
+    Renderiza la página de detalle de un usuario en el panel admin.
+    El frontend llama luego a /admin/api/users/<id>/detail para traer datos.
+    """
+    return render_template("admin/user_detail.html", user_id=user_id)
+
+
+@app.get("/admin/api/users/<int:user_id>/detail")
+@login_required
+@admin_required
+def admin_api_user_detail(user_id):
+    """
+    Devuelve resumen de movimientos del usuario:
+    - compras pagas (cantidad y total)
+    - descargas gratuitas
+    - si es vendedor
+    - ventas realizadas y distribución de comisiones
+    """
+    with Session() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        # Compras pagas aprobadas como comprador
+        paid_count, paid_cents = s.execute(
+            select(
+                func.count(Purchase.id),
+                func.coalesce(func.sum(Purchase.amount_cents), 0)
+            ).where(
+                Purchase.buyer_id == user_id,
+                Purchase.status == "approved",
+                Purchase.amount_cents > 0
+            )
+        ).one()
+        paid_count = int(paid_count or 0)
+        paid_cents = int(paid_cents or 0)
+
+        # Descargas gratuitas (compras en 0 aprobadas)
+        free_count = s.execute(
+            select(func.count(Purchase.id)).where(
+                Purchase.buyer_id == user_id,
+                Purchase.status == "approved",
+                Purchase.amount_cents == 0
+            )
+        ).scalar_one_or_none() or 0
+        free_count = int(free_count)
+
+        # Ventas como vendedor (compras aprobadas de sus apuntes)
+        sold_count, sold_gross_cents = s.execute(
+            select(
+                func.count(Purchase.id),
+                func.coalesce(func.sum(Purchase.amount_cents), 0)
+            ).join(Note, Note.id == Purchase.note_id).where(
+                Note.seller_id == user_id,
+                Purchase.status == "approved"
+            )
+        ).one()
+        sold_count = int(sold_count or 0)
+        sold_gross_cents = int(sold_gross_cents or 0)
+
+        # ¿Tiene al menos un apunte subido?
+        is_seller = s.execute(
+            select(func.count(Note.id)).where(Note.seller_id == user_id)
+        ).scalar_one_or_none() or 0
+        is_seller = bool(is_seller)
+
+        # Distribución de comisiones sobre lo vendido
+        mp_commission_cents  = int(round(sold_gross_cents * float(MP_COMMISSION_RATE)))
+        apy_commission_cents = int(round(sold_gross_cents * float(APY_COMMISSION_RATE)))
+        net_cents_for_seller = sold_gross_cents - mp_commission_cents - apy_commission_cents
+
+        return jsonify({
+            "ok": True,
+            "user": {
+                "id": u.id,
+                "name": u.name or "",
+                "email": u.email or "",
+                "university": getattr(u, "university", "") or "",
+                "faculty": getattr(u, "faculty", "") or "",
+                "career": getattr(u, "career", "") or "",
+                "created_at": (u.created_at.isoformat() if getattr(u, "created_at", None) else None),
+                "is_active": bool(getattr(u, "is_active", True)),
+                "is_admin": bool(getattr(u, "is_admin", False)),
+                "is_blocked": bool(getattr(u, "is_blocked", False)),
+            },
+            "stats": {
+                "paid_purchases_count": paid_count,
+                "paid_purchases_cents": paid_cents,
+                "free_downloads_count": free_count,
+                "sold_notes_count": sold_count,
+                "sold_gross_cents": sold_gross_cents,
+                "is_seller": is_seller,
+                "mp_commission_cents": mp_commission_cents,
+                "apy_commission_cents": apy_commission_cents,
+                "net_cents_for_seller": net_cents_for_seller,
+            }
+        })
+
+
+# ----------------------------------------------------------------------
 # Admin HUB - gestión de usuarios (bloquear / desbloquear / eliminar)
 # ----------------------------------------------------------------------
 @app.post("/admin/api/users/<int:user_id>/block")
