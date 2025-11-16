@@ -42,7 +42,7 @@
     }
 </style>
 
-<div class="admin-card" id="userDetailRoot">
+<div class="admin-card" id="userDetailRoot" data-user-id="{{ user_id|int }}">
     <h2 style="margin:0 0 6px;">Detalle de usuario #{{ user_id }}</h2>
     <p class="muted" id="userBasic">Cargando datos…</p>
 
@@ -70,63 +70,70 @@
 
 <script>
     (async function () {
-        const userId = {{ user_id }
-    };
-    try {
-        const r = await fetch(`/admin/api/users/${userId}/detail`);
-        const js = await r.json();
-        if (!js.ok) {
-            document.getElementById('userBasic').innerText = 'No se pudo cargar el usuario.';
-            return;
+        const root = document.getElementById('userDetailRoot');
+        const userId = parseInt(root.dataset.userId, 10);
+
+        try {
+            const r = await fetch(`/admin/api/users/${userId}/detail`);
+            const js = await r.json();
+            if (!js.ok) {
+                document.getElementById('userBasic').innerText = 'No se pudo cargar el usuario.';
+                return;
+            }
+            const u = js.user;
+            const st = js.stats || {};
+
+            const created = u.created_at ? new Date(u.created_at).toLocaleString() : 'N/D';
+            const statusParts = [];
+            if (u.is_admin) statusParts.push('Admin');
+            if (u.is_blocked || !u.is_active) statusParts.push('Bloqueado');
+            if (!statusParts.length) statusParts.push('Activo');
+
+            document.getElementById('userBasic').innerHTML =
+                `<strong>${escapeHtml(u.name || '(sin nombre)')}</strong> — ${escapeHtml(u.email || '')}<br>` +
+                `<span class="muted">${escapeHtml(u.university || '')} • ${escapeHtml(u.faculty || '')} • ${escapeHtml(u.career || '')}</span><br>` +
+                `<span class="muted">Creado: ${created} — Estado: ${statusParts.join(', ')}</span>`;
+
+            document.getElementById('userStats').style.display = '';
+
+            // Compras pagas
+            document.getElementById('st-paid-count').innerText = st.paid_purchases_count ?? 0;
+            const paidAmt = (st.paid_purchases_cents || 0) / 100;
+            document.getElementById('st-paid-amount').innerText =
+                paidAmt > 0 ? `Total pagado: $${paidAmt.toFixed(2)}` : 'Sin compras pagas';
+
+            // Descargas gratuitas
+            document.getElementById('st-free-count').innerText = st.free_downloads_count ?? 0;
+
+            // Ventas como vendedor
+            document.getElementById('st-sold-count').innerText = st.sold_notes_count ?? 0;
+            const soldGross = (st.sold_gross_cents || 0) / 100;
+            document.getElementById('st-sold-amount').innerText =
+                soldGross > 0 ? `Total vendido (bruto): $${soldGross.toFixed(2)}` : 'Sin ventas registradas';
+
+            // Comisiones
+            const mp = (st.mp_commission_cents || 0) / 100;
+            const apy = (st.apy_commission_cents || 0) / 100;
+            const net = (st.net_cents_for_seller || 0) / 100;
+            document.getElementById('st-fees-breakdown').innerText =
+                soldGross > 0
+                    ? `Vendedor: $${net.toFixed(2)} — MP: $${mp.toFixed(2)} — ApuntesYa: $${apy.toFixed(2)}`
+                    : 'Sin movimientos de venta.';
+
+        } catch (e) {
+            console.error(e);
+            document.getElementById('userBasic').innerText = 'Error al cargar el detalle.';
         }
-        const u = js.user;
-        const st = js.stats || {};
 
-        const created = u.created_at ? new Date(u.created_at).toLocaleString() : 'N/D';
-        const statusParts = [];
-        if (u.is_admin) statusParts.push('Admin');
-        if (u.is_blocked || !u.is_active) statusParts.push('Bloqueado');
-        if (!statusParts.length) statusParts.push('Activo');
-
-        document.getElementById('userBasic').innerHTML =
-            `<strong>${escapeHtml(u.name || '(sin nombre)')}</strong> — ${escapeHtml(u.email || '')}<br>` +
-            `<span class="muted">${escapeHtml(u.university || '')} • ${escapeHtml(u.faculty || '')} • ${escapeHtml(u.career || '')}</span><br>` +
-            `<span class="muted">Creado: ${created} — Estado: ${statusParts.join(', ')}</span>`;
-
-        document.getElementById('userStats').style.display = '';
-
-        document.getElementById('st-paid-count').innerText = st.paid_purchases_count ?? 0;
-        const paidAmt = (st.paid_purchases_cents || 0) / 100;
-        document.getElementById('st-paid-amount').innerText = paidAmt > 0 ? `Total pagado: $${paidAmt.toFixed(2)}` : 'Sin compras pagas';
-
-        document.getElementById('st-free-count').innerText = st.free_downloads_count ?? 0;
-
-        document.getElementById('st-sold-count').innerText = st.sold_notes_count ?? 0;
-        const soldGross = (st.sold_gross_cents || 0) / 100;
-        document.getElementById('st-sold-amount').innerText = soldGross > 0 ? `Total vendido (bruto): $${soldGross.toFixed(2)}` : 'Sin ventas registradas';
-
-        const mp = (st.mp_commission_cents || 0) / 100;
-        const apy = (st.apy_commission_cents || 0) / 100;
-        const net = (st.net_cents_for_seller || 0) / 100;
-        document.getElementById('st-fees-breakdown').innerText =
-            soldGross > 0
-                ? `Vendedor: $${net.toFixed(2)} — MP: $${mp.toFixed(2)} — ApuntesYa: $${apy.toFixed(2)}`
-                : 'Sin movimientos de venta.';
-
-    } catch (e) {
-        console.error(e);
-        document.getElementById('userBasic').innerText = 'Error al cargar el detalle.';
-    }
-
-    function escapeHtml(s) {
-        return (s || '').replace(/[&<>"']/g, m => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;'
-        }[m]));
-    }
-    }) ();
+        function escapeHtml(s) {
+            return (s || '').replace(/[&<>"']/g, m => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[m]));
+        }
+    })();
 </script>
 {% endblock %}
