@@ -348,7 +348,6 @@
         <p class="profile-contact-label">Correo electrónico</p>
         <p>{{ current_user.email }}</p>
 
-        <p class="profile-contact-label">Usuario desde</p>
         <p>{{ current_user.created_at.strftime("%d/%m/%Y") if current_user.created_at else "-" }}</p>
 
         <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
@@ -391,19 +390,21 @@
           </a>
           {% endif %}
           <h4>Estado como vendedor</h4>
-          {% if current_user.is_seller %}
+          {% if current_user.mp_user_id %}
           <p class="muted" style="margin-bottom:4px;">
             Tenés el modo vendedor activo ✅
           </p>
           <p class="muted">
-            Ya podés subir apuntes y recibir pagos por las ventas.
+            Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago conectada.
           </p>
           {% else %}
           <p class="muted" style="margin-bottom:4px;">
             Todavía no tenés activo el modo vendedor.
           </p>
           <p class="muted">
-            Pronto vas a poder habilitarlo desde tu perfil. Mientras tanto, podés seguir descargando apuntes de otros.
+            Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil. Después vas a poder subir
+            apuntes y
+            recibir pagos.
           </p>
           {% endif %}
         </div>
