@@ -14,13 +14,13 @@
 
   .profile-tabs {
     display: flex;
-    gap: 8px;
-    margin: 12px 0 20px;
     flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0 20px;
   }
 
   .profile-tab {
-    padding: 8px 14px;
+    padding: 6px 14px;
     border-radius: 999px;
     border: 1px solid #d9d9e3;
     background: #f7f9ff;
@@ -38,196 +38,380 @@
 
   .profile-header {
     display: flex;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
+    gap: 20px;
     align-items: center;
+    margin-bottom: 20px;
   }
 
-  .profile-sub {
-    color: #666;
+  .profile-avatar {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #eef;
+    box-shadow: 0 0 0 4px rgba(68, 120, 255, 0.08);
+  }
+
+  .profile-name {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+
+  .profile-email {
     font-size: 14px;
+    color: #667;
+    margin: 0;
   }
 
-  .btn-pill {
-    padding: 8px 14px;
-    border-radius: 999px;
-    border: 0;
-    background: #4478ff;
-    color: #fff;
+  .profile-section-title {
+    font-size: 16px;
     font-weight: 600;
-    font-size: 14px;
-    cursor: pointer;
-    text-decoration: none;
+    margin: 24px 0 8px;
   }
 
-  .btn-pill.ghost {
-    background: #f3f6ff;
-    color: #335;
+  .profile-note-list {
+    margin-top: 12px;
   }
 
   .note-row {
     display: flex;
     justify-content: space-between;
-    gap: 10px;
     align-items: center;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid #eee;
-    margin-top: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f5;
+    gap: 12px;
+  }
+
+  .note-row:last-child {
+    border-bottom: none;
   }
 
   .note-meta {
-    color: #666;
     font-size: 13px;
+    color: #777;
   }
 
   .note-actions {
     display: flex;
+    align-items: center;
     gap: 8px;
-    align-items: center;
-  }
-
-  .badge-free {
-    padding: 4px 8px;
-    border-radius: 999px;
-    background: #e7f9ee;
-    color: #13713c;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .badge-paid {
-    padding: 4px 8px;
-    border-radius: 999px;
-    background: #eef3ff;
-    color: #1f3c8f;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .muted {
-    color: #666;
-    font-size: 13px;
-  }
-
-  /* Bloque superior con foto + datos académicos + MP */
-  .profile-top {
-    display: grid;
-    grid-template-columns: minmax(0, 2.3fr) minmax(0, 2fr);
-    gap: 18px;
-    margin: 12px 0 20px;
-  }
-
-  @media (max-width: 768px) {
-    .profile-top {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .profile-top-left {
-    display: flex;
-    gap: 14px;
-    align-items: flex-start;
-  }
-
-  .avatar-wrap {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    overflow: hidden;
-    background: #eef3ff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    color: #334;
     flex-shrink: 0;
   }
 
-  .avatar-img {
+  .badge-free {
+    padding: 2px 8px;
+    font-size: 12px;
+    border-radius: 999px;
+    background: #e8fff0;
+    color: #1a7f37;
+    border: 1px solid #b7f0c8;
+  }
+
+  .badge-paid {
+    padding: 2px 8px;
+    font-size: 12px;
+    border-radius: 999px;
+    background: #fff4e5;
+    color: #8b5b14;
+    border: 1px solid #f2c89b;
+  }
+
+  .btn-pill {
+    border-radius: 999px;
+    border: none;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 600;
+    background: #4478ff;
+    color: #fff;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-pill.ghost {
+    background: #f6f7ff;
+    color: #334;
+    border: 1px solid #dde0ff;
+  }
+
+  .muted {
+    color: #777;
+    font-size: 13px;
+  }
+
+  .profile-wrapper {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr);
+    gap: 24px;
+  }
+
+  .profile-col {
+    min-width: 0;
+  }
+
+  .profile-right-box {
+    border-radius: 12px;
+    border: 1px solid #eee;
+    padding: 12px 14px;
+    background: #fafbff;
+    margin-top: 8px;
+  }
+
+  .profile-right-box h4 {
+    font-size: 14px;
+    margin: 0 0 6px;
+  }
+
+  .profile-right-box p {
+    margin: 0 0 6px;
+  }
+
+  .profile-contact-input {
     width: 100%;
-    height: 100%;
-    object-fit: cover;
+    padding: 6px 10px;
+    font-size: 13px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
   }
 
-  .profile-top-right {
-    border-left: 1px solid #f0f0f5;
-    padding-left: 16px;
+  .profile-contact-help {
+    font-size: 12px;
+    color: #777;
   }
 
-  @media (max-width: 768px) {
-    .profile-top-right {
-      border-left: 0;
-      border-top: 1px solid #f0f0f5;
-      padding-left: 0;
-      padding-top: 12px;
-    }
+  .profile-contact-label {
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 4px;
   }
 
   .mp-status {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 8px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
-    border: 1px solid #d9d9e3;
-    background: #f7f9ff;
-    color: #334;
-    margin-bottom: 8px;
+    font-size: 13px;
   }
 
-  /* Bloque separado para el botón de actualizar datos académicos */
+  .mp-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #22c55e;
+  }
+
+  .mp-status-dot.off {
+    background: #d4d4d8;
+  }
+
+  .mp-status-text-off {
+    color: #666;
+  }
+
   .academic-update {
-    margin: -8px 0 12px;
+    margin-top: 18px;
     padding: 10px 12px;
     border-radius: 10px;
-    background: #f8f9ff;
-    border: 1px solid #eef0ff;
+    background: #f8fafc;
+    border: 1px dashed #d0d7ff;
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
   }
+
+  .academic-update .btn-pill.ghost {
+    padding: 5px 10px;
+  }
+
+  @media (max-width: 880px) {
+    .profile-wrapper {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .profile-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .note-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .note-actions {
+      align-self: flex-end;
+    }
+  }
 </style>
 
 <div class="profile-card">
   <div class="profile-header">
     <div>
-      <h2 style="margin:0;">Mi perfil</h2>
-      <p class="profile-sub">Hola {{ current_user.name }} 👋. Acá podés ver tus apuntes, compras y ventas.</p>
+      {% if current_user.avatar_filename %}
+      <img src="{{ url_for('user_avatar', user_id=current_user.id) }}" alt="Foto de perfil" class="profile-avatar">
+      {% else %}
+      <div class="profile-avatar"
+        style="display:flex;align-items:center;justify-content:center;background:#f4f4ff;color:#556;">
+        {{ (current_user.name or current_user.email)[0:1].upper() }}
+      </div>
+      {% endif %}
+    </div>
+    <div>
+      <h1 class="profile-name">
+        {{ current_user.name or "Usuario sin nombre" }}
+      </h1>
+      <p class="profile-email">
+        {{ current_user.email }}
+      </p>
+      <p class="muted" style="margin-top:4px;">
+        Mi perfil en ApuntesYa · {{ current_user.created_at.strftime("%d/%m/%Y") if current_user.created_at else "" }}
+      </p>
     </div>
   </div>
 
-  <!-- BLOQUE SUPERIOR: foto + datos académicos + MP -->
-  {% if current_user.is_authenticated %}
-  {# Determinar imagen de perfil si existe #}
-  {% set profile_image = None %}
-  {% if current_user.imagen_de_perfil is defined and current_user.imagen_de_perfil %}
-  {% set profile_image = url_for('static', filename='uploads/profile_images/' ~ current_user.imagen_de_perfil) %}
-  {% elif current_user.profile_image is defined and current_user.profile_image %}
-  {% set profile_image = url_for('static', filename='uploads/profile_images/' ~ current_user.profile_image) %}
-  {% endif %}
+  <div class="profile-wrapper">
+    <div class="profile-col">
+      <div class="profile-tabs">
+        <a href="{{ url_for('profile_purchases') }}" class="profile-tab">
+          Mis compras / descargas
+        </a>
+        <a href="{{ url_for('profile') }}" class="profile-tab active">
+          Mis apuntes subidos
+        </a>
+        <a href="{{ url_for('profile_balance') }}" class="profile-tab">
+          Mis ventas y balance
+        </a>
+      </div>
 
-  <div class="profile-top">
-    <!-- Izquierda: foto + datos académicos -->
-    <div class="profile-top-left">
-      <div>
-        <div class="avatar-wrap">
-          {% if profile_image %}
-          <img src="{{ profile_image }}" alt="Foto de perfil" class="avatar-img">
-          {% else %}
-          {{ current_user.name[0]|upper }}
-          {% endif %}
+      <!-- Bloque contacto vendedor -->
+      <div style="margin-bottom:18px;">
+        <p class="muted" style="margin-bottom:6px;">
+          Si querés que los compradores puedan contactarte por fuera de ApuntesYa
+          (por ejemplo, para clases particulares o más materiales), podés dejar un link de contacto.
+        </p>
+
+        {% if seller_contact_url %}
+        <div class="profile-right-box" style="margin-top:6px;">
+          <h4>Mi contacto público como vendedor</h4>
+          <p class="profile-contact-label">Enlace visible en tus apuntes:</p>
+          <p style="margin:0;">
+            <a href="{{ seller_contact_url }}" target="_blank">{{ seller_contact_label }}</a>
+          </p>
+          <p class="profile-contact-help" style="margin-top:6px;">
+            Este enlace se muestra en la ficha de tus apuntes, para usuarios registrados.
+          </p>
         </div>
+        {% endif %}
+      </div>
 
-        <!-- Form para subir nueva foto -->
-        <form method="post" action="{{ url_for('upload_profile_image') }}" enctype="multipart/form-data"
-          style="margin-top:8px;">
-          <label class="muted" style="font-size:12px;display:block;margin-bottom:4px;">Cambiar foto de perfil</label>
+      <!-- Lista de apuntes subidos -->
+      <h3 style="margin:8px 0 4px;">Mis apuntes subidos</h3>
+      {% if not my_notes %}
+      <p class="muted">Todavía no subiste ningún apunte. Probá con el botón “Subir apunte” del menú 😊</p>
+      {% else %}
+      {% for n in my_notes %}
+      <div class="note-row">
+        <div>
+          <div>
+            <strong>{{ n.title }}</strong>
+          </div>
+          <div class="note-meta">
+            {{ n.university }} • {{ n.faculty }} • {{ n.career }} • {{ downloads_map.get(n.id, 0) }} descargas
+          </div>
+        </div>
+        <div class="note-actions">
+          {% if n.price_cents == 0 %}
+          <span class="badge-free">Gratis</span>
+          {% else %}
+          <span class="badge-paid">${{ '%.2f' % (n.price_cents / 100) }}</span>
+          {% endif %}
+          <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill" style="background:#f3f6ff;color:#335;">
+            Ver
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+
+    <div class="profile-col">
+      <div class="profile-right-box">
+        <h4>Datos de mi cuenta</h4>
+        <p class="profile-contact-label">Nombre completo</p>
+        <p>{{ current_user.name or 'Sin nombre cargado' }}</p>
+
+        <p class="profile-contact-label">Correo electrónico</p>
+        <p>{{ current_user.email }}</p>
+
+        <p class="profile-contact-label">Usuario desde</p>
+        <p>{{ current_user.created_at.strftime("%d/%m/%Y") if current_user.created_at else "-" }}</p>
+      </div>
+
+      <div class="profile-right-box">
+        <h4>Estado como vendedor</h4>
+        {% if current_user.is_seller %}
+        <p class="muted" style="margin-bottom:4px;">
+          Tenés el modo vendedor activo ✅
+        </p>
+        <p class="muted">
+          Ya podés subir apuntes y recibir pagos por las ventas.
+        </p>
+        {% else %}
+        <p class="muted" style="margin-bottom:4px;">
+          Todavía no tenés activo el modo vendedor.
+        </p>
+        <p class="muted">
+          Pronto vas a poder habilitarlo desde tu perfil. Mientras tanto, podés seguir descargando apuntes de otros.
+        </p>
+        {% endif %}
+      </div>
+
+      <div class="profile-right-box">
+        <h4>Cuenta de Mercado Pago</h4>
+        {% if current_user.mp_user_id %}
+        <p class="mp-status">
+          <span class="mp-status-dot"></span>
+          <span>Cuenta de Mercado Pago conectada</span>
+        </p>
+        <p class="muted" style="margin-top:6px;">
+          Los pagos de tus ventas se acreditan en esta cuenta.
+        </p>
+        {% else %}
+        <p class="mp-status mp-status-text-off">
+          <span class="mp-status-dot off"></span>
+          <span>Sin cuenta de Mercado Pago vinculada</span>
+        </p>
+        <p class="muted" style="margin:6px 0 8px;">
+          Para recibir pagos por tus ventas, vas a necesitar vincular una cuenta de Mercado Pago.
+        </p>
+        <a href="{{ url_for('connect_mp') }}" class="btn-pill">
+          Vincular Mercado Pago
+        </a>
+        {% endif %}
+      </div>
+
+      <!-- Bloque separado para actualizar datos académicos -->
+      <div class="academic-update">
+        <p class="muted" style="margin:0;">
+          ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo necesites.
+        </p>
+        <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
+          Actualizar datos académicos
+        </a>
+      </div>
+
+      <!-- Cambiar foto de perfil -->
+      <div class="profile-right-box" style="margin-top:16px;">
+        <h4>Foto de perfil</h4>
+        <p class="muted" style="margin-bottom:8px;">
+          Podés subir una imagen para que otros usuarios identifiquen más fácil tus apuntes.
+        </p>
+        <form action="{{ url_for('update_avatar') }}" method="post" enctype="multipart/form-data">
           <input type="file" name="file" accept=".jpg,.jpeg,.png" style="font-size:12px;margin-bottom:4px;">
           <button type="submit" class="btn-pill ghost" style="padding:5px 10px;font-size:12px;">
             Guardar foto
@@ -246,120 +430,7 @@
         </p>
       </div>
     </div>
-
-    <!-- Derecha: vinculación con Mercado Pago -->
-    <div class="profile-top-right">
-      <p class="muted" style="margin:0 0 4px;">Vinculación con Mercado Pago</p>
-
-      {% if current_user.mp_user_id or current_user.mp_access_token %}
-      <div class="mp-status">
-        <span>✅ Cuenta vinculada</span>
-      </div>
-      <p class="muted" style="margin:4px 0 8px;">
-        Ya estás recibiendo los pagos en tu cuenta de Mercado Pago vinculada.
-      </p>
-      <a href="{{ url_for('disconnect_mp') }}" class="btn-pill ghost">
-        Desvincular Mercado Pago
-      </a>
-      {% else %}
-      <div class="mp-status">
-        <span>⚠️ No vinculada</span>
-      </div>
-      <p class="muted" style="margin:4px 0 8px;">
-        Para poder cobrar tus ventas automáticamente, vinculá tu cuenta de Mercado Pago.
-      </p>
-      <a href="{{ url_for('connect_mp') }}" class="btn-pill">
-        Vincular Mercado Pago
-      </a>
-      {% endif %}
-    </div>
   </div>
-  {% endif %}
-
-  <!-- Bloque separado para actualizar datos académicos -->
-  <div class="academic-update">
-    <p class="muted" style="margin:0;">
-      ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo necesites.
-    </p>
-    <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
-      Actualizar datos académicos
-    </a>
-  </div>
-
-  <!-- Pestañas -->
-  <div class="profile-tabs">
-    <a href="{{ url_for('profile_purchases') }}" class="profile-tab">
-      Mis compras / descargas
-    </a>
-    <a href="{{ url_for('profile') }}" class="profile-tab active">
-      Mis apuntes subidos
-    </a>
-    <a href="{{ url_for('profile_balance') }}" class="profile-tab">
-      Mis ventas y balance
-    </a>
-  </div>
-
-  <!-- Bloque contacto vendedor -->
-  <div style="margin-bottom:18px;">
-    <p class="muted" style="margin-bottom:6px;">
-      Datos de contacto para quienes compren tus apuntes:
-    </p>
-    <form method="post" action="{{ url_for('profile_update_contact') }}" style="display:flex;gap:8px;flex-wrap:wrap;">
-      <input type="text" name="seller_contact" value="{{ seller_contact or '' }}" placeholder="WhatsApp, email o link"
-        style="flex:1;min-width:200px;padding:8px 10px;border-radius:10px;border:1px solid #d9d9e3;">
-      <button type="submit" class="btn-pill">Guardar contacto</button>
-    </form>
-    {% if seller_contact_url %}
-    <p class="muted" style="margin-top:6px;">
-      Vista para el comprador:
-      <a href="{{ seller_contact_url }}" target="_blank">{{ seller_contact_label }}</a>
-    </p>
-    {% endif %}
-  </div>
-
-  <!-- Lista de apuntes subidos -->
-  <h3 style="margin:8px 0 4px;">Mis apuntes subidos</h3>
-  {% if not my_notes %}
-  <p class="muted">Todavía no subiste ningún apunte. Probá con el botón “Subir apunte” del menú 😊</p>
-  {% else %}
-  {% for n in my_notes %}
-  <div class="note-row">
-    <div>
-      <div>
-        <strong>{{ n.title }}</strong>
-      </div>
-      <div class="note-meta">
-        {{ n.university }} • {{ n.faculty }} • {{ n.career }} • {{ downloads_map.get(n.id, 0) }} descargas
-      </div>
-    </div>
-    <div class="note-actions">
-      {% if n.price_cents == 0 %}
-      <span class="badge-free">Gratis</span>
-      {% else %}
-      <span class="badge-paid">${{ '%.2f' % (n.price_cents / 100) }}</span>
-      {% endif %}
-      <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill" style="background:#f3f6ff;color:#335;">
-        Ver
-      </a>
-    </div>
-  </div>
-  {% endfor %}
-  {% endif %}
-</div>
-
-<div class="note-actions">
-  {% if n.price_cents == 0 %}
-  <span class="badge-free">Gratis</span>
-  {% else %}
-  <span class="badge-paid">${{ '%.2f' % (n.price_cents / 100) }}</span>
-  {% endif %}
-  <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill" style="background:#f3f6ff;color:#335;">
-    Ver
-  </a>
-</div>
-</div>
-{% endfor %}
-{% endif %}
 </div>
 
 {% endblock %}
