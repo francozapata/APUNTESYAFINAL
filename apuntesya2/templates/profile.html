@@ -322,20 +322,41 @@
   {% if not my_notes %}
   <p class="muted">Todavía no subiste ningún apunte. Probá con el botón “Subir apunte” del menú 😊</p>
   {% else %}
-  <div class="note-meta">
-    {{ n.university }} • {{ n.faculty }} • {{ n.career }} • {{ downloads_map.get(n.id, 0) }} descargas
+  {% for n in my_notes %}
+  <div class="note-row">
+    <div>
+      <div>
+        <strong>{{ n.title }}</strong>
+      </div>
+      <div class="note-meta">
+        {{ n.university }} • {{ n.faculty }} • {{ n.career }} • {{ downloads_map.get(n.id, 0) }} descargas
+      </div>
+    </div>
+    <div class="note-actions">
+      {% if n.price_cents == 0 %}
+      <span class="badge-free">Gratis</span>
+      {% else %}
+      <span class="badge-paid">${{ '%.2f' % (n.price_cents / 100) }}</span>
+      {% endif %}
+      <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill" style="background:#f3f6ff;color:#335;">
+        Ver
+      </a>
+    </div>
   </div>
+  {% endfor %}
+  {% endif %}
+</div>
 
-  <div class="note-actions">
-    {% if n.price_cents == 0 %}
-    <span class="badge-free">Gratis</span>
-    {% else %}
-    <span class="badge-paid">${{ '%.2f' % (n.price_cents / 100) }}</span>
-    {% endif %}
-    <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill" style="background:#f3f6ff;color:#335;">
-      Ver
-    </a>
-  </div>
+<div class="note-actions">
+  {% if n.price_cents == 0 %}
+  <span class="badge-free">Gratis</span>
+  {% else %}
+  <span class="badge-paid">${{ '%.2f' % (n.price_cents / 100) }}</span>
+  {% endif %}
+  <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill" style="background:#f3f6ff;color:#335;">
+    Ver
+  </a>
+</div>
 </div>
 {% endfor %}
 {% endif %}
