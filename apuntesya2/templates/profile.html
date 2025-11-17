@@ -405,20 +405,6 @@
         </a>
       </div>
 
-      <!-- Cambiar foto de perfil -->
-      <div class="profile-right-box" style="margin-top:16px;">
-        <h4>Foto de perfil</h4>
-        <p class="muted" style="margin-bottom:8px;">
-          Podés subir una imagen para que otros usuarios identifiquen más fácil tus apuntes.
-        </p>
-        <form action="{{ url_for('update_avatar') }}" method="post" enctype="multipart/form-data">
-          <input type="file" name="file" accept=".jpg,.jpeg,.png" style="font-size:12px;margin-bottom:4px;">
-          <button type="submit" class="btn-pill ghost" style="padding:5px 10px;font-size:12px;">
-            Guardar foto
-          </button>
-        </form>
-      </div>
-
       <div>
         <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
         <p style="margin:0;font-weight:700;font-size:18px;">
