@@ -614,8 +614,24 @@ def complete_profile_post():
 def profile():
     with Session() as s:
         my_notes = s.execute(
-            select(Note).where(Note.seller_id == current_user.id).order_by(Note.created_at.desc())
+            select(Note)
+            .where(Note.seller_id == current_user.id)
+            .order_by(Note.created_at.desc())
         ).scalars().all()
+
+        # Descargas por apunte (compras aprobadas, incluyendo gratuitas)
+        note_ids = [n.id for n in my_notes]
+        downloads_map = {}
+        if note_ids:
+            rows = s.execute(
+                select(Purchase.note_id, func.count(Purchase.id))
+                .where(
+                    Purchase.note_id.in_(note_ids),
+                    Purchase.status == "approved"
+                )
+                .group_by(Purchase.note_id)
+            ).all()
+            downloads_map = {note_id: int(count or 0) for note_id, count in rows}
 
         me = s.get(User, current_user.id)
         seller_contact = getattr(me, "seller_contact", "") or ""
@@ -624,10 +640,12 @@ def profile():
     return render_template(
         "profile.html",
         my_notes=my_notes,
+        downloads_map=downloads_map,
         seller_contact=seller_contact,
         seller_contact_url=contact_url,
         seller_contact_label=contact_label
     )
+
 
 @app.post("/profile/update_contact")
 @login_required
@@ -759,7 +777,10 @@ def profile_purchases():
         purchases = s.execute(
             select(Purchase, Note)
             .join(Note, Note.id == Purchase.note_id)
-            .where(Purchase.buyer_id == current_user.id, Purchase.status == 'approved')
+            .where(
+                Purchase.buyer_id == current_user.id,
+                Purchase.status == 'approved'
+            )
             .order_by(Purchase.created_at.desc())
         ).all()
 
@@ -768,13 +789,14 @@ def profile_purchases():
             # lo que quería recibir el vendedor (base X)
             base_price = (p.amount_cents or 0) / 100.0
             # lo que realmente pagó el comprador (con comisión)
-            buyer_price_cents = int(round(base_price * GROSS_MULTIPLIER * 100))
+            buyer_price_cents = int(round(base_price * GROSS_MULTIPLIER * 100)) if p.amount_cents else 0
 
             items.append(dict(
                 id=p.id,
                 note_id=n.id,
                 title=n.title,
                 price_cents=buyer_price_cents,
+                is_free=(p.amount_cents == 0),
                 created_at=p.created_at.strftime("%Y-%m-%d %H:%M")
             ))
     return render_template("profile_purchases.html", items=items)
@@ -1010,8 +1032,29 @@ def download_note(note_id):
             flash("Necesitás comprar este apunte para descargarlo.")
             return redirect(url_for("note_detail", note_id=note.id))
 
+        # Registrar descarga gratuita como "compra" en 0 para el historial del comprador
+        if note.price_cents == 0 and note.seller_id != current_user.id:
+            existing_free = s.execute(
+                select(Purchase).where(
+                    Purchase.buyer_id == current_user.id,
+                    Purchase.note_id == note.id,
+                    Purchase.amount_cents == 0,
+                    Purchase.status == 'approved'
+                )
+            ).scalar_one_or_none()
+            if not existing_free:
+                free_purchase = Purchase(
+                    buyer_id=current_user.id,
+                    note_id=note.id,
+                    amount_cents=0,
+                    status="approved"
+                )
+                s.add(free_purchase)
+                s.commit()
+
         # ✅ Si está permitido, ahora sí devolvemos el archivo
         return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
+
 
 
 # -----------------------------------------------------------------------------

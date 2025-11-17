@@ -82,18 +82,23 @@
     </a>
   </div>
 
-  <h3 style="margin:8px 0 4px;">Mis compras</h3>
+  <h3 style="margin:8px 0 4px;">Mis compras y descargas</h3>
 
   {% if not items %}
-  <p class="muted">Todavía no realizaste compras en la plataforma.</p>
+  <p class="muted">Todavía no realizaste compras ni descargas gratuitas en la plataforma.</p>
   {% else %}
   {% for it in items %}
   <div class="purchase-row">
     <div>
       <div><strong>{{ it.title }}</strong></div>
       <div class="muted">
+        {% if it.is_free %}
+        Descargado gratis el {{ it.created_at }} • Gratis
+        {% else %}
         Comprado el {{ it.created_at }} • ${{ '%.2f' % (it.price_cents / 100) }}
+        {% endif %}
       </div>
+
     </div>
     <div>
       <a href="{{ url_for('note_detail', note_id=it.note_id) }}" class="btn-pill">
