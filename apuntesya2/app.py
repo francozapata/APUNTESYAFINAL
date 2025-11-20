@@ -1944,7 +1944,6 @@ def admin_api_files():
     return jsonify({"items": data})
 
 
-
 @app.get("/admin/download/<int:note_id>")
 @login_required
 @admin_required
@@ -1953,14 +1952,15 @@ def admin_download_note(note_id):
         n = s.get(Note, note_id)
         if not n or not n.is_active:
             abort(404)
-        return
-        if not n or not n.is_active:
-            abort(404)
+
+        # Si el archivo está en GCS (nuevo esquema)
         if gcs_bucket and n.file_path and "/" in n.file_path:
             signed_url = gcs_generate_signed_url(n.file_path, seconds=600)
             return redirect(signed_url)
-        else:
-            return send_from_directory(app.config["UPLOAD_FOLDER"], n.file_path, as_attachment=True)
+
+        # Fallback: archivo local (viejos apuntes, entorno dev sin GCS, etc.)
+        return send_from_directory(app.config["UPLOAD_FOLDER"], n.file_path, as_attachment=True)
+
 
 
 # -----------------------------------------------------------------------------
