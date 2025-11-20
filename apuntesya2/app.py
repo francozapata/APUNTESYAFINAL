@@ -9,6 +9,8 @@ import re
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from functools import wraps
+from google.cloud import storage
+from google.oauth2 import service_account
 
 from dotenv import load_dotenv
 from flask import (
@@ -160,6 +162,28 @@ if DB_URL.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 engine = create_engine(DB_URL, **engine_kwargs)
 
+
+# -----------------------------------------------------------------------------
+# Google Cloud Storage
+# -----------------------------------------------------------------------------
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
+GCS_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+
+gcs_client = None
+gcs_bucket = None
+
+if GCS_BUCKET_NAME and GCS_CREDENTIALS_JSON:
+    try:
+        creds_info = json.loads(GCS_CREDENTIALS_JSON)
+        credentials = service_account.Credentials.from_service_account_info(creds_info)
+        gcs_client = storage.Client(credentials=credentials)
+        gcs_bucket = gcs_client.bucket(GCS_BUCKET_NAME)
+        print(f"[GCS] Bucket configurado: {GCS_BUCKET_NAME}")
+    except Exception as e:
+        print("[GCS] ERROR al inicializar:", e)
+else:
+    print("[GCS] GCS no configurado (faltan variables de entorno)")
+
 # -----------------------------------------------------------------------------
 # Modelos e inicio de sesión
 # -----------------------------------------------------------------------------
@@ -293,6 +317,39 @@ def allowed_pdf(filename: str) -> bool:
 
 def ensure_dirs():
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+def gcs_upload_file(file_storage, blob_name: str) -> str:
+    """
+    Sube un archivo (FileStorage de Flask) a GCS.
+    Devuelve el nombre del blob guardado.
+    """
+    if not gcs_bucket:
+        raise RuntimeError("GCS no está configurado")
+
+    blob = gcs_bucket.blob(blob_name)
+    file_storage.stream.seek(0)
+    blob.upload_from_file(
+        file_storage.stream,
+        content_type=file_storage.content_type or "application/pdf"
+    )
+    return blob_name
+
+
+def gcs_generate_signed_url(blob_name: str, seconds: int = 600) -> str:
+    """
+    Genera un link firmado para descargar el archivo desde GCS.
+    """
+    if not gcs_bucket:
+        raise RuntimeError("GCS no está configurado")
+
+    blob = gcs_bucket.blob(blob_name)
+    url = blob.generate_signed_url(
+        version="v4",
+        expiration=timedelta(seconds=seconds),
+        method="GET",
+    )
+    return url
+
 
 # ------------------------------ util contacto vendedor ------------------------------
 def _build_contact_link(raw: str) -> tuple[str, str]:
@@ -825,16 +882,33 @@ def upload_note():
             flash("Sólo PDF.")
             return redirect(url_for("upload_note"))
 
-        ensure_dirs()
-        filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secure_filename(file.filename)}"
-        fpath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(fpath)
+        base_name = secure_filename(file.filename)
+        unique_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{base_name}"
+
+        if gcs_bucket:
+            # Guardamos en GCS bajo notes/<seller_id>/<archivo>
+            blob_name = f"notes/{current_user.id}/{unique_name}"
+            gcs_upload_file(file, blob_name)
+            stored_path = blob_name
+        else:
+            # Fallback local (por ejemplo, entorno de desarrollo sin GCS)
+            ensure_dirs()
+            fpath = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
+            file.save(fpath)
+            stored_path = unique_name
 
         with Session() as s:
             note = Note(
-                title=title, description=description, university=university, faculty=faculty, career=career,
-                price_cents=price_cents, file_path=filename, seller_id=current_user.id
+                title=title,
+                description=description,
+                university=university,
+                faculty=faculty,
+                career=career,
+                price_cents=price_cents,
+                file_path=stored_path,
+                seller_id=current_user.id
             )
+
             s.add(note)
             s.commit()
         flash("Apunte subido correctamente.")
@@ -1028,32 +1102,17 @@ def download_note(note_id):
             ).scalar_one_or_none()
             allowed = p is not None
 
-        if not allowed:
-            flash("Necesitás comprar este apunte para descargarlo.")
-            return redirect(url_for("note_detail", note_id=note.id))
-
-        # Registrar descarga gratuita como "compra" en 0 para el historial del comprador
-        if note.price_cents == 0 and note.seller_id != current_user.id:
-            existing_free = s.execute(
-                select(Purchase).where(
-                    Purchase.buyer_id == current_user.id,
-                    Purchase.note_id == note.id,
-                    Purchase.amount_cents == 0,
-                    Purchase.status == 'approved'
-                )
-            ).scalar_one_or_none()
-            if not existing_free:
-                free_purchase = Purchase(
-                    buyer_id=current_user.id,
-                    note_id=note.id,
-                    amount_cents=0,
-                    status="approved"
-                )
-                s.add(free_purchase)
-                s.commit()
+            if not allowed:
+                flash("Necesitás comprar este apunte para descargarlo.")
+                return redirect(url_for("note_detail", note_id=note.id))
 
         # ✅ Si está permitido, ahora sí devolvemos el archivo
-        return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
+        if gcs_bucket and note.file_path and "/" in note.file_path:
+            signed_url = gcs_generate_signed_url(note.file_path, seconds=600)  # 10 minutos
+            return redirect(signed_url)
+        else:
+            return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
+
 
 
 
@@ -1894,7 +1953,15 @@ def admin_download_note(note_id):
         n = s.get(Note, note_id)
         if not n or not n.is_active:
             abort(404)
-        return send_from_directory(app.config["UPLOAD_FOLDER"], n.file_path, as_attachment=True)
+        return
+        if not n or not n.is_active:
+            abort(404)
+        if gcs_bucket and n.file_path and "/" in n.file_path:
+            signed_url = gcs_generate_signed_url(n.file_path, seconds=600)
+            return redirect(signed_url)
+        else:
+            return send_from_directory(app.config["UPLOAD_FOLDER"], n.file_path, as_attachment=True)
+
 
 # -----------------------------------------------------------------------------
 # Actualizar datos académicos (redirige a form estilo complete_profile)
