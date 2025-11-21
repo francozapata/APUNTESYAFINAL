@@ -2,21 +2,24 @@
 {% block content %}
 
 <style>
-  .profile-card {
+  .profile-shell {
     max-width: 980px;
     margin: 32px auto;
+  }
+
+  .profile-card {
     background: #ffffff;
     border-radius: 16px;
+    border: 1px solid #e5e7f5;
     padding: 22px 20px;
     box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
-    border: 1px solid #e5e7f5;
   }
 
   .profile-header {
     display: flex;
     gap: 20px;
     align-items: center;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
   }
 
   .profile-avatar {
@@ -25,22 +28,14 @@
     border-radius: 50%;
     object-fit: cover;
     border: 3px solid #eef;
-    box-shadow: 0 0 0 4px rgba(68, 120, 255, 0.08);
-  }
-
-  .profile-avatar-placeholder {
-    width: 88px;
-    height: 88px;
-    border-radius: 50%;
+    box-shadow: 0 0 0 4px rgba(68, 120, 255, 0.12);
+    background: #f4f4ff;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #f4f4ff;
-    color: #4b5563;
     font-weight: 700;
-    font-size: 32px;
-    border: 3px solid #e0e7ff;
-    box-shadow: 0 0 0 4px rgba(68, 120, 255, 0.10);
+    font-size: 28px;
+    color: #4b5563;
   }
 
   .profile-name {
@@ -54,79 +49,50 @@
     font-size: 14px;
     color: #6b7280;
     margin: 0;
-    word-break: break-all;
   }
 
-  .profile-meta-line {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 6px;
-    font-size: 13px;
-    color: #6b7280;
-  }
-
-  .profile-meta-pill {
-    padding: 3px 9px;
-    border-radius: 999px;
-    background: #f7f9ff;
-    border: 1px solid #d9d9e8;
-    font-size: 12px;
+  .profile-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-  }
-
-  .profile-meta-pill-dot {
-    width: 7px;
-    height: 7px;
+    padding: 4px 10px;
     border-radius: 999px;
-    background: #22c55e;
+    background: #f3f4ff;
+    border: 1px solid #e0e4ff;
+    font-size: 12px;
+    color: #4b5563;
+    margin-top: 6px;
   }
 
-  .profile-meta-pill-dot.off {
-    background: #d4d4d8;
+  .muted {
+    color: #6b7280;
+    font-size: 13px;
   }
 
-  .profile-wrapper {
-    margin-top: 10px;
-    display: grid;
-    grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.4fr);
-    gap: 24px;
-  }
-
-  .profile-col {
-    min-width: 0;
-  }
-
+  /* TABS IGUALES A MI ACTIVIDAD */
   .profile-tabs {
     display: inline-flex;
-    flex-wrap: wrap;
     gap: 8px;
-    margin: 6px 0 18px;
+    margin: 8px 0 18px;
     padding: 4px;
     border-radius: 999px;
     background: #f7f9ff;
     border: 1px solid #e0e4ff;
+    flex-wrap: wrap;
   }
 
   .profile-tab {
     padding: 6px 14px;
     border-radius: 999px;
-    border: none;
     font-size: 13px;
     font-weight: 600;
     text-decoration: none;
-    color: #444a63;
     background: transparent;
+    border: none;
+    color: #4b5563;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    white-space: nowrap;
-  }
-
-  .profile-tab span.icon {
-    font-size: 14px;
+    gap: 4px;
   }
 
   .profile-tab.active {
@@ -135,153 +101,41 @@
     box-shadow: 0 8px 20px rgba(68, 120, 255, 0.35);
   }
 
-  .muted {
-    color: #6b7280;
-    font-size: 13px;
+  /* Layout columnas */
+  .profile-wrapper {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr);
+    gap: 24px;
   }
 
-  .section-title-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin: 4px 0 8px;
-  }
-
-  .section-title-row h3 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: #111827;
-  }
-
-  .section-title-row span {
-    font-size: 12px;
-    color: #9ca3af;
-  }
-
-  .profile-right-box {
-    border-radius: 12px;
-    border: 1px solid #eeeeff;
-    padding: 12px 14px;
-    background: #fafbff;
-    margin-top: 8px;
-  }
-
-  .profile-right-box h4 {
-    font-size: 14px;
-    margin: 0 0 6px;
-    font-weight: 600;
-    color: #111827;
-  }
-
-  .profile-right-box p {
-    margin: 0 0 6px;
-  }
-
-  .profile-contact-label {
-    font-size: 13px;
-    color: #4b5563;
-    margin-bottom: 3px;
-  }
-
-  .profile-contact-help {
-    font-size: 12px;
-    color: #6b7280;
-  }
-
-  .academic-update {
-    margin-top: 10px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: #f7f9ff;
-    border: 1px dashed #cbd2ff;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  .btn-pill {
-    border-radius: 999px;
-    border: none;
-    padding: 7px 16px;
-    font-size: 13px;
-    cursor: pointer;
-    font-weight: 600;
-    background: #4478ff;
-    color: #ffffff;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.1s ease, color 0.1s ease;
-  }
-
-  .btn-pill:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 10px 25px rgba(68, 120, 255, 0.35);
-  }
-
-  .btn-pill.ghost {
-    background: #f3f5ff;
-    color: #1f2937;
-    border: 1px solid #d6ddff;
-    box-shadow: none;
-  }
-
-  .btn-pill.ghost:hover {
-    background: #e3e7ff;
-  }
-
-  .btn-pill.subtle {
-    background: #f3f6ff;
-    color: #1f2937;
-    border: 1px solid #e1e5ff;
-    box-shadow: none;
-  }
-
-  .btn-pill.subtle:hover {
-    background: #e3e9ff;
-  }
-
-  .note-list {
-    margin-top: 6px;
-  }
-
-  .note-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid #edf0f8;
-    gap: 12px;
-  }
-
-  .note-row:last-child {
-    border-bottom: none;
-  }
-
-  .note-main {
+  .profile-col {
     min-width: 0;
   }
 
-  .note-title {
-    font-size: 14px;
+  .profile-section-title {
+    font-size: 16px;
     font-weight: 600;
+    margin: 8px 0 4px;
     color: #111827;
-    margin-bottom: 4px;
+  }
+
+  /* Lista de apuntes */
+  .note-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid #e5e7f5;
+    background: #fafbff;
+    margin-top: 10px;
   }
 
   .note-meta {
     font-size: 12px;
     color: #6b7280;
-  }
-
-  .note-meta span+span::before {
-    content: "•";
-    margin: 0 4px;
-    color: #9ca3af;
+    margin-top: 3px;
   }
 
   .note-actions {
@@ -293,24 +147,75 @@
 
   .badge-free,
   .badge-paid {
-    padding: 2px 8px;
-    font-size: 12px;
+    padding: 3px 9px;
+    font-size: 11px;
     border-radius: 999px;
     border: 1px solid transparent;
-    font-weight: 500;
-    white-space: nowrap;
+    font-weight: 600;
   }
 
   .badge-free {
     background: #e8fff0;
     color: #166534;
-    border-color: #b7f0c8;
+    border-color: #bbf7d0;
   }
 
   .badge-paid {
     background: #fff4e5;
-    color: #8b5b14;
-    border-color: #f2c89b;
+    color: #92400e;
+    border-color: #fed7aa;
+  }
+
+  .btn-pill {
+    padding: 7px 13px;
+    border-radius: 999px;
+    border: none;
+    background: #f3f6ff;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    border: 1px solid #dfe4ff;
+  }
+
+  .profile-right-box {
+    border-radius: 14px;
+    border: 1px solid #e5e7f5;
+    padding: 12px 14px;
+    background: #fafbff;
+    margin-top: 10px;
+  }
+
+  .profile-right-box h4 {
+    font-size: 14px;
+    margin: 0 0 6px;
+    color: #111827;
+  }
+
+  .profile-contact-label {
+    font-size: 13px;
+    color: #4b5563;
+    margin-bottom: 2px;
+  }
+
+  .academic-update {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px dashed #cbd2ff;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-pill.ghost {
+    background: #ffffff;
+    color: #111827;
+    border: 1px solid #dfe4ff;
   }
 
   .mp-status {
@@ -340,13 +245,13 @@
       padding: 20px 16px;
     }
 
-    .profile-wrapper {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
     .profile-header {
       flex-direction: column;
       align-items: flex-start;
+    }
+
+    .profile-wrapper {
+      grid-template-columns: minmax(0, 1fr);
     }
 
     .note-row {
@@ -357,125 +262,92 @@
     .note-actions {
       align-self: flex-end;
     }
-
-    .profile-tabs {
-      width: 100%;
-      justify-content: space-between;
-    }
   }
 </style>
 
-<div class="profile-card">
-  <!-- HEADER -->
-  <div class="profile-header">
-    <div>
-      {% if current_user.avatar_filename %}
-      <img src="{{ url_for('user_avatar', user_id=current_user.id) }}" alt="Foto de perfil" class="profile-avatar">
-      {% else %}
-      <div class="profile-avatar-placeholder">
-        {{ (current_user.name or current_user.email)[0:1].upper() }}
-      </div>
-      {% endif %}
-    </div>
-    <div>
-      <h1 class="profile-name">
-        {{ current_user.name or "Usuario sin nombre" }}
-      </h1>
-      <p class="profile-email">
-        {{ current_user.email }}
-      </p>
-      <div class="profile-meta-line">
-        <span>Mi perfil en ApuntesYa</span>
-        {% if current_user.created_at %}
-        <span>Cuenta creada el {{ current_user.created_at.strftime("%d/%m/%Y") }}</span>
-        {% endif %}
-        {% if current_user.mp_user_id %}
-        <span class="profile-meta-pill">
-          <span class="profile-meta-pill-dot"></span>
-          Vendedor activo
-        </span>
+<div class="profile-shell">
+  <div class="profile-card">
+    <!-- HEADER -->
+    <div class="profile-header">
+      <div>
+        {% if current_user.avatar_filename %}
+        <img src="{{ url_for('user_avatar', user_id=current_user.id) }}" alt="Foto de perfil" class="profile-avatar">
         {% else %}
-        <span class="profile-meta-pill">
-          <span class="profile-meta-pill-dot off"></span>
-          Modo vendedor pendiente
-        </span>
+        <div class="profile-avatar">
+          {{ (current_user.name or current_user.email)[0:1].upper() }}
+        </div>
         {% endif %}
       </div>
-    </div>
-  </div>
-
-  <div class="profile-wrapper">
-    <!-- COLUMNA IZQUIERDA -->
-    <div class="profile-col">
-      <!-- TABS -->
-      <div class="profile-tabs">
-        <a href="{{ url_for('profile_purchases') }}" class="profile-tab">
-          <span class="icon">📥</span>
-          <span>Mis compras / descargas</span>
-        </a>
-        <a href="{{ url_for('profile') }}" class="profile-tab active">
-          <span class="icon">📚</span>
-          <span>Mis apuntes subidos</span>
-        </a>
-        <a href="{{ url_for('profile_balance') }}" class="profile-tab">
-          <span class="icon">💰</span>
-          <span>Mis ventas y balance</span>
-        </a>
+      <div>
+        <h1 class="profile-name">
+          {{ current_user.name or "Usuario sin nombre" }}
+        </h1>
+        <p class="profile-email">
+          {{ current_user.email }}
+        </p>
+        <div class="profile-chip">
+          Mi perfil en ApuntesYa
+          {% if current_user.mp_user_id %}
+          · Modo vendedor activo
+          {% else %}
+          · Modo vendedor pendiente
+          {% endif %}
+        </div>
       </div>
+    </div>
 
-      <!-- CONTACTO PÚBLICO VENDEDOR -->
-      <div style="margin-bottom: 14px;">
-        <p class="muted" style="margin-bottom: 6px;">
+    <!-- TABS IGUALES QUE EN "MI ACTIVIDAD" -->
+    <div class="profile-tabs">
+      <a href="{{ url_for('profile_purchases') }}" class="profile-tab">
+        📥 <span>Mis compras / descargas</span>
+      </a>
+      <a href="{{ url_for('profile') }}" class="profile-tab active">
+        📚 <span>Mis apuntes subidos</span>
+      </a>
+      <a href="{{ url_for('profile_balance') }}" class="profile-tab">
+        💰 <span>Mis ventas y balance</span>
+      </a>
+    </div>
+
+    <!-- CONTENIDO -->
+    <div class="profile-wrapper">
+      <!-- Columna izquierda: apuntes -->
+      <div class="profile-col">
+        <!-- Bloque contacto vendedor -->
+        <p class="muted" style="margin-bottom:6px;">
           Si querés que los compradores puedan contactarte por fuera de ApuntesYa
           (por ejemplo, para clases particulares o más materiales), podés dejar un link de contacto.
         </p>
 
         {% if seller_contact_url %}
-        <div class="profile-right-box" style="margin-top: 6px;">
+        <div class="profile-right-box" style="margin-top:6px;">
           <h4>Mi contacto público como vendedor</h4>
           <p class="profile-contact-label">Enlace visible en tus apuntes:</p>
-          <p style="margin: 0;">
+          <p style="margin:0;">
             <a href="{{ seller_contact_url }}" target="_blank">{{ seller_contact_label }}</a>
           </p>
-          <p class="profile-contact-help" style="margin-top: 6px;">
-            Este enlace se muestra en la ficha de tus apuntes, solo para usuarios registrados.
+          <p class="muted" style="margin-top:6px;">
+            Este enlace se muestra en la ficha de tus apuntes, para usuarios registrados.
           </p>
         </div>
         {% endif %}
-      </div>
 
-      <!-- LISTA DE APUNTES -->
-      <div class="section-title-row">
-        <h3>Mis apuntes subidos</h3>
-        {% if my_notes %}
-        <span>
-          {{ my_notes|length }} apunte{{ '' if my_notes|length == 1 else 's' }}
-        </span>
-        {% endif %}
-      </div>
-
-      {% if not my_notes %}
-      <p class="muted">
-        Todavía no subiste ningún apunte. Probá con el botón
-        <strong>“Subir apunte”</strong> del menú 😊
-      </p>
-      {% else %}
-      <div class="note-list">
+        <!-- Lista de apuntes -->
+        <h3 class="profile-section-title">Mis apuntes subidos</h3>
+        {% if not my_notes %}
+        <p class="muted">
+          Todavía no subiste ningún apunte. Probá con el botón “Subir apunte” del menú 😊
+        </p>
+        {% else %}
         {% for n in my_notes %}
         <div class="note-row">
-          <div class="note-main">
-            <div class="note-title">
-              {{ n.title }}
+          <div>
+            <div><strong>{{ n.title }}</strong></div>
+            <div class="note-meta">
+              {{ n.university }} • {{ n.faculty }} • {{ n.career }}
             </div>
             <div class="note-meta">
-              <span>{{ n.university }}</span>
-              <span>{{ n.faculty }}</span>
-              <span>{{ n.career }}</span>
-            </div>
-            <div class="note-meta" style="margin-top: 2px;">
-              <span>
-                {{ n.download_count or 0 }} descarga{{ '' if (n.download_count or 0) == 1 else 's' }}
-              </span>
+              {{ n.download_count or 0 }} descarga{{ '' if (n.download_count or 0) == 1 else 's' }}
             </div>
           </div>
           <div class="note-actions">
@@ -486,95 +358,89 @@
               ${{ '%.2f' % (n.price_cents / 100) }}
             </span>
             {% endif %}
-            <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill subtle">
-              Ver apunte
+            <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill">
+              Ver
             </a>
           </div>
         </div>
         {% endfor %}
+        {% endif %}
       </div>
-      {% endif %}
-    </div>
 
-    <!-- COLUMNA DERECHA -->
-    <div class="profile-col">
-      <!-- DATOS DE MI CUENTA -->
-      <div class="profile-right-box">
-        <h4>Datos de mi cuenta</h4>
+      <!-- Columna derecha: datos de cuenta -->
+      <div class="profile-col">
+        <div class="profile-right-box">
+          <h4>Datos de mi cuenta</h4>
 
-        <p class="profile-contact-label">Nombre completo</p>
-        <p>{{ current_user.name or 'Sin nombre cargado' }}</p>
+          <p class="profile-contact-label">Nombre completo</p>
+          <p>{{ current_user.name or 'Sin nombre cargado' }}</p>
 
-        <p class="profile-contact-label">Correo electrónico</p>
-        <p>{{ current_user.email }}</p>
+          <p class="profile-contact-label">Correo electrónico</p>
+          <p>{{ current_user.email }}</p>
 
-        <p class="profile-contact-label" style="margin-top: 4px;">Fecha de alta</p>
-        <p>{{ current_user.created_at.strftime("%d/%m/%Y") if current_user.created_at else "-" }}</p>
-
-        <p class="muted" style="margin: 4px 0 4px;">Datos académicos</p>
-        <p style="margin: 0; font-weight: 700; font-size: 16px;">
-          {{ current_user.university or 'Universidad no indicada' }}<br>
-          <span class="muted" style="font-size: 14px;">
-            {{ current_user.faculty or 'Facultad no indicada' }} •
-            {{ current_user.career or 'Carrera no indicada' }}
-          </span>
-        </p>
-
-        <div class="academic-update">
-          <p class="muted" style="margin: 0;">
-            ¿Querés cambiar tu universidad, facultad o carrera?
-            Podés actualizar tus datos académicos cuando lo necesites.
+          <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
+          <p style="margin:0;font-weight:700;font-size:16px;">
+            {{ current_user.university or 'Universidad no indicada' }}<br>
+            <span class="muted" style="font-size:14px;">
+              {{ current_user.faculty or 'Facultad no indicada' }} •
+              {{ current_user.career or 'Carrera no indicada' }}
+            </span>
           </p>
-          <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
-            Actualizar datos académicos
-          </a>
+
+          <div class="academic-update">
+            <p class="muted" style="margin:0;">
+              ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo
+              necesites.
+            </p>
+            <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
+              Actualizar datos académicos
+            </a>
+          </div>
         </div>
-      </div>
 
-      <!-- MP CONECTADO -->
-      <div class="profile-right-box">
-        <h4>Cuenta de Mercado Pago</h4>
-        {% if current_user.mp_user_id %}
-        <p class="mp-status">
-          <span class="mp-status-dot"></span>
-          <span>Cuenta de Mercado Pago conectada</span>
-        </p>
-        <p class="muted" style="margin-top: 6px;">
-          Los pagos de tus ventas se acreditan en esta cuenta.
-        </p>
-        {% else %}
-        <p class="mp-status mp-status-text-off">
-          <span class="mp-status-dot off"></span>
-          <span>Sin cuenta de Mercado Pago vinculada</span>
-        </p>
-        <p class="muted" style="margin: 6px 0 8px;">
-          Para recibir pagos por tus ventas, necesitás vincular una cuenta de Mercado Pago.
-        </p>
-        <a href="{{ url_for('connect_mp') }}" class="btn-pill">
-          Vincular Mercado Pago
-        </a>
-        {% endif %}
-      </div>
+        <div class="profile-right-box">
+          <h4>Cuenta de Mercado Pago</h4>
+          {% if current_user.mp_user_id %}
+          <p class="mp-status">
+            <span class="mp-status-dot"></span>
+            <span>Cuenta de Mercado Pago conectada</span>
+          </p>
+          <p class="muted" style="margin-top:6px;">
+            Los pagos de tus ventas se acreditan en esta cuenta.
+          </p>
+          {% else %}
+          <p class="mp-status mp-status-text-off">
+            <span class="mp-status-dot off"></span>
+            <span>Sin cuenta de Mercado Pago vinculada</span>
+          </p>
+          <p class="muted" style="margin:6px 0 8px;">
+            Para recibir pagos por tus ventas, vas a necesitar vincular una cuenta de Mercado Pago.
+          </p>
+          <a href="{{ url_for('connect_mp') }}" class="btn-pill">
+            Vincular Mercado Pago
+          </a>
+          {% endif %}
+        </div>
 
-      <!-- ESTADO VENDEDOR -->
-      <div class="profile-right-box">
-        <h4>Estado como vendedor</h4>
-        {% if current_user.mp_user_id %}
-        <p class="muted" style="margin-bottom: 4px;">
-          Tenés el modo vendedor activo ✅
-        </p>
-        <p class="muted" style="margin: 0;">
-          Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago conectada.
-        </p>
-        {% else %}
-        <p class="muted" style="margin-bottom: 4px;">
-          Todavía no tenés activo el modo vendedor.
-        </p>
-        <p class="muted" style="margin: 0;">
-          Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil.
-          Después vas a poder subir apuntes y recibir pagos.
-        </p>
-        {% endif %}
+        <div class="profile-right-box">
+          <h4>Estado como vendedor</h4>
+          {% if current_user.mp_user_id %}
+          <p class="muted" style="margin-bottom:4px;">
+            Tenés el modo vendedor activo ✅
+          </p>
+          <p class="muted">
+            Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago conectada.
+          </p>
+          {% else %}
+          <p class="muted" style="margin-bottom:4px;">
+            Todavía no tenés activo el modo vendedor.
+          </p>
+          <p class="muted">
+            Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil. Después vas a poder subir
+            apuntes y recibir pagos.
+          </p>
+          {% endif %}
+        </div>
       </div>
     </div>
   </div>

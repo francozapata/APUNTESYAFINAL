@@ -1,21 +1,123 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container"
-    style="max-width:520px;margin:40px auto;padding:24px;border:1px solid #eee;border-radius:12px;box-shadow:0 2px 6px rgba(0,0,0,0.05)">
-    <h1 style="margin-bottom:8px;">Ingresá a ApuntesYa</h1>
-    <p style="color:#555;margin-bottom:16px;">Autenticación con Google</p>
 
-    <button id="btnGoogle"
-        style="display:flex;align-items:center;gap:10px;padding:10px 16px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;font-weight:500;">
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" width="20" height="20" />
-        <span>Continuar con Google</span>
-    </button>
+<style>
+    .auth-shell {
+        min-height: calc(100vh - 120px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 16px;
+    }
 
-    <p style="font-size:12px;color:#888;margin-top:16px;">
-        Al continuar, aceptás nuestros <a href="{{ url_for('terms') }}">Términos</a>.
-    </p>
+    .auth-card {
+        width: 100%;
+        max-width: 420px;
+        background: #ffffff;
+        border-radius: 18px;
+        border: 1px solid #e5e7f5;
+        padding: 24px 22px 20px;
+        box-shadow: 0 12px 35px rgba(15, 23, 42, 0.08);
+        text-align: center;
+    }
+
+    .auth-title {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+        color: #111827;
+    }
+
+    .auth-subtitle {
+        margin: 6px 0 14px;
+        font-size: 13px;
+        color: #6b7280;
+    }
+
+    .btn-google {
+        width: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid #e5e7f5;
+        background: #ffffff;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+        color: #111827;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+        transition: 0.15s;
+    }
+
+    .btn-google:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.10);
+    }
+
+    .btn-google img {
+        width: 20px;
+        height: 20px;
+    }
+
+    .auth-legend {
+        margin-top: 16px;
+        font-size: 11px;
+        color: #9ca3af;
+    }
+
+    .auth-legend a {
+        color: #2563eb;
+        text-decoration: none;
+    }
+
+    .auth-legend a:hover {
+        text-decoration: underline;
+    }
+
+    .auth-hint {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #6b7280;
+    }
+
+    @media (max-width: 480px) {
+        .auth-card {
+            padding: 20px 16px 18px;
+        }
+
+        .auth-title {
+            font-size: 20px;
+        }
+    }
+</style>
+
+<div class="auth-shell">
+    <div class="auth-card">
+        <h1 class="auth-title">Ingresá a ApuntesYa</h1>
+        <p class="auth-subtitle">
+            Usamos Google para que el acceso sea más rápido y seguro.
+        </p>
+
+        <button id="btnGoogle" class="btn-google">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
+            <span>Continuar con Google</span>
+        </button>
+
+        <p class="auth-legend">
+            Al continuar, aceptás nuestros
+            <a href="{{ url_for('terms') }}">Términos y Condiciones</a>.
+        </p>
+
+        <p class="auth-hint">
+            Si es tu primera vez, te vamos a pedir algunos datos académicos para organizar mejor los apuntes.
+        </p>
+    </div>
 </div>
 
 <!-- ✅ Cargar SOLO acá, como módulo -->
 <script type="module" src="{{ url_for('static', filename='js/firebase_google_auth.js') }}?v=6"></script>
+
 {% endblock %}

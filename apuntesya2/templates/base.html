@@ -2,83 +2,295 @@
 <html lang="es">
 
 <head>
-  <style>
-    .nav-profile-pic {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid #fff;
-      box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
-    }
-  </style>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <title>ApuntesYa</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-  <style>
-    .nav-profile-pic {
-      display: block;
-      width: fit-content;
-      margin: 0 auto;
 
+  <style>
+    /* ---------- NAVBAR MODERNA ---------- */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 16px;
+      background: linear-gradient(90deg, #2563eb, #4f46e5);
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.35);
+    }
+
+    .nav-inner {
+      width: 100%;
+      max-width: 1120px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-logo-link {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .brand-logo-img {
+      height: 34px;
+      width: auto;
+      display: block;
+    }
+
+    .brand-logo1-img {
+      height: 22px;
+      width: auto;
+      display: block;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .nav-actions .btn {
+      border-radius: 999px;
+      padding-inline: 14px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .nav-actions .btn.secondary {
+      background: #ffffff;
+      color: #1f2937;
+      border: none;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.20);
+    }
+
+    .nav-actions .btn.secondary:hover {
+      transform: translateY(-1px);
+    }
+
+    .nav-profile-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+    }
+
+    .nav-profile-pic {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 0 2px rgba(191, 219, 254, 0.9);
+      background: #e5e7eb;
+      display: block;
+    }
+
+    /* ---------- LAYOUT PRINCIPAL ---------- */
+    .container {
+      max-width: 1120px;
+      margin: 24px auto 40px;
+      padding: 0 16px;
+    }
+
+    /* ---------- FLASH MESSAGES SENCILLOS ---------- */
+    .flash-card {
+      margin-bottom: 10px;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #ecfeff;
+      border: 1px solid #bae6fd;
+      color: #0f172a;
+      font-size: 14px;
+    }
+
+    /* ---------- FOOTER ---------- */
+    .footer {
+      margin-top: 40px;
+      padding: 16px 24px;
+      text-align: center;
+      font-size: 13px;
+      color: #6b7280;
+      border-top: 1px solid #e5e7eb;
+      background: #f9fafb;
+    }
+
+    .footer .btn.ghost {
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      margin-left: 8px;
+    }
+
+    /* ---------- CONTACT WIDGET (posiciones básicas, estilos ya definidos en CSS general) ---------- */
+    #contact-widget-button {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 48px;
+      height: 48px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      z-index: 50;
+    }
+
+    #contact-widget-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.40);
+      z-index: 40;
+    }
+
+    #contact-widget-panel {
+      position: fixed;
+      bottom: 84px;
+      right: 24px;
+      width: 320px;
+      max-width: calc(100% - 40px);
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.30);
+      padding: 14px 14px 12px;
+      z-index: 50;
+    }
+
+    .contact-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .contact-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .contact-sub {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .contact-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .contact-chip {
       display: inline-flex;
       align-items: center;
       gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid #e5e7f5;
+      background: #f9fafb;
+      font-size: 13px;
+      text-decoration: none;
+      color: #111827;
+    }
+
+    .contact-chip .ico {
+      font-size: 16px;
+    }
+
+    .contact-chip.contact-primary {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #1d4ed8;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @media (max-width: 720px) {
+      .nav-inner {
+        gap: 10px;
+      }
+
+      .nav-actions {
+        gap: 6px;
+      }
+
+      .container {
+        margin-top: 20px;
+      }
     }
   </style>
 </head>
 
 <body>
   <div class="nav">
-    <div class="brand">
-      <a href="{{ url_for('index') }}" class="brand-logo-link">
-        <img src="{{ url_for('static', filename='img/logo.png') }}" alt="ApuntesYa" class="brand-logo-img">
-      </a>
-      <a href="{{ url_for('index') }}" class="brand-logo-link">
-        <img src="{{ url_for('static', filename='img/logo1.png') }}" alt="ApuntesYa" class="brand-logo1-img">
-      </a>
+    <div class="nav-inner">
+      <div class="brand">
+        <a href="{{ url_for('index') }}" class="brand-logo-link">
+          <img src="{{ url_for('static', filename='img/logo.png') }}" alt="ApuntesYa" class="brand-logo-img">
+        </a>
+        <a href="{{ url_for('index') }}" class="brand-logo-link">
+          <img src="{{ url_for('static', filename='img/logo1.png') }}" alt="ApuntesYa" class="brand-logo1-img">
+        </a>
+      </div>
+
+      <div class="nav-actions">
+        <a href="{{ url_for('index') }}" class="btn ghost">Inicio</a>
+
+        {% if current_user.is_authenticated %}
+        <a href="{{ url_for('upload_note') }}" class="btn">Subir apunte</a>
+        <a href="{{ url_for('profile') }}" class="btn secondary">Perfil</a>
+
+        {% if current_user.is_admin %}
+        <a href="{{ url_for('admin_hub') }}" class="btn ghost">Administrar</a>
+        {% endif %}
+
+        <a href="{{ url_for('logout') }}" class="btn ghost">Salir</a>
+
+        <a href="{{ url_for('profile') }}" class="nav-profile-link" aria-label="Ver perfil">
+          <img
+            src="{% if (current_user.imagen_de_perfil or current_user.profile_image) %}{{ url_for('static', filename='uploads/profile_images/' ~ (current_user.imagen_de_perfil or current_user.profile_image)) }}{% else %}{{ url_for('static', filename='img/default_profile.png') }}{% endif %}"
+            class="nav-profile-pic" alt="Foto de perfil">
+        </a>
+        {% else %}
+        <a href="{{ url_for('login') }}" class="btn secondary">Ingresar / Registrarse</a>
+        {% endif %}
+      </div>
     </div>
-    <div class="nav-actions">
-      <a href="{{ url_for('index') }}" class="btn ghost">Inicio</a>
-
-      {% if current_user.is_authenticated %}
-      <a href="{{ url_for('upload_note') }}" class="btn">Subir apunte</a>
-      <a href="{{ url_for('profile') }}" class="btn secondary">Perfil</a>
-
-      {% if current_user.is_authenticated and current_user.is_admin %}
-      <a href="{{ url_for('admin_hub') }}" class="btn ghost">Administrar</a>
-      {% endif %}
-
-      <a href="{{ url_for('logout') }}" class="btn ghost">Salir</a>
-
-      <a href="{{ url_for('profile') }}" style="display:inline-flex;align-items:center;gap:8px">
-        <img
-          src="{% if (current_user.imagen_de_perfil or current_user.profile_image) %}{{ url_for('static', filename='uploads/profile_images/' ~ (current_user.imagen_de_perfil or current_user.profile_image)) }}{% else %}{{ url_for('static', filename='img/default_profile.png') }}{% endif %}"
-          class="nav-profile-pic" alt="Foto de perfil">
-      </a>
-      {% else %}
-      <a href="{{ url_for('login') }}" class="btn ghost">Ingresar/Registrarse</a>
-      {% endif %}
-    </div>
-
   </div>
+
   <div class="container">
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
     {% for category, message in messages %}
-    <div class="card">{{ message }}</div>
+    <div class="flash-card">{{ message }}</div>
     {% endfor %}
     {% endif %}
     {% endwith %}
+
     {% block content %}{% endblock %}
   </div>
+
   <div class="footer">
-    <div class="footer">
-      Hecho con ♥ — Comisión plataforma: {{ config.get('PLATFORM_FEE_PERCENT', 20.0) }}%
-      <a class="btn ghost" href="{{ url_for('terms') }}">Términos y condiciones</a>
-    </div>
+    Hecho con ♥ — Comisión plataforma: {{ config.get('PLATFORM_FEE_PERCENT', 20.0) }}%
+    <a class="btn ghost" href="{{ url_for('terms') }}">Términos y condiciones</a>
   </div>
 
   <!-- Contact Widget: button, overlay, and panel -->
@@ -123,13 +335,11 @@
         <span>Enviar sugerencia</span>
       </a>
       {% endif %}
-
     </div>
   </div>
 
   {# Bloque para inyectar JS específicos de cada página (p.ej. selects) #}
   {% block extra_js %}{% endblock %}
-
 
   <!-- Toast simple -->
   <div id="apy-toast"
@@ -144,18 +354,16 @@
         t.style.display = 'block';
         setTimeout(function () { t.style.display = 'none'; }, 3500);
       }
-      // lee flashes si están en DOM
-      var el = document.querySelector('.flash-success, .flash'); // depende de tu render
       // fallback por query param
       var usp = new URLSearchParams(location.search);
       if (usp.get('paid') === '1') {
         showToast('✅ Pago aprobado, ya podés descargar.');
-        // scroll al botón de descarga si existe
         var btn = document.getElementById('download-btn');
         if (btn) { btn.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
       }
     })();
   </script>
+
   <script>
     // Widget de contacto: abre/cierra el panel
     document.addEventListener('DOMContentLoaded', function () {
@@ -194,7 +402,6 @@
       overlay.addEventListener('click', closeWidget);
     });
   </script>
-
 
 </body>
 
