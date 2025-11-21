@@ -1,99 +1,199 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-    .admin-card {
+    .admin-shell {
         max-width: 980px;
         margin: 32px auto;
-        background: #fff;
-        border: 1px solid #eee;
-        border-radius: 14px;
-        padding: 20px;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, .04);
     }
 
+    .admin-card {
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid #e5e7f5;
+        padding: 22px 20px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+    }
+
+    .admin-header {
+        margin-bottom: 12px;
+    }
+
+    .admin-header h2 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 700;
+        color: #111827;
+    }
+
+    .admin-header p {
+        margin: 4px 0 0;
+        font-size: 13px;
+        color: #6b7280;
+    }
+
+    /* Tabs */
     .tabs {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 14px;
+        display: inline-flex;
+        gap: 6px;
+        margin: 12px 0 14px;
+        padding: 4px;
+        border-radius: 999px;
+        background: #f7f9ff;
+        border: 1px solid #e0e4ff;
+        flex-wrap: wrap;
     }
 
     .tab {
-        padding: 8px 14px;
-        border-radius: 10px;
-        border: 1px solid #d9d9e3;
-        background: #f7f9ff;
+        padding: 6px 14px;
+        border-radius: 999px;
+        border: none;
+        background: transparent;
         cursor: pointer;
-        font-weight: 600
+        font-weight: 600;
+        font-size: 13px;
+        color: #4b5563;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
 
     .tab.active {
         background: #4478ff;
-        color: #fff;
-        border-color: #4478ff
+        color: #ffffff;
+        box-shadow: 0 8px 18px rgba(68, 120, 255, 0.35);
     }
 
+    /* Search */
     .input {
         width: 100%;
-        padding: 12px 14px;
+        padding: 10px 12px;
         border: 1px solid #d9d9e3;
-        border-radius: 10px;
-        background: #fff;
-        font-size: 15px;
+        border-radius: 999px;
+        background: #ffffff;
+        font-size: 14px;
     }
 
-    .row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 10px 12px;
-        border: 1px solid #eee;
-        border-radius: 10px;
-        margin-top: 10px;
+    .input::placeholder {
+        color: #9ca3af;
     }
 
     .muted {
-        color: #666;
-        font-size: 13px
+        color: #6b7280;
+        font-size: 13px;
     }
 
-    .btn {
-        padding: 8px 12px;
-        border: 0;
-        border-radius: 10px;
-        background: #4478ff;
-        color: #fff;
-        font-weight: 600;
-        cursor: pointer
+    /* Cards de filas */
+    .row-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        border: 1px solid #e5e7f5;
+        background: #fafbff;
+        margin-top: 10px;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
     }
 
-    .btn.ghost {
-        background: #f3f6ff;
-        color: #335
+    .row-main {
+        min-width: 0;
+    }
+
+    .row-main strong {
+        font-size: 14px;
+        color: #111827;
+    }
+
+    .row-main .muted {
+        margin-top: 2px;
+        display: block;
     }
 
     .right {
         display: flex;
         gap: 8px;
-        align-items: center
+        align-items: center;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    /* Botones */
+    .btn {
+        padding: 7px 12px;
+        border: 0;
+        border-radius: 999px;
+        background: #4478ff;
+        color: #fff;
+        font-weight: 600;
+        font-size: 12px;
+        cursor: pointer;
+        text-decoration: none;
+        transition: 0.15s;
+        white-space: nowrap;
+    }
+
+    .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 18px rgba(68, 120, 255, 0.35);
+    }
+
+    .btn.ghost {
+        background: #f3f6ff;
+        color: #334;
+        border: 1px solid #dfe4ff;
+        box-shadow: none;
+    }
+
+    .btn.ghost:hover {
+        background: #e4e9ff;
+    }
+
+    @media (max-width: 720px) {
+        .admin-card {
+            padding: 20px 16px;
+        }
+
+        .row-card {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .right {
+            width: 100%;
+            justify-content: flex-start;
+        }
     }
 </style>
 
-<div class="admin-card">
-    <h2 style="margin:0 0 6px">Administrar AP</h2>
+<div class="admin-shell">
+    <div class="admin-card">
+        <div class="admin-header">
+            <h2>Administrar ApuntesYa</h2>
+            <p>Buscá y gestioná usuarios, apuntes y archivos desde un solo lugar.</p>
+        </div>
 
-    <div class="tabs">
-        <button id="tabUsers" class="tab active">Usuarios</button>
-        <button id="tabNotes" class="tab">Apuntes</button>
-        <button id="tabFiles" class="tab">Archivos</button><!-- NUEVO -->
+        <div class="tabs">
+            <button id="tabUsers" class="tab active">
+                👥 <span>Usuarios</span>
+            </button>
+            <button id="tabNotes" class="tab">
+                📚 <span>Apuntes</span>
+            </button>
+            <button id="tabFiles" class="tab">
+                📄 <span>Archivos</span>
+            </button>
+        </div>
+
+        <!-- BUSCADOR -->
+        <input id="searchBox" class="input" placeholder="Buscar usuario (nombre/email)">
+
+        <!-- CONTENEDORES -->
+        <div id="usersPane" style="margin-top:14px;"></div>
+        <div id="notesPane" style="display:none;margin-top:14px;"></div>
+        <div id="filesPane" style="display:none;margin-top:14px;"></div>
     </div>
-
-    <!-- BUSCADOR -->
-    <input id="searchBox" class="input" placeholder="Buscar usuario (nombre/email)">
-
-    <!-- CONTENEDORES -->
-    <div id="usersPane" style="margin-top:14px;"></div>
-    <div id="notesPane" style="display:none;margin-top:14px;"></div>
-    <div id="filesPane" style="display:none;margin-top:14px;"></div><!-- NUEVO -->
 </div>
 
 <script>
@@ -120,9 +220,11 @@
             filesPane.style.display = tab === 'files' ? '' : 'none';
 
             searchBox.placeholder =
-                tab === 'users' ? 'Buscar usuario (nombre/email)' :
-                    tab === 'notes' ? 'Buscar por título, descripción, universidad, facultad o carrera' :
-                        'Buscar archivos por título, universidad, facultad o carrera';
+                tab === 'users'
+                    ? 'Buscar usuario (nombre/email)'
+                    : tab === 'notes'
+                        ? 'Buscar por título, descripción, universidad, facultad o carrera'
+                        : 'Buscar archivos por título, universidad, facultad o carrera';
 
             load();
         }
@@ -172,30 +274,35 @@
                 if (!u.is_admin) {
                     if (u.is_blocked || !u.is_active) {
                         actionsHtml += `
-                            <button class="btn" onclick="unblockUser(${u.id})">Desbloquear</button>
-                        `;
+              <button class="btn" onclick="unblockUser(${u.id})">Desbloquear</button>
+            `;
                     } else {
                         actionsHtml += `
-                            <button class="btn ghost" onclick="blockUser(${u.id})">Bloquear</button>
-                        `;
+              <button class="btn ghost" onclick="blockUser(${u.id})">Bloquear</button>
+            `;
                     }
                     actionsHtml += `
-                        <button class="btn ghost" onclick="deleteUser(${u.id})">Eliminar</button>
-                    `;
+            <button class="btn ghost" onclick="deleteUser(${u.id})">Eliminar</button>
+          `;
                 }
 
-                // 🔍 Nuevo botón: Ver detalle del usuario
+                // 🔍 Botón: Ver detalle del usuario
                 actionsHtml += `
-                    <button class="btn ghost" onclick="window.location='/admin/user/${u.id}'">
-                        Ver detalle
-                    </button>
-                `;
+          <button class="btn ghost" onclick="window.location='/admin/user/${u.id}'">
+            Ver detalle
+          </button>
+        `;
 
                 return `
-          <div class="row">
-            <div>
-              <div><strong>${escapeHtml(u.name || '(sin nombre)')}</strong> <span class="muted">— ${escapeHtml(u.email || '')}</span></div>
-              <div class="muted">${escapeHtml(u.university || '')} • ${escapeHtml(u.faculty || '')} • ${escapeHtml(u.career || '')}</div>
+          <div class="row-card">
+            <div class="row-main">
+              <div>
+                <strong>${escapeHtml(u.name || '(sin nombre)')}</strong>
+                <span class="muted">— ${escapeHtml(u.email || '')}</span>
+              </div>
+              <span class="muted">
+                ${escapeHtml(u.university || '')} • ${escapeHtml(u.faculty || '')} • ${escapeHtml(u.career || '')}
+              </span>
             </div>
             <div class="right">
               ${actionsHtml}
@@ -206,34 +313,49 @@
         }
 
         function renderNotes(items) {
-            if (!items.length) { notesPane.innerHTML = '<div class="muted">Sin resultados.</div>'; return; }
+            if (!items.length) {
+                notesPane.innerHTML = '<div class="muted">Sin resultados.</div>';
+                return;
+            }
             notesPane.innerHTML = items.map(n => `
-          <div class="row">
+        <div class="row-card">
+          <div class="row-main">
             <div>
-              <div><strong>${escapeHtml(n.title)}</strong> <span class="muted">— ${n.seller_name ? escapeHtml(n.seller_name) : ''}</span></div>
-              <div class="muted">${escapeHtml(n.university || '')} • ${escapeHtml(n.faculty || '')} • ${escapeHtml(n.career || '')}</div>
+              <strong>${escapeHtml(n.title)}</strong>
+              <span class="muted">
+                ${n.seller_name ? escapeHtml(n.seller_name) : ''}
+              </span>
             </div>
-            <div class="right">
-              <span class="muted">$${(n.price_cents / 100).toFixed(2)}</span>
-              <button class="btn ghost" onclick="deleteNote(${n.id})">Eliminar</button>
-            </div>
+            <span class="muted">
+              ${escapeHtml(n.university || '')} • ${escapeHtml(n.faculty || '')} • ${escapeHtml(n.career || '')}
+            </span>
           </div>
-        `).join('');
+          <div class="right">
+            <span class="muted">$${(n.price_cents / 100).toFixed(2)}</span>
+            <button class="btn ghost" onclick="deleteNote(${n.id})">Eliminar</button>
+          </div>
+        </div>
+      `).join('');
         }
 
         function renderFiles(items) {
-            if (!items.length) { filesPane.innerHTML = '<div class="muted">Sin resultados.</div>'; return; }
+            if (!items.length) {
+                filesPane.innerHTML = '<div class="muted">Sin resultados.</div>';
+                return;
+            }
             filesPane.innerHTML = items.map(it => `
-          <div class="row">
-            <div>
-              <div><strong>${escapeHtml(it.title)}</strong></div>
-              <div class="muted">${escapeHtml(it.university || '')} • ${escapeHtml(it.faculty || '')} • ${escapeHtml(it.career || '')}</div>
-            </div>
-            <div class="right">
-              <a class="btn" href="${it.download_url}">Descargar PDF</a>
-            </div>
+        <div class="row-card">
+          <div class="row-main">
+            <div><strong>${escapeHtml(it.title)}</strong></div>
+            <span class="muted">
+              ${escapeHtml(it.university || '')} • ${escapeHtml(it.faculty || '')} • ${escapeHtml(it.career || '')}
+            </span>
           </div>
-        `).join('');
+          <div class="right">
+            <a class="btn" href="${it.download_url}">Descargar PDF</a>
+          </div>
+        </div>
+      `).join('');
         }
 
         // ---------- Acciones de apuntes ----------

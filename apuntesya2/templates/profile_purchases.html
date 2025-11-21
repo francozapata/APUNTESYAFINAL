@@ -2,113 +2,176 @@
 {% block content %}
 
 <style>
-  .profile-card {
+  .activity-shell {
     max-width: 980px;
     margin: 32px auto;
-    background: #fff;
-    border: 1px solid #eee;
-    border-radius: 14px;
-    padding: 20px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, .04);
   }
 
+  .activity-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e5e7f5;
+    padding: 22px 20px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #111827;
+  }
+
+  .muted {
+    color: #6b7280;
+    font-size: 13px;
+  }
+
+  /* Tabs */
   .profile-tabs {
-    display: flex;
+    display: inline-flex;
     gap: 8px;
-    margin: 12px 0 20px;
+    margin: 16px 0 20px;
+    padding: 4px;
+    border-radius: 999px;
+    background: #f7f9ff;
+    border: 1px solid #e0e4ff;
     flex-wrap: wrap;
   }
 
   .profile-tab {
-    padding: 8px 14px;
+    padding: 6px 14px;
     border-radius: 999px;
-    border: 1px solid #d9d9e3;
-    background: #f7f9ff;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     text-decoration: none;
-    color: #334;
+    background: transparent;
+    border: none;
+    color: #4b5563;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .profile-tab.active {
     background: #4478ff;
-    color: #fff;
-    border-color: #4478ff;
+    color: #ffffff;
+    box-shadow: 0 6px 14px rgba(68, 120, 255, 0.25);
   }
 
+  /* Purchases list */
   .purchase-row {
     display: flex;
     justify-content: space-between;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid #eee;
-    margin-top: 10px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: #fafbff;
+    border: 1px solid #eeeeff;
+    margin-top: 12px;
   }
 
-  .muted {
-    color: #666;
-    font-size: 13px;
+  .purchase-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: #111827;
+  }
+
+  .purchase-meta {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #6b7280;
   }
 
   .btn-pill {
-    padding: 8px 14px;
+    padding: 8px 16px;
     border-radius: 999px;
-    border: 0;
+    border: none;
     background: #4478ff;
     color: #fff;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
     cursor: pointer;
     text-decoration: none;
+    transition: 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn-pill:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 25px rgba(68, 120, 255, 0.3);
+  }
+
+  @media (max-width: 720px) {
+    .activity-card {
+      padding: 20px 16px;
+    }
+
+    .purchase-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .btn-pill {
+      align-self: flex-end;
+    }
   }
 </style>
 
-<div class="profile-card">
-  <h2 style="margin:0;">Mi actividad</h2>
-  <p class="muted" style="margin-top:4px;">Revisá tus descargas y volvé a abrir los apuntes comprados.</p>
+<div class="activity-shell">
+  <div class="activity-card">
+    <h2>Mi actividad</h2>
+    <p class="muted" style="margin-top:4px;">
+      Revisá tus descargas y volvé a abrir los apuntes que compraste o bajaste gratis.
+    </p>
 
-  <!-- Pestañas -->
-  <div class="profile-tabs">
-    <a href="{{ url_for('profile_purchases') }}" class="profile-tab active">
-      Mis compras / descargas
-    </a>
-    <a href="{{ url_for('profile') }}" class="profile-tab">
-      Mis apuntes subidos
-    </a>
-    <a href="{{ url_for('profile_balance') }}" class="profile-tab">
-      Mis ventas y balance
-    </a>
-  </div>
-
-  <h3 style="margin:8px 0 4px;">Mis compras y descargas</h3>
-
-  {% if not items %}
-  <p class="muted">Todavía no realizaste compras ni descargas gratuitas en la plataforma.</p>
-  {% else %}
-  {% for it in items %}
-  <div class="purchase-row">
-    <div>
-      <strong>{{ it.title }}</strong>
-      <div class="muted">
-        {% if it.is_free %}
-        Descargado el {{ it.created_at }} • Gratis
-        {% else %}
-        Comprado el {{ it.created_at }} • ${{ '%.2f' % (it.price_cents / 100) }}
-        {% endif %}
-      </div>
+    <!-- TABS -->
+    <div class="profile-tabs">
+      <a href="{{ url_for('profile_purchases') }}" class="profile-tab active">
+        <span>📥</span>
+        <span>Mis compras / descargas</span>
+      </a>
+      <a href="{{ url_for('profile') }}" class="profile-tab">
+        <span>📚</span>
+        <span>Mis apuntes subidos</span>
+      </a>
+      <a href="{{ url_for('profile_balance') }}" class="profile-tab">
+        <span>💰</span>
+        <span>Mis ventas y balance</span>
+      </a>
     </div>
-    <div>
+
+    <h3 style="margin:8px 0 4px; font-size:16px; font-weight:600;">
+      Mis compras y descargas
+    </h3>
+
+    {% if not items %}
+    <p class="muted">
+      Todavía no realizaste compras ni descargas gratuitas en la plataforma.
+    </p>
+    {% else %}
+    {% for it in items %}
+    <div class="purchase-row">
+      <div>
+        <div class="purchase-title">{{ it.title }}</div>
+        <div class="purchase-meta">
+          {% if it.is_free %}
+          Descargado el {{ it.created_at }} • Gratis
+          {% else %}
+          Comprado el {{ it.created_at }} •
+          ${{ '%.2f' % (it.price_cents / 100) }}
+          {% endif %}
+        </div>
+      </div>
       <a href="{{ url_for('note_detail', note_id=it.note_id) }}" class="btn-pill" target="_blank"
         rel="noopener noreferrer">
         Ver / descargar
       </a>
     </div>
-
+    {% endfor %}
+    {% endif %}
   </div>
-  {% endfor %}
-  {% endif %}
 </div>
 
 {% endblock %}

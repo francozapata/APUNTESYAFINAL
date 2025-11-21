@@ -1,120 +1,382 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card mt-3">
-  <div class="tabs as-buttons">
-    <button class="tab btn ghost {{ 'active' if (show_tab or '') != 'advanced' else '' }}" type="button"
-      onclick="toggleTab('quick')">
-      Búsqueda rápida
-    </button>
-    <button class="tab btn ghost {{ 'active' if (show_tab or '') == 'advanced' else '' }}" type="button"
-      onclick="toggleTab('advanced')">
-      Búsqueda avanzada
-    </button>
-  </div>
+<style>
+  .search-shell {
+    max-width: 980px;
+    margin: 24px auto 0;
+  }
 
-  <!-- -------- BÚSQUEDA RÁPIDA -------- -->
-  <div id="tab-quick" class="tab-panel" style="{{ '' if (show_tab or '') != 'advanced' else 'display:none' }}">
-    <form id="quick-search" action="{{ url_for('search_quick') }}" method="get" class="search-bar row gap">
-      <input class="input flex-1" type="text" name="q" value="{{ q or '' }}"
-        placeholder="Buscar por título, descripción o materia..." />
-      <button type="submit" class="btn primary">Buscar</button>
-    </form>
-  </div>
+  .search-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e5e7f5;
+    padding: 18px 18px 20px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  }
 
-  <!-- -------- BÚSQUEDA AVANZADA -------- -->
-  <div id="tab-advanced" class="tab-panel" style="{{ '' if (show_tab or '') == 'advanced' else 'display:none' }}">
-    <h2 class="mt-2">Buscar apuntes</h2>
+  .muted {
+    color: #6b7280;
+    font-size: 13px;
+  }
 
-    <form id="advanced-search" action="{{ url_for('search_advanced') }}" method="get" class="stack gap">
+  /* Tabs búsqueda */
+  .tabs.as-buttons {
+    display: inline-flex;
+    padding: 4px;
+    border-radius: 999px;
+    background: #f7f9ff;
+    border: 1px solid #e0e4ff;
+    margin-bottom: 16px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
 
-      <!-- palabra clave opcional -->
-      <div class="field">
-        <label>Palabra clave (opcional)</label>
-        <input class="input" type="text" name="q" value="{{ q or '' }}" placeholder="Ej: Álgebra, parcial, guía..." />
-      </div>
+  .tabs.as-buttons .tab.btn.ghost {
+    border-radius: 999px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b5563;
+    padding: 6px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
 
-      <!-- Selects académicos (por nombre) -->
-      <div class="grid-3 gap">
+  .tabs.as-buttons .tab.btn.ghost.active {
+    background: #4478ff;
+    color: #ffffff;
+    box-shadow: 0 8px 20px rgba(68, 120, 255, 0.3);
+  }
+
+  /* Búsqueda rápida */
+  .search-bar {
+    margin-top: 4px;
+  }
+
+  .search-bar input.input {
+    border-radius: 999px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .search-bar .btn.primary {
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-weight: 600;
+  }
+
+  /* Búsqueda avanzada */
+  #tab-advanced h2 {
+    margin: 6px 0 10px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  .field .input,
+  .field select.input {
+    font-size: 14px;
+  }
+
+  .grid-3.gap {
+    margin-top: 4px;
+  }
+
+  .actions.row.gap {
+    margin-top: 10px;
+  }
+
+  .actions .btn.primary {
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-weight: 600;
+  }
+
+  .actions .btn.ghost {
+    border-radius: 999px;
+    padding: 8px 16px;
+  }
+
+  /* Resultados */
+  .results-shell {
+    max-width: 980px;
+    margin: 16px auto 32px;
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e5e7f5;
+    padding: 18px 18px 20px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  }
+
+  .results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .results-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .results-header span {
+    font-size: 13px;
+    color: #6b7280;
+  }
+
+  .notes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    margin-top: 4px;
+  }
+
+  .note-card.card {
+    border-radius: 16px;
+    border: 1px solid #eeeeff;
+    background: #fafbff;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 150px;
+  }
+
+  .note-card__header {
+    margin-bottom: 6px;
+  }
+
+  .note-title.link-strong {
+    font-size: 15px;
+    font-weight: 700;
+    color: #111827;
+    text-decoration: none;
+  }
+
+  .note-title.link-strong:hover {
+    text-decoration: underline;
+  }
+
+  .note-card__desc {
+    font-size: 13px;
+    color: #4b5563;
+    margin: 4px 0 6px;
+  }
+
+  .note-card__meta {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .note-card__meta span+span::before {
+    content: "•";
+    margin: 0 4px;
+    color: #9ca3af;
+  }
+
+  .note-card__footer {
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .price-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #e0ecff;
+    color: #1d4ed8;
+  }
+
+  .price-tag.free {
+    background: #e8fff0;
+    color: #166534;
+  }
+
+  .btn.secondary {
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .mt-1 {
+    margin-top: 0.25rem;
+  }
+
+  .mt-2 {
+    margin-top: 0.5rem;
+  }
+
+  @media (max-width: 720px) {
+
+    .search-card,
+    .results-shell {
+      padding: 16px 14px 18px;
+    }
+
+    .note-card__footer {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>
+
+<div class="search-shell">
+  <div class="search-card card mt-3">
+    <div class="tabs as-buttons">
+      <button class="tab btn ghost {{ 'active' if (show_tab or '') != 'advanced' else '' }}" type="button"
+        onclick="toggleTab('quick')">
+        🔎 Búsqueda rápida
+      </button>
+      <button class="tab btn ghost {{ 'active' if (show_tab or '') == 'advanced' else '' }}" type="button"
+        onclick="toggleTab('advanced')">
+        🎯 Búsqueda avanzada
+      </button>
+    </div>
+
+    <!-- -------- BÚSQUEDA RÁPIDA -------- -->
+    <div id="tab-quick" class="tab-panel" style="{{ '' if (show_tab or '') != 'advanced' else 'display:none' }}">
+      <form id="quick-search" action="{{ url_for('search_quick') }}" method="get" class="search-bar row gap">
+        <input class="input flex-1" type="text" name="q" value="{{ q or '' }}"
+          placeholder="Buscar por título, descripción o materia..." />
+        <button type="submit" class="btn primary">Buscar</button>
+      </form>
+      <p class="muted mt-1">
+        Tip: podés buscar por nombre de materia, tema, parcial, final, etc.
+      </p>
+    </div>
+
+    <!-- -------- BÚSQUEDA AVANZADA -------- -->
+    <div id="tab-advanced" class="tab-panel" style="{{ '' if (show_tab or '') == 'advanced' else 'display:none' }}">
+      <h2 class="mt-2">Buscar apuntes</h2>
+
+      <form id="advanced-search" action="{{ url_for('search_advanced') }}" method="get" class="stack gap">
+        <!-- palabra clave opcional -->
         <div class="field">
-          <label>Universidad</label>
-          <select id="acad-uni" class="input">
-            <option value="" disabled selected>Elegí tu Universidad</option>
-            <option value="__other__">Otra…</option>
-          </select>
-          <input id="acad-uni-other" class="input" type="text" placeholder="Escribí tu Universidad"
-            style="display:none;">
-          <input type="hidden" name="university" id="acad-hidden-university" value="{{ (filters.university or '') }}" />
+          <label>Palabra clave (opcional)</label>
+          <input class="input" type="text" name="q" value="{{ q or '' }}" placeholder="Ej: Álgebra, parcial, guía..." />
         </div>
 
-        <div class="field">
-          <label>Facultad</label>
-          <select id="acad-fac" class="input" disabled>
-            <option value="" disabled selected>Elegí tu Facultad</option>
-            <option value="__other__">Otra…</option>
-          </select>
-          <input id="acad-fac-other" class="input" type="text" placeholder="Escribí tu Facultad" style="display:none;">
-          <input type="hidden" name="faculty" id="acad-hidden-faculty" value="{{ (filters.faculty or '') }}" />
+        <!-- Selects académicos (por nombre) -->
+        <div class="grid-3 gap">
+          <div class="field">
+            <label>Universidad</label>
+            <select id="acad-uni" class="input">
+              <option value="" disabled selected>Elegí tu Universidad</option>
+              <option value="__other__">Otra…</option>
+            </select>
+            <input id="acad-uni-other" class="input" type="text" placeholder="Escribí tu Universidad"
+              style="display:none;">
+            <input type="hidden" name="university" id="acad-hidden-university"
+              value="{{ (filters.university or '') }}" />
+          </div>
+
+          <div class="field">
+            <label>Facultad</label>
+            <select id="acad-fac" class="input" disabled>
+              <option value="" disabled selected>Elegí tu Facultad</option>
+              <option value="__other__">Otra…</option>
+            </select>
+            <input id="acad-fac-other" class="input" type="text" placeholder="Escribí tu Facultad"
+              style="display:none;">
+            <input type="hidden" name="faculty" id="acad-hidden-faculty" value="{{ (filters.faculty or '') }}" />
+          </div>
+
+          <div class="field">
+            <label>Carrera</label>
+            <select id="acad-car" class="input" disabled>
+              <option value="" disabled selected>Elegí tu Carrera</option>
+              <option value="__other__">Otra…</option>
+            </select>
+            <input id="acad-car-other" class="input" type="text" placeholder="Escribí tu Carrera" style="display:none;">
+            <input type="hidden" name="career" id="acad-hidden-career" value="{{ (filters.career or '') }}" />
+          </div>
         </div>
 
+        <!-- Tipo (opcional) -->
         <div class="field">
-          <label>Carrera</label>
-          <select id="acad-car" class="input" disabled>
-            <option value="" disabled selected>Elegí tu Carrera</option>
-            <option value="__other__">Otra…</option>
+          <label>Tipo</label>
+          <select name="type" class="input">
+            <option value="" {{ 'selected' if not filters.type }}>Todos</option>
+            <option value="free" {{ 'selected' if (filters.type or '' )=='free' }}>Gratis</option>
+            <option value="paid" {{ 'selected' if (filters.type or '' )=='paid' }}>Pago</option>
           </select>
-          <input id="acad-car-other" class="input" type="text" placeholder="Escribí tu Carrera" style="display:none;">
-          <input type="hidden" name="career" id="acad-hidden-career" value="{{ (filters.career or '') }}" />
         </div>
-      </div>
 
-      <!-- Tipo (opcional) -->
-      <div class="field">
-        <label>Tipo</label>
-        <select name="type" class="input">
-          <option value="" {{ 'selected' if not filters.type }}>Todos</option>
-          <option value="free" {{ 'selected' if (filters.type or '' )=='free' }}>Gratis</option>
-          <option value="paid" {{ 'selected' if (filters.type or '' )=='paid' }}>Pago</option>
-        </select>
-      </div>
-
-      <div class="actions mt-2 row gap">
-        <button type="submit" class="btn primary" onclick="return beforeSubmitAdvanced()">Aplicar filtros</button>
-        <a href="{{ url_for('index') }}" class="btn ghost">Limpiar</a>
-      </div>
-    </form>
+        <div class="actions mt-2 row gap">
+          <button type="submit" class="btn primary" onclick="return beforeSubmitAdvanced()">
+            Aplicar filtros
+          </button>
+          <a href="{{ url_for('index') }}" class="btn ghost">Limpiar</a>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
 <!-- ===========================
      Resultados (tarjetas)
      =========================== -->
-<div class="card mt-3">
+<div class="results-shell card mt-3">
   {% if notes and notes|length > 0 %}
-  <p class="mt-1">{{ notes|length }} resultado(s)</p>
+  <div class="results-header">
+    <h3>Resultados</h3>
+    <span>{{ notes|length }} resultado(s)</span>
+  </div>
 
   <div class="notes-grid">
     {% for n in notes %}
     <article class="note-card card">
       <header class="note-card__header">
-        <a href="{{ url_for('note_detail', note_id=n.id) }}" class="note-title link-strong">{{ n.title }}</a>
+        <a href="{{ url_for('note_detail', note_id=n.id) }}" class="note-title link-strong">
+          {{ n.title }}
+        </a>
       </header>
 
       {% if n.description %}
-      <p class="note-card__desc">{{ n.description }}</p>
+      <p class="note-card__desc">
+        {{ n.description }}
+      </p>
       {% endif %}
 
-      <div class="note-card__meta">{{ n.university }} • {{ n.faculty }} • {{ n.career }}</div>
+      <div class="note-card__meta">
+        <span>{{ n.university }}</span>
+        <span>{{ n.faculty }}</span>
+        <span>{{ n.career }}</span>
+      </div>
 
       <footer class="note-card__footer">
-        <span class="price-tag">
+        <span class="price-tag {% if (n.price_cents or 0) == 0 %}free{% endif %}">
           {% if (n.price_cents or 0) > 0 %}
           ${{ '%.2f' % gross_price(n.price_cents) }}
           {% else %}
           Gratis
           {% endif %}
         </span>
-        <a class="btn secondary" href="{{ url_for('note_detail', note_id=n.id) }}">Ver detalle</a>
+        <a class="btn secondary" href="{{ url_for('note_detail', note_id=n.id) }}">
+          Ver detalle
+        </a>
       </footer>
     </article>
     {% endfor %}
@@ -158,9 +420,12 @@
           const text = sel && sel.options && sel.selectedIndex >= 0
             ? sel.options[sel.selectedIndex].text
             : '';
-          if (level === 'university') document.getElementById('acad-hidden-university').value = value ? text : '';
-          if (level === 'faculty') document.getElementById('acad-hidden-faculty').value = value ? text : '';
-          if (level === 'career') document.getElementById('acad-hidden-career').value = value ? text : '';
+          if (level === 'university')
+            document.getElementById('acad-hidden-university').value = value ? text : '';
+          if (level === 'faculty')
+            document.getElementById('acad-hidden-faculty').value = value ? text : '';
+          if (level === 'career')
+            document.getElementById('acad-hidden-career').value = value ? text : '';
         }
       });
     } catch (e) {

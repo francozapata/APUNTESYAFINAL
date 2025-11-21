@@ -1,111 +1,212 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-    .admin-card {
+    .admin-shell {
         max-width: 980px;
         margin: 32px auto;
-        background: #fff;
-        border: 1px solid #eee;
-        border-radius: 14px;
-        padding: 20px;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, .04);
+    }
+
+    .admin-card {
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid #e5e7f5;
+        padding: 22px 20px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+    }
+
+    .admin-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 8px;
+    }
+
+    .admin-title {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 700;
+        color: #111827;
+    }
+
+    .admin-sub {
+        margin: 2px 0 0;
+        font-size: 13px;
+        color: #6b7280;
+    }
+
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        border: 1px solid transparent;
+    }
+
+    .status-pill.active {
+        background: #ecfdf3;
+        border-color: #bbf7d0;
+        color: #166534;
+    }
+
+    .status-pill.blocked {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #b91c1c;
+    }
+
+    .status-pill.admin {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+        color: #1d4ed8;
     }
 
     .muted {
-        color: #666;
+        color: #6b7280;
+        font-size: 13px;
+    }
+
+    .muted-small {
+        color: #9ca3af;
+        font-size: 12px;
+    }
+
+    .admin-basic {
+        margin-top: 6px;
         font-size: 14px;
+        line-height: 1.5;
+    }
+
+    .admin-basic strong {
+        font-weight: 600;
+        color: #111827;
+    }
+
+    .admin-basic .muted {
+        display: block;
+        margin-top: 2px;
     }
 
     .stat-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 12px;
-        margin-top: 14px;
+        margin-top: 18px;
     }
 
     .stat-card {
         padding: 10px 12px;
-        border-radius: 10px;
-        border: 1px solid #eee;
-        background: #fafbff;
+        border-radius: 14px;
+        border: 1px solid #e5e7f5;
+        background: #f7f9ff;
     }
 
     .stat-label {
-        font-size: 13px;
-        color: #777;
+        font-size: 12px;
+        color: #6b7280;
+        margin-bottom: 2px;
     }
 
     .stat-value {
         font-size: 18px;
         font-weight: 700;
         margin-top: 2px;
+        color: #111827;
     }
 
     .stat-extra {
-        font-size: 13px;
-        color: #666;
+        font-size: 12px;
+        color: #6b7280;
         margin-top: 2px;
     }
 
     .summary-box {
-        margin-top: 18px;
+        margin-top: 20px;
         padding: 12px 14px;
-        border-radius: 10px;
-        border: 1px dashed #d0d4ff;
-        background: #f6f7ff;
-        font-size: 14px;
-        line-height: 1.5;
+        border-radius: 12px;
+        border: 1px dashed #cbd2ff;
+        background: #f7f9ff;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #111827;
+    }
+
+    .summary-box strong {
+        font-weight: 600;
+    }
+
+    @media (max-width: 720px) {
+        .admin-card {
+            padding: 20px 16px;
+        }
+
+        .admin-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
     }
 </style>
 
-<div class="admin-card" id="userDetailRoot" data-user-id="{{ user_id|int }}">
-    <h2 style="margin:0 0 6px;">Detalle de usuario #{{ user_id }}</h2>
-    <p class="muted" id="userBasic">Cargando datos…</p>
-
-    <div class="stat-grid" id="userStats" style="display:none;">
-        <!-- Apuntes subidos -->
-        <div class="stat-card">
-            <div class="stat-label">Apuntes subidos</div>
-            <div class="stat-value" id="st-notes-uploaded">-</div>
-            <div class="stat-extra" id="st-notes-extra"></div>
+<div class="admin-shell">
+    <div class="admin-card" id="userDetailRoot" data-user-id="{{ user_id|int }}">
+        <div class="admin-header">
+            <div>
+                <h2 class="admin-title">Detalle de usuario #{{ user_id }}</h2>
+                <p class="admin-sub" id="userBasic">Cargando datos…</p>
+            </div>
+            <div id="userStatusPills">
+                <!-- Se rellenan desde JS usando el estado del usuario -->
+            </div>
         </div>
 
-        <!-- Compras pagas -->
-        <div class="stat-card">
-            <div class="stat-label">Compras pagas</div>
-            <div class="stat-value" id="st-paid-count">-</div>
-            <div class="stat-extra" id="st-paid-amount"></div>
+        <div class="stat-grid" id="userStats" style="display:none;">
+            <!-- Apuntes subidos -->
+            <div class="stat-card">
+                <div class="stat-label">Apuntes subidos</div>
+                <div class="stat-value" id="st-notes-uploaded">-</div>
+                <div class="stat-extra" id="st-notes-extra"></div>
+            </div>
+
+            <!-- Compras pagas -->
+            <div class="stat-card">
+                <div class="stat-label">Compras pagas</div>
+                <div class="stat-value" id="st-paid-count">-</div>
+                <div class="stat-extra" id="st-paid-amount"></div>
+            </div>
+
+            <!-- Descargas gratuitas -->
+            <div class="stat-card">
+                <div class="stat-label">Descargas gratuitas</div>
+                <div class="stat-value" id="st-free-count">-</div>
+            </div>
+
+            <!-- Ventas como vendedor -->
+            <div class="stat-card">
+                <div class="stat-label">Ventas realizadas</div>
+                <div class="stat-value" id="st-sold-count">-</div>
+                <div class="stat-extra" id="st-sold-amount"></div>
+            </div>
+
+            <!-- Ganancia neta del usuario -->
+            <div class="stat-card">
+                <div class="stat-label">Ganancia recibida (neto)</div>
+                <div class="stat-value" id="st-net-seller">$0.00</div>
+                <div class="stat-extra" id="st-net-extra"></div>
+            </div>
+
+            <!-- Ingresos ApuntesYa por este usuario -->
+            <div class="stat-card">
+                <div class="stat-label">Ingreso ApuntesYa (ventas de este usuario)</div>
+                <div class="stat-value" id="st-apy-income">$0.00</div>
+                <div class="stat-extra" id="st-apy-extra"></div>
+            </div>
         </div>
 
-        <!-- Descargas gratuitas -->
-        <div class="stat-card">
-            <div class="stat-label">Descargas gratuitas</div>
-            <div class="stat-value" id="st-free-count">-</div>
-        </div>
-
-        <!-- Ventas como vendedor -->
-        <div class="stat-card">
-            <div class="stat-label">Ventas realizadas</div>
-            <div class="stat-value" id="st-sold-count">-</div>
-            <div class="stat-extra" id="st-sold-amount"></div>
-        </div>
-
-        <!-- Ganancia neta del usuario -->
-        <div class="stat-card">
-            <div class="stat-label">Ganancia recibida (neto)</div>
-            <div class="stat-value" id="st-net-seller">$0.00</div>
-            <div class="stat-extra" id="st-net-extra"></div>
-        </div>
-
-        <!-- Ingresos ApuntesYa por este usuario -->
-        <div class="stat-card">
-            <div class="stat-label">Ingreso ApuntesYa (ventas de este usuario)</div>
-            <div class="stat-value" id="st-apy-income">$0.00</div>
-            <div class="stat-extra" id="st-apy-extra"></div>
-        </div>
+        <div id="userSummary" class="summary-box" style="display:none;"></div>
     </div>
-
-    <div id="userSummary" class="summary-box" style="display:none;"></div>
 </div>
 
 <script>
@@ -130,11 +231,36 @@
             if (u.is_blocked || !u.is_active) statusParts.push('Bloqueado');
             if (!statusParts.length) statusParts.push('Activo');
 
-            // Cabecera básica
+            // Cabecera básica (nombre, mail, datos académicos, fecha/estado)
             document.getElementById('userBasic').innerHTML =
-                `<strong>${escapeHtml(u.name || '(sin nombre)')}</strong> — ${escapeHtml(u.email || '')}<br>` +
-                `<span class="muted">${escapeHtml(u.university || '')} • ${escapeHtml(u.faculty || '')} • ${escapeHtml(u.career || '')}</span><br>` +
-                `<span class="muted">Creado: ${created} — Estado: ${statusParts.join(', ')}</span>`;
+                `<div class="admin-basic">
+          <strong>${escapeHtml(u.name || '(sin nombre)')}</strong> — ${escapeHtml(u.email || '')}<br>
+          <span class="muted">${escapeHtml(u.university || '')} • ${escapeHtml(u.faculty || '')} • ${escapeHtml(u.career || '')}</span><br>
+          <span class="muted-small">Creado: ${created} — Estado: ${statusParts.join(', ')}</span>
+        </div>`;
+
+            // Pills de estado visuales
+            const pillsRoot = document.getElementById('userStatusPills');
+            if (pillsRoot) {
+                pillsRoot.innerHTML = '';
+                if (u.is_admin) {
+                    const pill = document.createElement('span');
+                    pill.className = 'status-pill admin';
+                    pill.textContent = 'Admin';
+                    pillsRoot.appendChild(pill);
+                }
+                if (u.is_blocked || !u.is_active) {
+                    const pill = document.createElement('span');
+                    pill.className = 'status-pill blocked';
+                    pill.textContent = 'Bloqueado';
+                    pillsRoot.appendChild(pill);
+                } else {
+                    const pill = document.createElement('span');
+                    pill.className = 'status-pill active';
+                    pill.textContent = 'Activo';
+                    pillsRoot.appendChild(pill);
+                }
+            }
 
             document.getElementById('userStats').style.display = '';
             document.getElementById('userSummary').style.display = '';
@@ -143,7 +269,9 @@
             const notesUploaded = st.notes_uploaded_count ?? 0;
             document.getElementById('st-notes-uploaded').innerText = notesUploaded;
             document.getElementById('st-notes-extra').innerText =
-                notesUploaded > 0 ? 'Apuntes activos subidos a la plataforma.' : 'Todavía no subió apuntes.';
+                notesUploaded > 0
+                    ? 'Apuntes activos subidos a la plataforma.'
+                    : 'Todavía no subió apuntes.';
 
             // Compras pagas
             const paidCount = st.paid_purchases_count ?? 0;
@@ -189,8 +317,7 @@
             const summaryLines = [];
 
             summaryLines.push(
-                `• Movió en total $${totalMovido.toFixed(2)} en la plataforma `
-                + `(compras pagas + ventas brutas).`
+                `• Movió en total $${totalMovido.toFixed(2)} en la plataforma (compras pagas + ventas brutas).`
             );
 
             summaryLines.push(
@@ -198,8 +325,7 @@
             );
 
             summaryLines.push(
-                `• Vendió $${soldGross.toFixed(2)} en apuntes propios y recibió `
-                + `$${net.toFixed(2)} netos.`
+                `• Vendió $${soldGross.toFixed(2)} en apuntes propios y recibió $${net.toFixed(2)} netos.`
             );
 
             summaryLines.push(

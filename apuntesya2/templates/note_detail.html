@@ -2,14 +2,66 @@
 {% block content %}
 
 <style>
-  .note-card {
-    max-width: 900px;
+  .note-shell {
+    max-width: 980px;
     margin: 32px auto;
-    background: #fff;
-    border-radius: 14px;
-    border: 1px solid #eee;
-    padding: 24px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+  }
+
+  .note-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e5e7f5;
+    padding: 22px 20px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  }
+
+  .note-header {
+    margin-bottom: 16px;
+  }
+
+  .note-title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #111827;
+  }
+
+  .note-meta-top {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 13px;
+    color: #6b7280;
+  }
+
+  .note-meta-top span+span::before {
+    content: "•";
+    margin: 0 4px;
+    color: #9ca3af;
+  }
+
+  .rating-summary {
+    margin-top: 8px;
+    font-size: 14px;
+    color: #4b5563;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .rating-summary strong {
+    font-weight: 700;
+  }
+
+  .rating-pill {
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: #f7f9ff;
+    border: 1px solid #e0e4ff;
+    font-size: 12px;
+    color: #4b5563;
   }
 
   .muted {
@@ -17,44 +69,168 @@
     font-size: 14px;
   }
 
+  .note-layout {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.3fr);
+    gap: 24px;
+  }
+
+  .note-main {
+    min-width: 0;
+  }
+
+  .note-description {
+    font-size: 14px;
+    color: #111827;
+    line-height: 1.5;
+  }
+
+  .note-meta-detail {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #6b7280;
+  }
+
+  .note-meta-detail span+span::before {
+    content: "•";
+    margin: 0 4px;
+    color: #9ca3af;
+  }
+
+  .note-side {
+    min-width: 0;
+  }
+
+  .note-side-box {
+    border-radius: 14px;
+    border: 1px solid #eeeeff;
+    background: #fafbff;
+    padding: 14px 14px 12px;
+  }
+
+  .note-price-label {
+    font-size: 13px;
+    color: #6b7280;
+    margin-bottom: 2px;
+  }
+
+  .note-price-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+  }
+
+  .note-price-free {
+    font-size: 18px;
+    font-weight: 700;
+    color: #166534;
+  }
+
+  .note-cta {
+    margin-top: 12px;
+  }
+
   .btn-primary {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     padding: 10px 18px;
     background: #4478ff;
     color: #fff;
-    border-radius: 12px;
+    border-radius: 999px;
     border: none;
     text-decoration: none;
     font-weight: 600;
     cursor: pointer;
+    font-size: 14px;
+    transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.1s ease;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 25px rgba(68, 120, 255, 0.35);
   }
 
   .btn-primary.ghost {
     background: #f3f6ff;
     color: #335;
+    box-shadow: none;
   }
 
-  .note-meta {
-    color: #555;
-    font-size: 14px;
-    margin-top: 4px;
+  .note-help-text {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #6b7280;
   }
 
+  .note-contact {
+    margin-top: 12px;
+    font-size: 13px;
+  }
+
+  .note-contact a {
+    color: #4460ff;
+    font-weight: 500;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+  }
+
+  .note-side-small {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed #d4d8ff;
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  /* Reseñas */
   .review-block {
-    border-top: 1px solid #eee;
+    border-top: 1px solid #e5e7f0;
     margin-top: 24px;
     padding-top: 18px;
   }
 
-  .review-item {
-    border-bottom: 1px solid #f3f3f3;
-    padding: 10px 0;
+  .review-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
   }
 
-  .review-stars {
-    color: #ffb400;
-    font-size: 15px;
-    margin-bottom: 2px;
+  .review-header-row h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .review-header-row span {
+    font-size: 12px;
+    color: #9ca3af;
+  }
+
+  .review-form {
+    margin-bottom: 18px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #f7f9ff;
+    border: 1px solid #e0e4ff;
+  }
+
+  .review-form label {
+    font-size: 13px;
+  }
+
+  select.review-rating {
+    padding: 6px 8px;
+    border-radius: 10px;
+    border: 1px solid #d9d9e3;
+    font-size: 13px;
+    margin-top: 4px;
   }
 
   textarea.review-text {
@@ -64,129 +240,224 @@
     padding: 8px 10px;
     resize: vertical;
     min-height: 70px;
+    font-size: 13px;
+    margin-top: 4px;
   }
 
-  select.review-rating {
-    padding: 6px 8px;
-    border-radius: 10px;
-    border: 1px solid #d9d9e3;
+  .review-item {
+    border-bottom: 1px solid #f3f3f7;
+    padding: 10px 0;
+  }
+
+  .review-item:last-child {
+    border-bottom: none;
+  }
+
+  .review-stars {
+    color: #ffb400;
+    font-size: 15px;
+    margin-bottom: 2px;
+  }
+
+  .review-author {
+    margin: 0;
+    font-weight: 600;
+    font-size: 13px;
+    color: #111827;
+  }
+
+  .review-comment {
+    margin: 3px 0 4px;
+    font-size: 13px;
+  }
+
+  .review-date {
+    font-size: 12px;
+    margin: 0;
+    color: #9ca3af;
+  }
+
+  @media (max-width: 880px) {
+    .note-card {
+      padding: 20px 16px;
+    }
+
+    .note-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .note-side {
+      order: -1;
+    }
   }
 </style>
 
-<div class="note-card">
-  <h2 style="margin-top:0;">{{ note.title }}</h2>
+<div class="note-shell">
+  <div class="note-card">
+    <!-- HEADER -->
+    <div class="note-header">
+      <h2 class="note-title">{{ note.title }}</h2>
 
-  {% if not reviews %}
-  <p class="muted">
-    Este apunte todavía no tiene reseñas.
-  </p>
-  {% else %}
-  {% if avg_rating %}
-  <p class="muted" style="margin:4px 0 10px;">
-    ⭐ <strong>{{ avg_rating }}</strong>/5 &nbsp;
-    ({{ reviews|length }} reseñas)
-  </p>
-  {% endif %}
-  {% endif %}
-
-  {% if note.description %}
-  <p>{{ note.description }}</p>
-  {% endif %}
-
-  <p class="note-meta">
-    {{ note.university }} • {{ note.faculty }} • {{ note.career }}
-  </p>
-
-  {# ---------- PRECIO ---------- #}
-  {% if note.price_cents == 0 %}
-  <p style="margin-top:12px;">
-    <strong>Precio:</strong> Gratis
-  </p>
-  {% else %}
-  <p style="margin-top:12px;">
-    <strong>Precio:</strong>
-    ${{ '%.2f' % buyer_price }}
-  </p>
-  {% endif %}
-
-  {# ---------- ACCIÓN PRINCIPAL: COMPRAR / DESCARGAR ---------- #}
-  <div style="margin-top:12px;">
-    {% if can_download %}
-    <a href="{{ url_for('download_note', note_id=note.id) }}" class="btn-primary" target="_blank"
-      rel="noopener noreferrer">
-      Descargar PDF
-    </a>
-    {% elif note.price_cents > 0 %}
-
-    <a href="{{ url_for('buy_note', note_id=note.id) }}" class="btn-primary">
-      Comprar
-    </a>
-    {% endif %}
-  </div>
-
-  {# ---------- CONTACTO DEL VENDEDOR ---------- #}
-  {% if seller_contact_url %}
-  <p class="muted" style="margin-top:14px;">
-    ¿Tenés dudas sobre el apunte?
-    <a href="{{ seller_contact_url }}" target="_blank">
-      {{ seller_contact_label }}
-    </a>
-  </p>
-  {% endif %}
-
-  {# ---------- RESEÑAS ---------- #}
-  <div class="review-block" id="reviews">
-    <h3 style="margin-top:0;">Reseñas</h3>
-
-    {% if can_review %}
-    <form method="post" action="{{ url_for('submit_review', note_id=note.id) }}" style="margin-bottom:18px;">
-
-      <label class="muted">Tu calificación:</label><br>
-      <select name="rating" required class="review-rating">
-        <option value="">Elegir…</option>
-        <option value="5">5 ⭐</option>
-        <option value="4">4 ⭐</option>
-        <option value="3">3 ⭐</option>
-        <option value="2">2 ⭐</option>
-        <option value="1">1 ⭐</option>
-      </select>
-
-      <br>
-      <label class="muted" style="margin-top:8px;display:block;">
-        Comentario (opcional):
-      </label>
-      <textarea name="comment" class="review-text" placeholder="Contá brevemente qué te pareció el apunte…"></textarea>
-
-      <button type="submit" class="btn-primary" style="margin-top:8px;">
-        Enviar reseña
-      </button>
-    </form>
-    {% elif already_reviewed %}
-    <p class="muted" style="margin-bottom:10px;">
-      Ya enviaste una reseña para este apunte ✅
-    </p>
-    {% endif %}
-
-    {% if reviews %}
-    {% for r, buyer_name in reviews %}
-    <div class="review-item">
-      <div class="review-stars">
-        {% for i in range(r.rating) %}⭐{% endfor %}
+      <div class="note-meta-top">
+        <span>{{ note.university }}</span>
+        <span>{{ note.faculty }}</span>
+        <span>{{ note.career }}</span>
       </div>
-      <p style="margin:0;font-weight:600;">{{ buyer_name }}</p>
-      {% if r.comment %}
-      <p style="margin:3px 0 4px;">{{ r.comment }}</p>
-      {% endif %}
-      <p class="muted" style="font-size:12px;margin:0;">
-        {{ r.created_at.strftime('%d/%m/%Y') }}
+
+      {% if avg_rating and reviews %}
+      <div class="rating-summary">
+        <span>⭐ <strong>{{ avg_rating }}</strong>/5</span>
+        <span class="rating-pill">
+          {{ reviews|length }} reseña{{ '' if reviews|length == 1 else 's' }}
+        </span>
+      </div>
+      {% else %}
+      <p class="muted" style="margin-top: 8px;">
+        Este apunte todavía no tiene reseñas.
       </p>
+      {% endif %}
     </div>
-    {% endfor %}
-    {% else %}
-    <p class="muted" style="margin-top:4px;">
-      Todavía no hay reseñas. Sé el primero en opinar 🙌
-    </p>
-    {% endif %}
+
+    <!-- LAYOUT DOS COLUMNAS -->
+    <div class="note-layout">
+      <!-- COLUMNA IZQUIERDA: descripción y detalle -->
+      <div class="note-main">
+        {% if note.description %}
+        <p class="note-description">
+          {{ note.description }}
+        </p>
+        {% else %}
+        <p class="muted">
+          El autor no agregó una descripción detallada para este apunte.
+        </p>
+        {% endif %}
+
+        <div class="note-meta-detail">
+          <span>Formato: PDF</span>
+          <span>Descargas: {{ note.download_count or 0 }}</span>
+        </div>
+
+        {# Bloque de reseñas #}
+        <div class="review-block" id="reviews">
+          <div class="review-header-row">
+            <h3>Reseñas</h3>
+            {% if reviews %}
+            <span>
+              {{ reviews|length }} comentario{{ '' if reviews|length == 1 else 's' }}
+            </span>
+            {% endif %}
+          </div>
+
+          {% if can_review %}
+          <form method="post" action="{{ url_for('submit_review', note_id=note.id) }}" class="review-form">
+            <label class="muted">Tu calificación:</label><br>
+            <select name="rating" required class="review-rating">
+              <option value="">Elegir…</option>
+              <option value="5">5 ⭐</option>
+              <option value="4">4 ⭐</option>
+              <option value="3">3 ⭐</option>
+              <option value="2">2 ⭐</option>
+              <option value="1">1 ⭐</option>
+            </select>
+
+            <label class="muted" style="margin-top:8px;display:block;">
+              Comentario (opcional):
+            </label>
+            <textarea name="comment" class="review-text"
+              placeholder="Contá brevemente qué te pareció el apunte…"></textarea>
+
+            <button type="submit" class="btn-primary" style="margin-top:8px;">
+              Enviar reseña
+            </button>
+          </form>
+          {% elif already_reviewed %}
+          <p class="muted" style="margin-bottom:10px;">
+            Ya enviaste una reseña para este apunte ✅
+          </p>
+          {% endif %}
+
+          {% if reviews %}
+          {% for r, buyer_name in reviews %}
+          <div class="review-item">
+            <div class="review-stars">
+              {% for i in range(r.rating) %}⭐{% endfor %}
+            </div>
+            <p class="review-author">{{ buyer_name }}</p>
+            {% if r.comment %}
+            <p class="review-comment">{{ r.comment }}</p>
+            {% endif %}
+            <p class="review-date">
+              {{ r.created_at.strftime('%d/%m/%Y') }}
+            </p>
+          </div>
+          {% endfor %}
+          {% else %}
+          <p class="muted" style="margin-top:4px;">
+            Todavía no hay reseñas. Sé el primero en opinar 🙌
+          </p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- COLUMNA DERECHA: precio, acción y contacto -->
+      <div class="note-side">
+        <div class="note-side-box">
+          {# ---------- PRECIO ---------- #}
+          {% if note.price_cents == 0 %}
+          <p class="note-price-label">Precio</p>
+          <p class="note-price-free">Gratis</p>
+          {% else %}
+          <p class="note-price-label">Precio para comprar este apunte</p>
+          <p class="note-price-value">
+            ${{ '%.2f' % buyer_price }}
+          </p>
+          {% endif %}
+
+          {# ---------- ACCIÓN PRINCIPAL: COMPRAR / DESCARGAR ---------- #}
+          <div class="note-cta">
+            {% if can_download %}
+            <a href="{{ url_for('download_note', note_id=note.id) }}" class="btn-primary" target="_blank"
+              rel="noopener noreferrer">
+              Descargar PDF
+            </a>
+            <p class="note-help-text">
+              Ya tenés acceso a este apunte. Si no se abre automáticamente, podés descargarlo desde este botón.
+            </p>
+            {% elif note.price_cents > 0 %}
+            <a href="{{ url_for('buy_note', note_id=note.id) }}" class="btn-primary">
+              Comprar apunte
+            </a>
+            <p class="note-help-text">
+              Una vez completado el pago, vas a poder descargar el PDF desde esta misma página y desde tu perfil.
+            </p>
+            {% else %}
+            {# Apunte gratis pero sin permiso de descarga (caso raro) #}
+            <p class="note-help-text">
+              Iniciá sesión para poder descargar este apunte gratuito.
+            </p>
+            {% endif %}
+          </div>
+
+          {# ---------- CONTACTO DEL VENDEDOR ---------- #}
+          {% if seller_contact_url %}
+          <div class="note-contact">
+            <p class="muted" style="margin:0 0 4px;">
+              ¿Tenés dudas sobre el apunte?
+            </p>
+            <p style="margin:0;">
+              <a href="{{ seller_contact_url }}" target="_blank">
+                {{ seller_contact_label }}
+              </a>
+            </p>
+          </div>
+          {% endif %}
+
+          <div class="note-side-small">
+            Solo los usuarios registrados pueden comprar y dejar reseñas sobre los apuntes.
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 

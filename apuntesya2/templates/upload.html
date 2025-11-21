@@ -1,199 +1,402 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card" style="max-width:1200px;margin:32px auto">
-  <h2>Subir apunte (PDF)</h2>
-  <form method="post" enctype="multipart/form-data" id="uploadForm">
-    <label>Título</label><input class="input" name="title" required>
-    <label>Descripción</label><input class="input" name="description" required>
 
-    {% set prefix = 'up' %}
-    {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
-    {% include 'components/academics_selects.html' %}
+<style>
+  .upload-shell {
+    max-width: 980px;
+    margin: 32px auto;
+  }
 
-    <label style="margin-top:14px">Precio (ARS). Dejar en blanco para gratis</label>
-    <input class="input" name="price" id="price" id="price" type="number" min="0" step="0.01">
+  .upload-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e5e7f5;
+    padding: 22px 20px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  }
 
-    <div class="card" style="margin-top:16px">
-      <h2 class="explicacion-titulo">💡 Cómo Calculamos tu Ganancia</h2>
+  .upload-header {
+    margin-bottom: 16px;
+  }
 
-      <p class="explicacion-intro">En ApuntesYa, tú decides el precio que quieres recibir, y nosotros nos encargamos de
-        agregar las comisiones al precio final del comprador.</p>
+  .upload-header h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #111827;
+  }
 
-      <ol class="pasos-calculo">
-        <li class="paso-item">
-          <strong>Fijas tu Ganancia (Precio Base):</strong> Ingresas el monto que deseas recibir por la venta de tu
-          apunte.
-        </li>
-        <li class="paso-item">
-          <strong>Agregamos la Comisión Total (20%):</strong> Sumamos una Comisión Total del 20% al precio de venta
-          que
-          verá el comprador.
-          <ul class="desglose-comision">
-            <li><strong>8%</strong> (aprox.) va para <strong>Mercado Pago</strong> (costo de procesamiento).</li>
-            <li><strong>12%</strong> va para <strong>ApuntesYa</strong> (nuestra ganancia por la plataforma).</li>
-          </ul>
-        </li>
-        <li class="paso-item">
-          <strong>Recibís lo que pediste:</strong> Al venderse el apunte, tú recibís tu <strong>Precio Base</strong>
-          completo, antes de la retención de IIBB.
-        </li>
-      </ol>
-      <hr>
-      <aside class="disclaimer-iibb">
-        <h3 class="disclaimer-titulo">⚠️ Nota Importante sobre Impuestos</h3>
-        <p class="disclaimer-texto">
-          Tu <strong>Precio Base</strong> estará sujeto a la **Retención de Ingresos Brutos (IIBB)**, un impuesto
-          provincial
-          obligatorio. Esta deducción la aplica directamente el procesador de pagos y varía según tu situación fiscal.
-          Te
-          recomendamos consultar con tu contador.
-        </p>
-      </aside>
+  .upload-header p {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: #6b7280;
+  }
 
-      <p class="mt-2 text-sm">
-        ¿Dudas con Mercado Pago?
-        <a href="{{ url_for('help_mp') }}" class="text-blue-600 hover:underline">Ver instructivo</a>.
+  .upload-grid {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.3fr);
+    gap: 24px;
+  }
+
+  .upload-main,
+  .upload-side {
+    min-width: 0;
+  }
+
+  .upload-form-group {
+    margin-bottom: 12px;
+  }
+
+  .upload-form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+  }
+
+  .upload-form-group .input {
+    width: 100%;
+  }
+
+  .upload-hint {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+
+  .upload-side-box {
+    border-radius: 14px;
+    border: 1px solid #eeeeff;
+    background: #fafbff;
+    padding: 14px 14px 12px;
+    margin-bottom: 12px;
+  }
+
+  .upload-side-box h2,
+  .upload-side-box h3 {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .upload-side-box p {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: #4b5563;
+  }
+
+  .explicacion-titulo {
+    font-size: 15px;
+    margin: 0 0 6px;
+  }
+
+  .explicacion-intro {
+    margin: 0 0 8px;
+    font-size: 13px;
+  }
+
+  .pasos-calculo {
+    padding-left: 18px;
+    margin: 0 0 10px;
+    font-size: 13px;
+  }
+
+  .paso-item {
+    margin-bottom: 6px;
+  }
+
+  .desglose-comision {
+    margin: 4px 0 0;
+    padding-left: 16px;
+    font-size: 12px;
+  }
+
+  .disclaimer-iibb {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #fef3c7;
+    border: 1px solid #fde68a;
+  }
+
+  .disclaimer-titulo {
+    margin: 0 0 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #92400e;
+  }
+
+  .disclaimer-texto {
+    margin: 0;
+    font-size: 12px;
+    color: #78350f;
+  }
+
+  .upload-resumen-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    font-size: 13px;
+  }
+
+  .upload-resumen-grid div strong {
+    font-weight: 600;
+  }
+
+  .mt-2 {
+    margin-top: 0.5rem;
+  }
+
+  .mt-3 {
+    margin-top: 0.75rem;
+  }
+
+  .mt-4 {
+    margin-top: 1rem;
+  }
+
+  .text-sm {
+    font-size: 0.875rem;
+  }
+
+  .inline-flex {
+    display: inline-flex;
+  }
+
+  .items-center {
+    align-items: center;
+  }
+
+  .ml-2 {
+    margin-left: 0.5rem;
+  }
+
+  .text-blue-600 {
+    color: #2563eb;
+  }
+
+  .text-blue-600:hover {
+    text-decoration: underline;
+  }
+
+  .btn-submit {
+    margin-top: 16px;
+  }
+
+  .btn-submit .btn {
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-weight: 600;
+  }
+
+  @media (max-width: 880px) {
+    .upload-card {
+      padding: 20px 16px;
+    }
+
+    .upload-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>
+
+<div class="upload-shell">
+  <div class="upload-card">
+    <div class="upload-header">
+      <h2>Subir apunte (PDF)</h2>
+      <p>
+        Completá los datos del apunte, definí cuánto querés recibir y cargá el archivo PDF.
+        Nosotros nos encargamos del resto 💸📚
       </p>
     </div>
 
-    <div class="card mt-4" id="resumen-publicacion">
-      <h3>Resumen de publicación</h3>
-      <p class="text-sm">
-        Este cálculo es estimativo. Tomamos como base el precio que cargues arriba
-        (lo que vos querés recibir) y calculamos cuánto se suma en comisiones
-        (<strong>8% Mercado Pago</strong> + <strong>12% plataforma ApuntesYa</strong>) y
-        cuál sería el total aproximado que pagará la persona que compra.
-      </p>
+    <form method="post" enctype="multipart/form-data" id="uploadForm">
+      <div class="upload-grid">
+        <!-- COLUMNA IZQUIERDA: campos principales -->
+        <div class="upload-main">
+          <div class="upload-form-group">
+            <label for="title">Título</label>
+            <input class="input" name="title" id="title" required>
+          </div>
 
-      <div class="grid">
-        <div><strong>Lo que querés recibir (X):</strong> $<span id="rp-precio">0.00</span></div>
-        <div><strong>Comisión Mercado Pago (8%):</strong> $<span id="rp-mp">0.00</span></div>
-        <div><strong>Comisión ApuntesYa (12%):</strong> $<span id="rp-ay">0.00</span></div>
-        <div><strong>Neto estimado para vos:</strong> $<span id="rp-neto">0.00</span></div>
-        <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.00</span></div>
+          <div class="upload-form-group">
+            <label for="description">Descripción</label>
+            <input class="input" name="description" id="description" required>
+            <p class="upload-hint">
+              Podés indicar temas incluidos, año de cursado, docente, tipo de examen, etc.
+            </p>
+          </div>
+
+          {% set prefix = 'up' %}
+          {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
+          {% include 'components/academics_selects.html' %}
+
+          <div class="upload-form-group" style="margin-top:14px;">
+            <label for="price">
+              Precio (ARS)
+            </label>
+            <input class="input" name="price" id="price" type="number" min="0" step="0.01">
+            <p class="upload-hint">
+              Este es el monto que querés recibir por cada venta. Si lo dejás en blanco o 0, el apunte será gratis.
+            </p>
+          </div>
+
+          <div class="upload-form-group" style="margin-top:14px;">
+            <label for="file">Archivo PDF</label>
+            <input class="input" type="file" name="file" id="file" accept="application/pdf" required>
+            <p class="upload-hint">
+              Formato recomendado: PDF legible, sin fotos borrosas. Peso máximo según las condiciones de la plataforma.
+            </p>
+          </div>
+
+          <div class="mt-3">
+            <label class="inline-flex items-center">
+              <input type="checkbox" name="accept_commissions" required>
+              <span class="ml-2 text-sm">
+                Declaro haber leído y aceptado las comisiones y plazos de acreditación indicados.
+                <a href="{{ url_for('help_commissions') }}" class="text-blue-600">Ver detalle</a>
+              </span>
+            </label>
+          </div>
+
+          <div class="btn-submit">
+            <button class="btn">Subir apunte</button>
+          </div>
+        </div>
+
+        <!-- COLUMNA DERECHA: explicación y resumen -->
+        <div class="upload-side">
+          <div class="upload-side-box">
+            <h2 class="explicacion-titulo">💡 Cómo calculamos tu ganancia</h2>
+            <p class="explicacion-intro">
+              En ApuntesYa, vos decidís el precio que querés recibir y nosotros
+              sumamos las comisiones al precio final que ve el comprador.
+            </p>
+
+            <ol class="pasos-calculo">
+              <li class="paso-item">
+                <strong>Definís tu ganancia (Precio Base):</strong>
+                ingresás el monto que querés recibir por la venta de tu apunte.
+              </li>
+              <li class="paso-item">
+                <strong>Sumamos la comisión total (20%):</strong>
+                agregamos una Comisión Total del 20% al precio de venta que verá el comprador:
+                <ul class="desglose-comision">
+                  <li><strong>8%</strong> (aprox.) para <strong>Mercado Pago</strong> (procesamiento de pago).</li>
+                  <li><strong>12%</strong> para <strong>ApuntesYa</strong> (mantenimiento y mejora de la plataforma).
+                  </li>
+                </ul>
+              </li>
+              <li class="paso-item">
+                <strong>Recibís lo que pediste:</strong>
+                cuando se vende el apunte, recibís tu <strong>Precio Base</strong> completo,
+                antes de la retención de IIBB.
+              </li>
+            </ol>
+
+            <aside class="disclaimer-iibb">
+              <h3 class="disclaimer-titulo">⚠️ Nota importante sobre impuestos</h3>
+              <p class="disclaimer-texto">
+                Tu <strong>Precio Base</strong> está sujeto a la
+                retención de <strong>Ingresos Brutos (IIBB)</strong>, un impuesto provincial obligatorio.
+                Esta deducción la aplica directamente el procesador de pagos y puede variar según tu situación fiscal.
+                Te recomendamos consultarlo con tu contador.
+              </p>
+            </aside>
+
+            <p class="mt-2 text-sm">
+              ¿Dudas con Mercado Pago?
+              <a href="{{ url_for('help_mp') }}" class="text-blue-600">Ver instructivo</a>.
+            </p>
+          </div>
+
+          <div class="upload-side-box" id="resumen-publicacion">
+            <h3>Resumen de publicación</h3>
+            <p class="text-sm">
+              Este cálculo es estimativo. Tomamos como base el precio que cargues arriba
+              (lo que vos querés recibir) y calculamos cuánto se suma en comisiones
+              (<strong>8% Mercado Pago</strong> + <strong>12% plataforma ApuntesYa</strong>) y
+              cuál sería el total aproximado que paga la persona que compra.
+            </p>
+
+            <div class="upload-resumen-grid">
+              <div><strong>Lo que querés recibir (X):</strong> $<span id="rp-precio">0.00</span></div>
+              <div><strong>Comisión Mercado Pago (8%):</strong> $<span id="rp-mp">0.00</span></div>
+              <div><strong>Comisión ApuntesYa (12%):</strong> $<span id="rp-ay">0.00</span></div>
+              <div><strong>Neto estimado para vos:</strong> $<span id="rp-neto">0.00</span></div>
+              <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.00</span></div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-
-    <div class="mt-3">
-
-      <label class="inline-flex items-center">
-        <input type="checkbox" name="accept_commissions" required>
-        <span class="ml-2 text-sm">
-          Declaro haber leído y aceptado las comisiones y plazos de acreditación indicados.
-          <a href="{{ url_for('help_commissions') }}" class="text-blue-600 hover:underline">Ver detalle</a>
-        </span>
-      </label>
-    </div>
-
-    <script>
-      (function () {
-        function toNum(x) { var n = parseFloat(x); return isNaN(n) ? 0 : n; }
-        var precioInput = document.querySelector('input[name="price" id="price" id="price"]');
-        var box = document.getElementById('resumen-publicacion');
-        if (!box) return;
-
-        // Campo de precio: lo que quiere recibir el vendedor (X)
-        var precioInput = document.getElementById('price');
-
-        function toNum(v) {
-          var x = parseFloat((v || '').replace(',', '.'));
-          return isNaN(x) ? 0 : x;
-        }
-
-        var ayPct = 12.0; // plataforma
-        var mpPct = 8.0;  // MP
-        var totalPct = ayPct + mpPct; // 20%
-
-        function fmt(n) {
-          return n.toFixed(2);
-        }
-
-        function recalc() {
-          if (!precioInput) return;
-          var x = toNum(precioInput.value);  // X = lo que vos querés recibir
-
-          var feeMP = x * (mpPct / 100);
-          var feeAY = x * (ayPct / 100);
-          var totalBuyer = x * (1 + totalPct / 100);
-          var netoVendedor = x;  // por diseño, X es lo que recibís
-
-          var $ = function (id) { return document.getElementById(id); };
-
-          if ($('rp-precio')) $('rp-precio').textContent = fmt(x);
-          if ($('rp-mp')) $('rp-mp').textContent = fmt(feeMP);
-          if ($('rp-ay')) $('rp-ay').textContent = fmt(feeAY);
-          if ($('rp-neto')) $('rp-neto').textContent = fmt(netoVendedor);
-          if ($('rp-buyer')) $('rp-buyer').textContent = fmt(totalBuyer);
-        }
-
-        if (precioInput) {
-          precioInput.addEventListener('input', recalc);
-          recalc();
-        }
-      })();
-    </script>
-
-
-    <script>
-      (function () {
-        var box = document.getElementById('resumen-publicacion');
-        if (!box) return;
-
-        var precioInput = document.getElementById('price');
-
-        function toNum(v) {
-          var x = parseFloat((v || '').replace(',', '.'));
-          return isNaN(x) ? 0 : x;
-        }
-
-        var ayPct = 12.0; // plataforma
-        var mpPct = 8.0;  // MP
-        var totalPct = ayPct + mpPct; // 20%
-
-        function fmt(n) { return n.toFixed(2); }
-
-        function recalc() {
-          if (!precioInput) return;
-          var x = toNum(precioInput.value);  // X = lo que vos querés recibir
-
-          var feeMP = x * (mpPct / 100);
-          var feeAY = x * (ayPct / 100);
-          var totalBuyer = x * (1 + totalPct / 100);
-          var netoVendedor = x;  // X es lo que recibís
-
-          var $ = function (id) { return document.getElementById(id); };
-
-          if ($('rp-precio')) $('rp-precio').textContent = fmt(x);
-          if ($('rp-mp')) $('rp-mp').textContent = fmt(feeMP);
-          if ($('rp-ay')) $('rp-ay').textContent = fmt(feeAY);
-          if ($('rp-neto')) $('rp-neto').textContent = fmt(netoVendedor);
-          if ($('rp-buyer')) $('rp-buyer').textContent = fmt(totalBuyer);
-        }
-
-        if (precioInput) {
-          precioInput.addEventListener('input', recalc);
-          recalc();
-        }
-      })();
-    </script>
-
-    <label style="margin-top:14px">Archivo PDF</label>
-    <input class="input" type="file" name="file" accept="application/pdf" required>
-
-    <button class="btn" style="margin-top:14px">Subir</button>
-  </form>
+    </form>
+  </div>
 </div>
 
 <script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=1"></script>
 <script>
+  // Inicializa selects dinámicos de universidad / facultad / carrera
   document.addEventListener('DOMContentLoaded', async () => {
     const api = await window.initAcademicsSelects({ prefix: 'up', enableCreate: true });
     const form = document.getElementById('uploadForm');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      try { await api.resolveHidden(); } catch (err) { alert(err.message); return; }
+      try {
+        await api.resolveHidden();
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
       form.submit();
     });
   });
 </script>
+
+<script>
+  // Cálculo dinámico de comisiones y total para el comprador
+  (function () {
+    var box = document.getElementById('resumen-publicacion');
+    if (!box) return;
+
+    var precioInput = document.getElementById('price');
+
+    function toNum(v) {
+      var x = parseFloat((v || '').replace(',', '.'));
+      return isNaN(x) ? 0 : x;
+    }
+
+    var ayPct = 12.0; // plataforma
+    var mpPct = 8.0;  // MP
+    var totalPct = ayPct + mpPct; // 20%
+
+    function fmt(n) { return n.toFixed(2); }
+
+    function recalc() {
+      if (!precioInput) return;
+      var x = toNum(precioInput.value);  // X = lo que vos querés recibir
+
+      var feeMP = x * (mpPct / 100);
+      var feeAY = x * (ayPct / 100);
+      var totalBuyer = x * (1 + totalPct / 100);
+      var netoVendedor = x;  // X es lo que recibís
+
+      var $ = function (id) { return document.getElementById(id); };
+
+      if ($('rp-precio')) $('rp-precio').textContent = fmt(x);
+      if ($('rp-mp')) $('rp-mp').textContent = fmt(feeMP);
+      if ($('rp-ay')) $('rp-ay').textContent = fmt(feeAY);
+      if ($('rp-neto')) $('rp-neto').textContent = fmt(netoVendedor);
+      if ($('rp-buyer')) $('rp-buyer').textContent = fmt(totalBuyer);
+    }
+
+    if (precioInput) {
+      precioInput.addEventListener('input', recalc);
+      recalc();
+    }
+  })();
+</script>
+
 {% endblock %}
