@@ -112,10 +112,12 @@
   {# ---------- ACCIÓN PRINCIPAL: COMPRAR / DESCARGAR ---------- #}
   <div style="margin-top:12px;">
     {% if can_download %}
-    <a href="{{ url_for('download_note', note_id=note.id) }}" class="btn-primary">
+    <a href="{{ url_for('download_note', note_id=note.id) }}" class="btn-primary" target="_blank"
+      rel="noopener noreferrer">
       Descargar PDF
     </a>
     {% elif note.price_cents > 0 %}
+
     <a href="{{ url_for('buy_note', note_id=note.id) }}" class="btn-primary">
       Comprar
     </a>

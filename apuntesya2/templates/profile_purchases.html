@@ -90,21 +90,22 @@
   {% for it in items %}
   <div class="purchase-row">
     <div>
-      <div><strong>{{ it.title }}</strong></div>
+      <strong>{{ it.title }}</strong>
       <div class="muted">
         {% if it.is_free %}
-        Descargado gratis el {{ it.created_at }} • Gratis
+        Descargado el {{ it.created_at }} • Gratis
         {% else %}
         Comprado el {{ it.created_at }} • ${{ '%.2f' % (it.price_cents / 100) }}
         {% endif %}
       </div>
-
     </div>
     <div>
-      <a href="{{ url_for('note_detail', note_id=it.note_id) }}" class="btn-pill">
+      <a href="{{ url_for('note_detail', note_id=it.note_id) }}" class="btn-pill" target="_blank"
+        rel="noopener noreferrer">
         Ver / descargar
       </a>
     </div>
+
   </div>
   {% endfor %}
   {% endif %}

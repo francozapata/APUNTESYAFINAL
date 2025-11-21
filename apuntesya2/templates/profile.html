@@ -321,7 +321,10 @@
             <strong>{{ n.title }}</strong>
           </div>
           <div class="note-meta">
-            {{ n.university }} • {{ n.faculty }} • {{ n.career }} • {{ downloads_map.get(n.id, 0) }} descargas
+            {{ n.university }} • {{ n.faculty }} • {{ n.career }}
+          </div>
+          <div class="note-meta">
+            {{ n.download_count or 0 }} descarga{{ '' if (n.download_count or 0) == 1 else 's' }}
           </div>
         </div>
         <div class="note-actions">
@@ -335,87 +338,89 @@
           </a>
         </div>
       </div>
-      {% endfor %}
-      {% endif %}
+
     </div>
+    {% endfor %}
+    {% endif %}
+  </div>
 
-    <div class="profile-col">
-      <div class="profile-right-box">
-        <h4>Datos de mi cuenta</h4>
-        <p class="profile-contact-label">Nombre completo</p>
-        <p>{{ current_user.name or 'Sin nombre cargado' }}</p>
+  <div class="profile-col">
+    <div class="profile-right-box">
+      <h4>Datos de mi cuenta</h4>
+      <p class="profile-contact-label">Nombre completo</p>
+      <p>{{ current_user.name or 'Sin nombre cargado' }}</p>
 
-        <p class="profile-contact-label">Correo electrónico</p>
-        <p>{{ current_user.email }}</p>
+      <p class="profile-contact-label">Correo electrónico</p>
+      <p>{{ current_user.email }}</p>
 
-        <p>{{ current_user.created_at.strftime("%d/%m/%Y") if current_user.created_at else "-" }}</p>
+      <p>{{ current_user.created_at.strftime("%d/%m/%Y") if current_user.created_at else "-" }}</p>
 
-        <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
-        <p style="margin:0;font-weight:700;font-size:18px;">
-          {{ current_user.university or 'Universidad no indicada' }}<br>
-          <span class="muted" style="font-size:15px;">
-            {{ current_user.faculty or 'Facultad no indicada' }} •
-            {{ current_user.career or 'Carrera no indicada' }}
-          </span>
+      <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
+      <p style="margin:0;font-weight:700;font-size:18px;">
+        {{ current_user.university or 'Universidad no indicada' }}<br>
+        <span class="muted" style="font-size:15px;">
+          {{ current_user.faculty or 'Facultad no indicada' }} •
+          {{ current_user.career or 'Carrera no indicada' }}
+        </span>
+      </p>
+      <div class="academic-update">
+        <p class="muted" style="margin:0;">
+          ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo
+          necesites.
         </p>
-        <div class="academic-update">
-          <p class="muted" style="margin:0;">
-            ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo
-            necesites.
-          </p>
-          <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
-            Actualizar datos académicos
-          </a>
-        </div>
-        <div class="profile-right-box">
-          <h4>Cuenta de Mercado Pago</h4>
-          {% if current_user.mp_user_id %}
-          <p class="mp-status">
-            <span class="mp-status-dot"></span>
-            <span>Cuenta de Mercado Pago conectada</span>
-          </p>
-          <p class="muted" style="margin-top:6px;">
-            Los pagos de tus ventas se acreditan en esta cuenta.
-          </p>
-          {% else %}
-          <p class="mp-status mp-status-text-off">
-            <span class="mp-status-dot off"></span>
-            <span>Sin cuenta de Mercado Pago vinculada</span>
-          </p>
-          <p class="muted" style="margin:6px 0 8px;">
-            Para recibir pagos por tus ventas, vas a necesitar vincular una cuenta de Mercado Pago.
-          </p>
-          <a href="{{ url_for('connect_mp') }}" class="btn-pill">
-            Vincular Mercado Pago
-          </a>
-          {% endif %}
-          <h4>Estado como vendedor</h4>
-          {% if current_user.mp_user_id %}
-          <p class="muted" style="margin-bottom:4px;">
-            Tenés el modo vendedor activo ✅
-          </p>
-          <p class="muted">
-            Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago conectada.
-          </p>
-          {% else %}
-          <p class="muted" style="margin-bottom:4px;">
-            Todavía no tenés activo el modo vendedor.
-          </p>
-          <p class="muted">
-            Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil. Después vas a poder subir
-            apuntes y
-            recibir pagos.
-          </p>
-          {% endif %}
-        </div>
-
-        <!-- Bloque separado para actualizar datos académicos -->
-
+        <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
+          Actualizar datos académicos
+        </a>
+      </div>
+      <div class="profile-right-box">
+        <h4>Cuenta de Mercado Pago</h4>
+        {% if current_user.mp_user_id %}
+        <p class="mp-status">
+          <span class="mp-status-dot"></span>
+          <span>Cuenta de Mercado Pago conectada</span>
+        </p>
+        <p class="muted" style="margin-top:6px;">
+          Los pagos de tus ventas se acreditan en esta cuenta.
+        </p>
+        {% else %}
+        <p class="mp-status mp-status-text-off">
+          <span class="mp-status-dot off"></span>
+          <span>Sin cuenta de Mercado Pago vinculada</span>
+        </p>
+        <p class="muted" style="margin:6px 0 8px;">
+          Para recibir pagos por tus ventas, vas a necesitar vincular una cuenta de Mercado Pago.
+        </p>
+        <a href="{{ url_for('connect_mp') }}" class="btn-pill">
+          Vincular Mercado Pago
+        </a>
+        {% endif %}
+        <h4>Estado como vendedor</h4>
+        {% if current_user.mp_user_id %}
+        <p class="muted" style="margin-bottom:4px;">
+          Tenés el modo vendedor activo ✅
+        </p>
+        <p class="muted">
+          Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago conectada.
+        </p>
+        {% else %}
+        <p class="muted" style="margin-bottom:4px;">
+          Todavía no tenés activo el modo vendedor.
+        </p>
+        <p class="muted">
+          Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil. Después vas a poder subir
+          apuntes y
+          recibir pagos.
+        </p>
+        {% endif %}
       </div>
 
+      <!-- Bloque separado para actualizar datos académicos -->
 
     </div>
+
+
   </div>
+</div>
 </div>
 
 {% endblock %}

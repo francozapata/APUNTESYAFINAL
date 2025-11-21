@@ -166,7 +166,7 @@ elif DB_URL.startswith("postgres://"):
 engine_kwargs = {"pool_pre_ping": True, "future": True}
 if DB_URL.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
-engine = create_engine(DB_URL, **engine_kwargs)
+engine = create_engine(DB_URL, **engine_kwargs) 
 
 
 # -----------------------------------------------------------------------------
@@ -676,25 +676,28 @@ def complete_profile_post():
 @login_required
 def profile():
     with Session() as s:
-        my_notes = s.execute(
-            select(Note)
+        # Notas del usuario + cantidad de descargas (compras aprobadas)
+        rows = s.execute(
+            select(
+                Note,
+                func.count(Purchase.id).label("download_count"),
+            )
+            .outerjoin(
+                Purchase,
+                and_(
+                    Purchase.note_id == Note.id,
+                    Purchase.status == "approved",
+                ),
+            )
             .where(Note.seller_id == current_user.id)
+            .group_by(Note.id)
             .order_by(Note.created_at.desc())
-        ).scalars().all()
+        ).all()
 
-        # Descargas por apunte (compras aprobadas, incluyendo gratuitas)
-        note_ids = [n.id for n in my_notes]
-        downloads_map = {}
-        if note_ids:
-            rows = s.execute(
-                select(Purchase.note_id, func.count(Purchase.id))
-                .where(
-                    Purchase.note_id.in_(note_ids),
-                    Purchase.status == "approved"
-                )
-                .group_by(Purchase.note_id)
-            ).all()
-            downloads_map = {note_id: int(count or 0) for note_id, count in rows}
+        my_notes = []
+        for note, download_count in rows:
+            note.download_count = int(download_count or 0)  # atributo "virtual" solo para la vista
+            my_notes.append(note)
 
         me = s.get(User, current_user.id)
         seller_contact = getattr(me, "seller_contact", "") or ""
@@ -703,12 +706,10 @@ def profile():
     return render_template(
         "profile.html",
         my_notes=my_notes,
-        downloads_map=downloads_map,
         seller_contact=seller_contact,
         seller_contact_url=contact_url,
-        seller_contact_label=contact_label
+        seller_contact_label=contact_label,
     )
-
 
 @app.post("/profile/update_contact")
 @login_required
@@ -847,22 +848,30 @@ def profile_purchases():
             .order_by(Purchase.created_at.desc())
         ).all()
 
-        items = []
-        for p, n in purchases:
-            # lo que quería recibir el vendedor (base X)
-            base_price = (p.amount_cents or 0) / 100.0
-            # lo que realmente pagó el comprador (con comisión)
-            buyer_price_cents = int(round(base_price * GROSS_MULTIPLIER * 100)) if p.amount_cents else 0
+    items = []
+    for p, n in purchases:
+        base_cents = int(p.amount_cents or 0)
+        is_free = base_cents == 0
 
-            items.append(dict(
-                id=p.id,
-                note_id=n.id,
-                title=n.title,
-                price_cents=buyer_price_cents,
-                is_free=(p.amount_cents == 0),
-                created_at=p.created_at.strftime("%Y-%m-%d %H:%M")
-            ))
+        # lo que quería recibir el vendedor (base X)
+        base_price = base_cents / 100.0
+
+        # lo que realmente pagó el comprador (con comisión)
+        if is_free:
+            buyer_price_cents = 0
+        else:
+            buyer_price_cents = int(round(base_price * GROSS_MULTIPLIER * 100))
+
+        items.append(dict(
+            id=p.id,
+            note_id=n.id,
+            title=n.title,
+            price_cents=buyer_price_cents,
+            is_free=is_free,
+            created_at=p.created_at.strftime("%Y-%m-%d %H:%M"),
+        ))
     return render_template("profile_purchases.html", items=items)
+
 
 
 # -----------------------------------------------------------------------------
@@ -1095,23 +1104,50 @@ def download_note(note_id):
         if not note or not note.is_active:
             abort(404)
 
-        # ¿Está autorizado a descargar?
-        if note.seller_id == current_user.id or note.price_cents == 0:
+        allowed = False
+
+        # El vendedor siempre puede descargar su propio apunte
+        if note.seller_id == current_user.id:
             allowed = True
+
+        # Apuntes gratuitos: permitir y registrar una "descarga gratuita"
+        elif note.price_cents == 0:
+            allowed = True
+
+            # Registrar una sola vez la descarga gratuita
+            existing = s.execute(
+                select(Purchase).where(
+                    Purchase.buyer_id == current_user.id,
+                    Purchase.note_id == note.id,
+                    Purchase.status == "approved",
+                    Purchase.amount_cents == 0,
+                )
+            ).scalar_one_or_none()
+
+            if existing is None:
+                free_purchase = Purchase(
+                    buyer_id=current_user.id,
+                    note_id=note.id,
+                    status="approved",
+                    amount_cents=0,
+                )
+                s.add(free_purchase)
+                s.commit()
+
+        # Apuntes pagos: solo si tiene compra aprobada
         else:
             p = s.execute(
                 select(Purchase).where(
                     Purchase.buyer_id == current_user.id,
                     Purchase.note_id == note.id,
-                    Purchase.status == 'approved'
+                    Purchase.status == "approved",
                 )
             ).scalar_one_or_none()
             allowed = p is not None
 
-            if not allowed:
-                flash("Necesitás comprar este apunte para descargarlo.")
-                return redirect(url_for("note_detail", note_id=note.id))
-
+        if not allowed:
+            flash("No tenés acceso a este archivo.")
+            return redirect(url_for("note_detail", note_id=note.id))
         # ✅ Si está permitido, ahora sí devolvemos el archivo
         if gcs_bucket and note.file_path and "/" in note.file_path:
             signed_url = gcs_generate_signed_url(note.file_path, seconds=600)  # 10 minutos
