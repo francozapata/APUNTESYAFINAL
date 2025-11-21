@@ -157,6 +157,12 @@ app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # 25MB
 DEFAULT_DB = f"sqlite:///{os.path.join(BASE_DATA, 'apuntesya.db')}"
 DB_URL = os.getenv("DATABASE_URL", DEFAULT_DB)
 
+# Si la URL viene de Postgres (Supabase), usamos el driver psycopg (v3)
+if DB_URL.startswith("postgresql://"):
+    DB_URL = DB_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+elif DB_URL.startswith("postgres://"):
+    DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg://", 1)
+
 engine_kwargs = {"pool_pre_ping": True, "future": True}
 if DB_URL.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
