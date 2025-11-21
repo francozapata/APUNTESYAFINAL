@@ -42,14 +42,15 @@
       align-items: center;
     }
 
+    /* logo apenas más grande */
     .brand-logo-img {
-      height: 34px;
+      height: 40px;
       width: auto;
       display: block;
     }
 
     .brand-logo1-img {
-      height: 22px;
+      height: 26px;
       width: auto;
       display: block;
     }
@@ -62,33 +63,45 @@
       justify-content: flex-end;
     }
 
+    /* TODOS LOS BOTONES IGUALES */
     .nav-actions .btn {
       border-radius: 999px;
-      padding-inline: 14px;
+      padding: 8px 18px;
       font-size: 13px;
       font-weight: 600;
       white-space: nowrap;
-    }
-
-    .nav-actions .btn.secondary {
       background: #ffffff;
-      color: #1f2937;
-      border: none;
-      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.20);
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+      text-decoration: none;
+      transition: 0.15s;
     }
 
-    .nav-actions .btn.secondary:hover {
+    .nav-actions .btn:hover {
+      background: #eff6ff;
       transform: translateY(-1px);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.24);
+    }
+
+    /* que secondary y ghost no cambien estilo */
+    .nav-actions .btn.secondary,
+    .nav-actions .btn.ghost {
+      background: #ffffff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
     }
 
     .nav-profile-link {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 2px;
+      padding: 3px;
       border-radius: 999px;
-      background: rgba(15, 23, 42, 0.18);
-      border: 1px solid rgba(255, 255, 255, 0.6);
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid #bfdbfe;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
     }
 
     .nav-profile-pic {
@@ -138,7 +151,7 @@
       margin-left: 8px;
     }
 
-    /* ---------- CONTACT WIDGET (posiciones básicas, estilos ya definidos en CSS general) ---------- */
+    /* ---------- CONTACT WIDGET (posiciones básicas) ---------- */
     #contact-widget-button {
       position: fixed;
       bottom: 24px;
@@ -252,17 +265,17 @@
       </div>
 
       <div class="nav-actions">
-        <a href="{{ url_for('index') }}" class="btn ghost">Inicio</a>
+        <a href="{{ url_for('index') }}" class="btn">Inicio</a>
 
         {% if current_user.is_authenticated %}
         <a href="{{ url_for('upload_note') }}" class="btn">Subir apunte</a>
-        <a href="{{ url_for('profile') }}" class="btn secondary">Perfil</a>
+        <a href="{{ url_for('profile') }}" class="btn">Perfil</a>
 
         {% if current_user.is_admin %}
-        <a href="{{ url_for('admin_hub') }}" class="btn ghost">Administrar</a>
+        <a href="{{ url_for('admin_hub') }}" class="btn">Administrar</a>
         {% endif %}
 
-        <a href="{{ url_for('logout') }}" class="btn ghost">Salir</a>
+        <a href="{{ url_for('logout') }}" class="btn">Salir</a>
 
         <a href="{{ url_for('profile') }}" class="nav-profile-link" aria-label="Ver perfil">
           <img
@@ -270,7 +283,7 @@
             class="nav-profile-pic" alt="Foto de perfil">
         </a>
         {% else %}
-        <a href="{{ url_for('login') }}" class="btn secondary">Ingresar / Registrarse</a>
+        <a href="{{ url_for('login') }}" class="btn">Ingresar / Registrarse</a>
         {% endif %}
       </div>
     </div>
