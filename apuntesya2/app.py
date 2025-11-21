@@ -152,8 +152,9 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_DIR
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # 25MB
 
 # -----------------------------------------------------------------------------
-# DB URL (SQLite por defecto)
 # -----------------------------------------------------------------------------
+from sqlalchemy.pool import NullPool
+
 DEFAULT_DB = f"sqlite:///{os.path.join(BASE_DATA, 'apuntesya.db')}"
 DB_URL = os.getenv("DATABASE_URL", DEFAULT_DB)
 
@@ -164,9 +165,17 @@ elif DB_URL.startswith("postgres://"):
     DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg://", 1)
 
 engine_kwargs = {"pool_pre_ping": True, "future": True}
+
+# Si es SQLite (local), dejamos como estaba
 if DB_URL.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
-engine = create_engine(DB_URL, **engine_kwargs) 
+
+# Si es Postgres (Supabase) → usar NullPool
+else:
+    engine_kwargs["poolclass"] = NullPool
+
+engine = create_engine(DB_URL, **engine_kwargs)
+
 
 
 # -----------------------------------------------------------------------------
