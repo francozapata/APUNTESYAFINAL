@@ -98,6 +98,8 @@ def moderation_approve(note_id: int):
         if not n:
             abort(404)
         n.moderation_status = "approved"
+        if hasattr(n, "is_active"):
+            n.is_active = True
         n.moderation_reason = None
         if hasattr(n, "moderated_by_admin_id"):
             n.moderated_by_admin_id = current_user.id
