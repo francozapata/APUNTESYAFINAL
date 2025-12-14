@@ -2774,7 +2774,7 @@ def update_academics_post():
 # Main
 # -----------------------------------------------------------------------------
 # ------------------------------ Combos ------------------------------
-from ..models import ComboNote
+from apuntesya2.models import ComboNote
 
 def _combo_buyer_price_cents(combo: Combo) -> int:
     # Buyer price includes 15% fees (seller enters net). If free, 0.
