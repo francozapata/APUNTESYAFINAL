@@ -31,20 +31,62 @@ def dashboard():
 @admin_bp.route("/moderation")
 @login_required
 def moderation_queue():
-    """List notes pending moderation."""
+    """List notes & combos pending moderation."""
     _require_admin()
+
     status = (request.args.get("status") or "pending_manual").strip()
+
     with Session() as s:
-        notes = (
+        # ---------- NOTES ----------
+        notes_q = (
             s.query(Note)
             .options(joinedload(Note.seller))
             .filter(Note.deleted_at.is_(None))
-            .filter(getattr(Note, "moderation_status", "approved") == status)
-            .order_by(getattr(Note, "created_at", Note.id).desc())
-            .limit(300)
-            .all()
         )
-    return render_template("admin/moderation.html", notes=notes, combos=combos, status=status)
+
+        # Filtrar por status solo si existe la columna/atributo
+        if hasattr(Note, "moderation_status"):
+            notes_q = notes_q.filter(Note.moderation_status == status)
+        else:
+            # Si no existe moderación en notes, por seguridad no mostramos nada en esa vista
+            notes_q = notes_q.filter(False)
+
+        # Order seguro
+        if hasattr(Note, "created_at"):
+            notes_q = notes_q.order_by(Note.created_at.desc())
+        else:
+            notes_q = notes_q.order_by(Note.id.desc())
+
+        notes = notes_q.limit(300).all()
+
+        # ---------- COMBOS ----------
+        combos_q = s.query(Combo)
+
+        # joinedload si Combo tiene relación seller
+        if hasattr(Combo, "seller"):
+            combos_q = combos_q.options(joinedload(Combo.seller))
+
+        # Filtrar por status solo si existe
+        if hasattr(Combo, "moderation_status"):
+            combos_q = combos_q.filter(Combo.moderation_status == status)
+        else:
+            combos_q = combos_q.filter(False)
+
+        # Order seguro
+        if hasattr(Combo, "created_at"):
+            combos_q = combos_q.order_by(Combo.created_at.desc())
+        else:
+            combos_q = combos_q.order_by(Combo.id.desc())
+
+        combos = combos_q.limit(300).all()
+
+    return render_template(
+        "admin/moderation.html",
+        notes=notes,
+        combos=combos,
+        status=status
+    )
+
 
 
 @admin_bp.route("/moderation/<int:note_id>/approve", methods=["POST"])
