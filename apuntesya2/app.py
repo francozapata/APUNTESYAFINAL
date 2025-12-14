@@ -2795,32 +2795,47 @@ def profile_combos():
 @login_required
 def combo_create():
     with Session() as s:
-        # seller can only include own approved notes (and not deleted)
+        # ===============================
+        # 1) Traer apuntes elegibles
+        # ===============================
         stmt = select(Note).where(Note.seller_id == current_user.id)
 
-        # Evitar borrados si existe la columna
+        # No borrados
         if hasattr(Note, "deleted_at"):
             stmt = stmt.where(Note.deleted_at.is_(None))
 
-        # Solo aprobados (esto es lo que corresponde para armar combos)
+        # Aceptar cualquier estado "aprobado" real
         if hasattr(Note, "moderation_status"):
-            stmt = stmt.where(Note.moderation_status == "approved")
+            stmt = stmt.where(
+                Note.moderation_status.in_([
+                    "approved",
+                    "approved_manual",
+                    "approved_ai",
+                    "APROBADO"
+                ])
+            )
 
-        # is_active: no bloquear por False/NULL (porque hoy puede estar desalineado)
-        # Si existe, aceptamos True o NULL
+        # No bloquear por is_active (puede estar NULL o mal seteado)
         if hasattr(Note, "is_active"):
-            stmt = stmt.where((Note.is_active == True) | (Note.is_active.is_(None)))
+            stmt = stmt.where(
+                (Note.is_active == True) | (Note.is_active.is_(None))
+            )
 
         stmt = stmt.order_by(getattr(Note, "created_at", Note.id).desc())
 
         notes = s.execute(stmt).scalars().all()
 
+        # ===============================
+        # 2) POST: crear combo
+        # ===============================
         if request.method == "POST":
             title = (request.form.get("title") or "").strip()
             description = (request.form.get("description") or "").strip()
 
             try:
-                price_net = int(float((request.form.get("price_net") or "0").replace(",", ".")) * 100)
+                price_net = int(
+                    float((request.form.get("price_net") or "0").replace(",", ".")) * 100
+                )
             except Exception:
                 price_net = 0
 
@@ -2828,7 +2843,10 @@ def combo_create():
             note_ids = [int(x) for x in note_ids if str(x).isdigit()]
 
             if not title or not description or len(note_ids) < 2:
-                flash("El combo debe tener título, descripción y al menos 2 apuntes.", "danger")
+                flash(
+                    "El combo debe tener título, descripción y al menos 2 apuntes.",
+                    "danger"
+                )
                 return render_template("combo_create.html", notes=notes)
 
             combo = Combo(
@@ -2840,63 +2858,77 @@ def combo_create():
                 moderation_status="pending_ai",
             )
             s.add(combo)
-            s.flush()  # get id
+            s.flush()  # obtener combo.id
 
-            # Solo permitir apuntes del vendedor y aprobados (doble seguridad)
+            # ===============================
+            # 3) Validar apuntes elegidos
+            # ===============================
             chosen_stmt = select(Note).where(
                 Note.id.in_(note_ids),
                 Note.seller_id == current_user.id
             )
+
             if hasattr(Note, "deleted_at"):
                 chosen_stmt = chosen_stmt.where(Note.deleted_at.is_(None))
+
             if hasattr(Note, "moderation_status"):
-                chosen_stmt = chosen_stmt.where(Note.moderation_status == "approved")
+                chosen_stmt = chosen_stmt.where(
+                    Note.moderation_status.in_([
+                        "approved",
+                        "approved_manual",
+                        "approved_ai",
+                        "APROBADO"
+                    ])
+                )
+
             if hasattr(Note, "is_active"):
-                chosen_stmt = chosen_stmt.where((Note.is_active == True) | (Note.is_active.is_(None)))
+                chosen_stmt = chosen_stmt.where(
+                    (Note.is_active == True) | (Note.is_active.is_(None))
+                )
 
             chosen = s.execute(chosen_stmt).scalars().all()
 
             if len(chosen) < 2:
-                flash("Seleccioná al menos 2 apuntes aprobados para armar el combo.", "danger")
+                flash(
+                    "Seleccioná al menos 2 apuntes aprobados para armar el combo.",
+                    "danger"
+                )
                 return render_template("combo_create.html", notes=notes)
 
-            # link combo <-> notes
+            # ===============================
+            # 4) Link combo <-> apuntes
+            # ===============================
             for n in chosen:
                 s.add(ComboNote(combo_id=combo.id, note_id=n.id))
 
-            # Auto-approve rule requested:
-            # If ALL notes are approved, approve combo immediately.
-            if chosen and all((getattr(n, "moderation_status", "approved") == "approved") for n in chosen):
-                combo.moderation_status = "approved"
-                if hasattr(combo, "ai_decision"):
-                    combo.ai_decision = "approve"
-                if hasattr(combo, "ai_confidence"):
-                    combo.ai_confidence = 1000
-                if hasattr(combo, "ai_model"):
-                    combo.ai_model = GEMINI_MODEL if GEMINI_API_KEY else None
-                if hasattr(combo, "ai_summary"):
-                    combo.ai_summary = "Auto-aprobado: todos los apuntes del combo ya estaban aprobados."
-                if hasattr(combo, "ai_raw"):
-                    combo.ai_raw = {"auto": True, "rule": "all_notes_approved"}
-            else:
-                combo.moderation_status = "pending_manual"
-                combo.moderation_reason = "Revisión manual: el combo incluye apuntes no aprobados."
-                if hasattr(combo, "manual_review_due_at"):
-                    combo.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
-                try:
-                    s.add(Notification(
-                        user_id=current_user.id,
-                        kind="warning",
-                        title="Combo en revisión manual",
-                        body="Tu combo quedó en revisión manual. Puede demorar hasta 12hs."
-                    ))
-                except Exception:
-                    pass
+            # ===============================
+            # 5) Auto-aprobación del combo
+            # ===============================
+            combo.moderation_status = "approved"
+
+            if hasattr(combo, "ai_decision"):
+                combo.ai_decision = "approve"
+            if hasattr(combo, "ai_confidence"):
+                combo.ai_confidence = 1000
+            if hasattr(combo, "ai_model"):
+                combo.ai_model = GEMINI_MODEL if GEMINI_API_KEY else None
+            if hasattr(combo, "ai_summary"):
+                combo.ai_summary = (
+                    "Auto-aprobado: todos los apuntes del combo ya estaban aprobados."
+                )
+            if hasattr(combo, "ai_raw"):
+                combo.ai_raw = {"auto": True, "rule": "all_notes_approved"}
 
             s.commit()
-            flash("Combo creado. Si está aprobado, ya se publicará en tu perfil.", "success")
+            flash(
+                "Combo creado y aprobado automáticamente. Ya está publicado.",
+                "success"
+            )
             return redirect(url_for("profile_combos"))
 
+    # ===============================
+    # GET
+    # ===============================
     return render_template("combo_create.html", notes=notes)
 
 
