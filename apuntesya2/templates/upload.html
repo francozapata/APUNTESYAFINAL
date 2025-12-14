@@ -262,6 +262,20 @@
             </label>
           </div>
 
+          <div class="mt-3">
+            <div class="upload-side-box" style="margin:0;">
+              <h3 style="margin:0 0 6px;font-size:14px;">🛡️ Moderación de contenido</h3>
+              <p style="margin:0 0 8px;font-size:13px;color:#4b5563;">
+                Al subir un apunte, se evalúa automáticamente con IA. Si hay dudas, pasa a revisión manual.
+                En caso de revisión manual, la resolución puede demorar hasta <strong>12hs</strong>.
+              </p>
+              <label class="inline-flex items-center">
+                <input type="checkbox" name="moderation_ack" value="1" required>
+                <span class="ml-2 text-sm">Entiendo y acepto esta revisión (IA + posible revisión manual).</span>
+              </label>
+            </div>
+          </div>
+
           <div class="btn-submit">
             <button class="btn">Subir apunte</button>
           </div>
@@ -282,11 +296,11 @@
                 ingresás el monto que querés recibir por la venta de tu apunte.
               </li>
               <li class="paso-item">
-                <strong>Sumamos la comisión total (20%):</strong>
-                agregamos una Comisión Total del 20% al precio de venta que verá el comprador:
+                <strong>Sumamos la comisión total (15%):</strong>
+                agregamos una Comisión Total del 15% al precio de venta que verá el comprador:
                 <ul class="desglose-comision">
                   <li><strong>8%</strong> (aprox.) para <strong>Mercado Pago</strong> (procesamiento de pago).</li>
-                  <li><strong>12%</strong> para <strong>ApuntesYa</strong> (mantenimiento y mejora de la plataforma).
+                  <li><strong>7%</strong> para <strong>ApuntesYa</strong> (mantenimiento y mejora de la plataforma).
                   </li>
                 </ul>
               </li>
@@ -318,14 +332,14 @@
             <p class="text-sm">
               Este cálculo es estimativo. Tomamos como base el precio que cargues arriba
               (lo que vos querés recibir) y calculamos cuánto se suma en comisiones
-              (<strong>8% Mercado Pago</strong> + <strong>12% plataforma ApuntesYa</strong>) y
+              (<strong>8% Mercado Pago</strong> + <strong>7% plataforma ApuntesYa</strong>) y
               cuál sería el total aproximado que paga la persona que compra.
             </p>
 
             <div class="upload-resumen-grid">
               <div><strong>Lo que querés recibir (X):</strong> $<span id="rp-precio">0.00</span></div>
               <div><strong>Comisión Mercado Pago (8%):</strong> $<span id="rp-mp">0.00</span></div>
-              <div><strong>Comisión ApuntesYa (12%):</strong> $<span id="rp-ay">0.00</span></div>
+              <div><strong>Comisión ApuntesYa (7%):</strong> $<span id="rp-ay">0.00</span></div>
               <div><strong>Neto estimado para vos:</strong> $<span id="rp-neto">0.00</span></div>
               <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.00</span></div>
             </div>
@@ -368,9 +382,9 @@
       return isNaN(x) ? 0 : x;
     }
 
-    var ayPct = 12.0; // plataforma
+    var ayPct = 7.0; // plataforma
     var mpPct = 8.0;  // MP
-    var totalPct = ayPct + mpPct; // 20%
+    var totalPct = ayPct + mpPct; // 15%
 
     function fmt(n) { return n.toFixed(2); }
 
@@ -378,9 +392,10 @@
       if (!precioInput) return;
       var x = toNum(precioInput.value);  // X = lo que vos querés recibir
 
-      var feeMP = x * (mpPct / 100);
-      var feeAY = x * (ayPct / 100);
-      var totalBuyer = x * (1 + totalPct / 100);
+      // Buyer pays gross price that includes fees inside the final amount
+      var totalBuyer = (x <= 0) ? 0 : (x / (1 - totalPct / 100));
+      var feeMP = totalBuyer * (mpPct / 100);
+      var feeAY = totalBuyer * (ayPct / 100);
       var netoVendedor = x;  // X es lo que recibís
 
       var $ = function (id) { return document.getElementById(id); };

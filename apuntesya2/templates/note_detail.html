@@ -332,6 +332,33 @@
         </p>
         {% endif %}
 
+        {# ---------- PREVIEW (watermarked) ---------- #}
+        {% if note.preview_images and note.preview_images.images %}
+        <div style="margin:14px 0 6px;">
+          <div class="muted" style="margin-bottom:8px;">
+            Vista previa (marca de agua ApuntesYa). No descargable.
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+            {% for _img in note.preview_images.images %}
+              <div style="border:1px solid #e5e7f5;border-radius:12px;overflow:hidden;background:#fff;">
+                <img
+                  src="{{ url_for('note_preview_image', note_id=note.id, idx=loop.index) }}"
+                  alt="Vista previa {{ loop.index }}"
+                  style="width:100%;height:auto;display:block;user-select:none;"
+                  draggable="false"
+                />
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+        <script>
+          // Soft anti-copy protections (not bulletproof)
+          document.addEventListener('contextmenu', function(e){
+            if(e.target && e.target.tagName === 'IMG'){ e.preventDefault(); }
+          });
+        </script>
+        {% endif %}
+
         <div class="note-meta-detail">
           <span>Formato: PDF</span>
           <span>Descargas: {{ note.download_count or 0 }}</span>
@@ -416,8 +443,7 @@
           {# ---------- ACCIÓN PRINCIPAL: COMPRAR / DESCARGAR ---------- #}
           <div class="note-cta">
             {% if can_download %}
-            <a href="{{ url_for('download_note', note_id=note.id) }}" class="btn-primary" target="_blank"
-              rel="noopener noreferrer">
+            <a href="{{ url_for('download_note', note_id=note.id) }}" class="btn-primary">
               Descargar PDF
             </a>
             <p class="note-help-text">
@@ -438,17 +464,28 @@
             {% endif %}
           </div>
 
-          {# ---------- CONTACTO DEL VENDEDOR ---------- #}
-          {% if seller_contact_url %}
+          {# ---------- VENDEDOR + CONTACTO ---------- #}
+          {% if seller %}
           <div class="note-contact">
-            <p class="muted" style="margin:0 0 4px;">
-              ¿Tenés dudas sobre el apunte?
-            </p>
-            <p style="margin:0;">
-              <a href="{{ seller_contact_url }}" target="_blank">
-                {{ seller_contact_label }}
+            <p class="muted" style="margin:0 0 8px;">
+              Vendedor:
+              <a href="{{ url_for('seller_profile', seller_id=seller.id) }}">
+                {{ seller.name }}
               </a>
+              {% if seller_verified %}
+                <span class="rating-pill" title="Vendedor verificado">Verificado</span>
+              {% endif %}
             </p>
+            {% if seller_contacts and (can_download or note.price_cents==0) %}
+              <p class="muted" style="margin:0 0 4px;">Contacto del vendedor:</p>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                {% for url, label in seller_contacts %}
+                  <a class="rating-pill" href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }}</a>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="note-help-text" style="margin-top:6px;">Tras la compra vas a ver los datos de contacto del vendedor acá mismo.</p>
+            {% endif %}
           </div>
           {% endif %}
 

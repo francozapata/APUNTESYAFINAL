@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:980px;margin:28px auto;">
+  <div class="card" style="padding:18px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h1 style="margin:0;font-size:22px;">{{ seller.name }}</h1>
+        <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          {% if seller_verified %}
+            <span class="pill" title="Vendedor con Mercado Pago vinculado y al menos 1 venta aprobada">✅ Verificado</span>
+          {% else %}
+            <span class="pill">Vendedor</span>
+          {% endif %}
+          {% if avg_rating %}<span class="pill">⭐ {{ '%.2f' % avg_rating }}</span>{% endif %}
+          <span class="pill">Ventas: {{ paid_sales }}</span>
+          <span class="pill">Descargas: {{ total_downloads }}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        {% for url, label in contacts %}
+          <a class="btn ghost" href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:18px;margin-top:14px;">
+    <h2 style="margin:0 0 12px;font-size:18px;">Catálogo</h2>
+    {% if notes and notes|length > 0 %}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+        {% for n in notes %}
+          <div class="card" style="padding:14px;">
+            <a class="link-strong" href="{{ url_for('note_detail', note_id=n.id) }}">{{ n.title }}</a>
+            {% if n.description %}<p class="muted" style="margin:8px 0 0;">{{ n.description }}</p>{% endif %}
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <span class="pill">{{ n.university }}</span>
+              <span class="pill">{{ n.faculty }}</span>
+              <span class="pill">{{ n.career }}</span>
+            </div>
+            <div style="margin-top:10px;">
+              {% if n.price_cents == 0 %}
+                <span class="pill" style="background:#ecfdf5;border-color:#d1fae5;color:#065f46;">Gratis</span>
+              {% else %}
+                <span class="pill">Pago</span>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted" style="margin:0;">Este vendedor todavía no tiene apuntes publicados.</p>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;background:#f7f9ff;border:1px solid #e0e4ff;font-size:12px;color:#4b5563;}
+</style>
+{% endblock %}

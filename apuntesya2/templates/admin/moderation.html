@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:1100px;margin:28px auto;">
+  <div class="card" style="padding:18px;">
+    <h1 style="margin:0 0 6px;">Moderación</h1>
+    <p class="muted" style="margin:0;">Estado actual: <strong>{{ status }}</strong></p>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='pending_ai') }}">Pendientes IA</a>
+      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='pending_manual') }}">Revisión manual</a>
+      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='approved') }}">Aprobados</a>
+      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='rejected') }}">Rechazados</a>
+    </div>
+  </div>
+
+  <div class="card" style="padding:18px;margin-top:14px;">
+    {% if notes and notes|length > 0 %}
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid #eee;">Apunte</th>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid #eee;">Vendedor</th>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid #eee;">Precio</th>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid #eee;">IA</th>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid #eee;">Fecha</th>
+            <th style="text-align:right;padding:10px;border-bottom:1px solid #eee;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for n in notes %}
+            <tr>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;">
+                <a class="link-strong" href="{{ url_for('note_detail', note_id=n.id) }}" target="_blank" rel="noopener noreferrer">{{ n.title }}</a>
+                {% if n.moderation_reason %}<div class="muted" style="margin-top:6px;">Motivo: {{ n.moderation_reason }}</div>{% endif %}
+              </td>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;">{{ n.seller.name if n.seller else '-' }}</td>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;">
+                {% if n.price_cents == 0 %}Gratis{% else %}${{ '%.2f' % (n.price_cents/100) }} (neto){% endif %}
+              </td>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;">
+                {% if n.ai_decision %}
+                  <div><strong>{{ n.ai_decision }}</strong>
+                    {% if n.ai_confidence is not none %}
+                      <span class="muted">({{ '%.0f' % (n.ai_confidence/10) }}%)</span>
+                    {% endif %}
+                  </div>
+                  {% if n.ai_summary %}<div class="muted" style="margin-top:6px;">{{ n.ai_summary }}</div>{% endif %}
+                {% else %}
+                  <span class="muted">-</span>
+                {% endif %}
+              </td>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '' }}</td>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;text-align:right;">
+                {% if n.moderation_status != 'approved' %}
+                  <button class="btn primary" onclick="act('approve', {{ n.id }})">Aprobar</button>
+                {% endif %}
+                {% if n.moderation_status != 'rejected' %}
+                  <button class="btn ghost" onclick="act('reject', {{ n.id }})">Rechazar</button>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}<hr style="margin:22px 0;border:none;border-top:1px solid #e5e7eb;">
+<h3 style="margin:0 0 10px;">Combos</h3>
+{% if combos and combos|length %}
+  <div style="display:grid;gap:12px;">
+    {% for c in combos %}
+      <div style="border:1px solid #e5e7eb;border-radius:14px;padding:14px;background:#fff;">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <div>
+            <div style="font-weight:800;">{{ c.title }}</div>
+            <div style="color:#6b7280;font-size:13px;">Estado: <b>{{ c.moderation_status }}</b></div>
+            {% if c.ai_decision %}<div style="color:#6b7280;font-size:13px;">IA: {{ c.ai_decision }}{% if c.ai_confidence %} ({{ (c.ai_confidence/10)|round(1) }}%) {% endif %}</div>{% endif %}
+            {% if c.ai_summary %}<div style="color:#374151;font-size:13px;margin-top:6px;">{{ c.ai_summary }}</div>{% endif %}
+            {% if c.moderation_reason %}<div style="color:#b45309;font-size:13px;margin-top:6px;">Motivo: {{ c.moderation_reason }}</div>{% endif %}
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start;">
+            <form method="post" action="/admin/moderation/combo/{{ c.id }}/approve">
+              <button type="submit" style="padding:10px 12px;border-radius:12px;border:1px solid #d1fae5;background:#ecfdf5;font-weight:800;">Aprobar</button>
+            </form>
+            <form method="post" action="/admin/moderation/combo/{{ c.id }}/reject">
+              <input type="hidden" name="reason" value="Denegado por moderación manual.">
+              <button type="submit" style="padding:10px 12px;border-radius:12px;border:1px solid #fee2e2;background:#fef2f2;font-weight:800;">Rechazar</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div style="color:#6b7280;">No hay combos en este estado.</div>
+{% endif %}
+
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted" style="margin:0;">No hay apuntes en este estado.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+async function act(type, noteId){
+  let reason = null;
+  if(type === 'reject'){
+    reason = prompt('Motivo de rechazo (opcional):') || '';
+  }
+  const url = type === 'approve'
+    ? `{{ url_for('admin.moderation_approve', note_id=0) }}`.replace('/0/', `/${noteId}/`)
+    : `{{ url_for('admin.moderation_reject', note_id=0) }}`.replace('/0/', `/${noteId}/`);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: type === 'reject' ? JSON.stringify({reason}) : null
+  });
+  if(res.ok){
+    location.reload();
+  } else {
+    alert('No se pudo ejecutar la acción.');
+  }
+}
+</script>
+{% endblock %}

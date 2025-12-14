@@ -6,7 +6,7 @@ import math
 import json
 import base64
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timedelta
 from urllib.parse import urlencode
 from functools import wraps
 from google.cloud import storage
@@ -21,6 +21,7 @@ from flask_login import (
     LoginManager, login_user, logout_user, current_user, login_required
 )
 from sqlalchemy import create_engine, select, or_, and_, func, text, desc
+from sqlalchemy import inspect
 from sqlalchemy.orm import sessionmaker, scoped_session
 from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
@@ -31,7 +32,7 @@ from firebase_admin import credentials, auth as fb_auth
 
 # modelos
 from apuntesya2.models import (
-    Base, User, Note, Purchase, University, Faculty, Career, WebhookEvent, Review
+    Base, User, Note, Purchase, University, Faculty, Career, WebhookEvent, Review, DownloadLog, Notification, Combo, ComboNote
 )
 
 # helpers MP
@@ -204,6 +205,86 @@ else:
 # -----------------------------------------------------------------------------
 Base.metadata.create_all(engine)
 
+
+def _ensure_schema(engine):
+    """Lightweight runtime migrations for SQLite/Postgres.
+
+    This project historically relied on create_all() only. For V1 marketplace
+    features we add a few columns and tables, and we keep backward compatibility
+    by applying safe ALTERs when missing.
+    """
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        # users: structured contacts + visibility flags
+        if insp.has_table('users'):
+            cols = {c['name'] for c in insp.get_columns('users')}
+            add_cols = []
+            if 'contact_email' not in cols:
+                add_cols.append("ALTER TABLE users ADD COLUMN contact_email VARCHAR(255)")
+            if 'contact_whatsapp' not in cols:
+                add_cols.append("ALTER TABLE users ADD COLUMN contact_whatsapp VARCHAR(64)")
+            if 'contact_instagram' not in cols:
+                add_cols.append("ALTER TABLE users ADD COLUMN contact_instagram VARCHAR(80)")
+            if 'contact_visible_public' not in cols:
+                add_cols.append("ALTER TABLE users ADD COLUMN contact_visible_public BOOLEAN DEFAULT 1")
+            if 'contact_visible_buyers' not in cols:
+                add_cols.append("ALTER TABLE users ADD COLUMN contact_visible_buyers BOOLEAN DEFAULT 1")
+            for stmt in add_cols:
+                try:
+                    conn.execute(text(stmt))
+                except Exception:
+                    pass
+
+        # notes: moderation + preview metadata
+        if insp.has_table('notes'):
+            cols = {c['name'] for c in insp.get_columns('notes')}
+            add_cols = []
+            if 'moderation_status' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN moderation_status VARCHAR(32) DEFAULT 'pending_ai'")
+            if 'moderation_reason' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN moderation_reason TEXT")
+            # AI moderation payload
+            if 'ai_decision' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN ai_decision VARCHAR(16)")
+            if 'ai_confidence' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN ai_confidence INTEGER")
+            if 'ai_score_quality' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN ai_score_quality INTEGER")
+            if 'ai_score_copyright' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN ai_score_copyright INTEGER")
+            if 'ai_score_mismatch' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN ai_score_mismatch INTEGER")
+            if 'ai_model' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN ai_model VARCHAR(80)")
+            if 'ai_summary' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN ai_summary TEXT")
+            if 'ai_raw' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN ai_raw JSON")
+            if 'manual_review_due_at' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN manual_review_due_at TIMESTAMP")
+            if 'moderated_by_admin_id' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN moderated_by_admin_id INTEGER")
+            if 'moderated_at' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN moderated_at TIMESTAMP")
+            if 'preview_pages' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN preview_pages JSON")
+            if 'preview_images' not in cols:
+                add_cols.append("ALTER TABLE notes ADD COLUMN preview_images JSON")
+            for stmt in add_cols:
+                try:
+                    conn.execute(text(stmt))
+                except Exception:
+                    pass
+
+        # New tables: reviews unique/constraint already in model; download_logs
+        # create_all already handled table creation, but some DBs might have been created earlier.
+
+
+try:
+    _ensure_schema(engine)
+except Exception as e:
+    print('[schema] WARNING:', e)
+
 Session = scoped_session(sessionmaker(bind=engine, autoflush=False, expire_on_commit=False))
 
 login_manager = LoginManager(app)
@@ -236,20 +317,33 @@ app.config["BASE_URL"] = os.getenv("BASE_URL", "")
 # Porcentaje que mostramos en el footer y usamos como base de la comisión de plataforma
 app.config["PLATFORM_FEE_PERCENT"] = float(os.getenv("MP_PLATFORM_FEE_PERCENT", "12.8"))
 
-# Comisión estimada de MP (ej: 7,74% para acreditación inmediata)
-app.config["MP_COMMISSION_RATE"] = float(os.getenv("MP_COMMISSION_RATE", "0.0774"))
+"""Pricing rules (V1)
 
-# Comisión real de ApuntesYa sobre el monto base que quiere recibir el vendedor (12,8% = 0.128)
-app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.128"))
+- Seller inputs NET (what they want to receive) => stored in Note.price_cents
+- Buyer sees gross price with commission included.
+
+Total fee included in the buyer-facing price: 15%
+  - 8% Mercado Pago
+  - 7% ApuntesYa
+
+Buyer price: P = N / 0.85
+"""
+
+# Fee rates used for accounting/labels (buyer does not see a breakdown)
+app.config["MP_COMMISSION_RATE"] = float(os.getenv("MP_COMMISSION_RATE", "0.08"))
+app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.07"))
+app.config["TOTAL_FEE_RATE"] = float(os.getenv("TOTAL_FEE_RATE", "0.15"))
 
 app.config["IIBB_ENABLED"] = os.getenv("IIBB_ENABLED", "false").lower() in ("1", "true", "yes")
 app.config["IIBB_RATE"] = float(os.getenv("IIBB_RATE", "0.0"))
 
 MP_COMMISSION_RATE = app.config["MP_COMMISSION_RATE"]
 APY_COMMISSION_RATE = app.config["APY_COMMISSION_RATE"]
+TOTAL_FEE_RATE = app.config["TOTAL_FEE_RATE"]
 IIBB_ENABLED = app.config["IIBB_ENABLED"]
 IIBB_RATE = app.config["IIBB_RATE"]
-GROSS_MULTIPLIER = 1 + APY_COMMISSION_RATE + (1 + APY_COMMISSION_RATE) * MP_COMMISSION_RATE
+# Buyer price includes TOTAL_FEE_RATE inside the final price
+GROSS_MULTIPLIER = 1.0 / (1.0 - float(TOTAL_FEE_RATE))
 
 app.config["MP_ACCESS_TOKEN_PLATFORM"] = os.getenv("MP_ACCESS_TOKEN", "")
 app.config["MP_OAUTH_REDIRECT_URL"] = os.getenv("MP_OAUTH_REDIRECT_URL")
@@ -318,9 +412,8 @@ try:
 except Exception:
     auth_reset_bp = None
 
-# ⚠️ Para evitar choques con el Hub nativo, NO registramos el blueprint admin.
-# if admin_bp:
-#     app.register_blueprint(admin_bp)
+if admin_bp:
+    app.register_blueprint(admin_bp)
 if auth_reset_bp:
     app.register_blueprint(auth_reset_bp)
 
@@ -364,6 +457,292 @@ def gcs_generate_signed_url(blob_name: str, seconds: int = 600) -> str:
         method="GET",
     )
     return url
+
+
+def gcs_download_to_temp(blob_name: str) -> str:
+    """Download a blob to a temporary file and return the local path."""
+    if not gcs_bucket:
+        raise RuntimeError("GCS no está configurado")
+    tmp_dir = os.path.join(BASE_DATA, "tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+    tmp_path = os.path.join(tmp_dir, f"{secrets.token_hex(8)}.bin")
+    blob = gcs_bucket.blob(blob_name)
+    blob.download_to_filename(tmp_path)
+    return tmp_path
+
+
+def gcs_download_bytes(blob_name: str) -> bytes:
+    if not gcs_bucket:
+        raise RuntimeError("GCS no está configurado")
+    blob = gcs_bucket.blob(blob_name)
+    return blob.download_as_bytes()
+
+
+def gcs_upload_bytes(data: bytes, blob_name: str, content_type: str = "application/octet-stream") -> str:
+    if not gcs_bucket:
+        raise RuntimeError("GCS no está configurado")
+    blob = gcs_bucket.blob(blob_name)
+    blob.upload_from_string(data, content_type=content_type)
+    return blob_name
+
+
+def _watermark_image(img, text: str = "APUNTESYA"):
+    """Apply a repeated diagonal watermark over a PIL image."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    if img.mode != "RGBA":
+        base = img.convert("RGBA")
+    else:
+        base = img.copy()
+
+    overlay = Image.new("RGBA", base.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    # Font fallback
+    try:
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", size=max(16, int(min(base.size) * 0.05)))
+    except Exception:
+        font = ImageFont.load_default()
+
+    w, h = base.size
+    step = max(140, int(min(w, h) * 0.25))
+    angle = -30
+
+    # Create rotated watermark tile
+    tile = Image.new("RGBA", (step, step), (255, 255, 255, 0))
+    td = ImageDraw.Draw(tile)
+    td.text((10, step // 2 - 10), text, font=font, fill=(0, 0, 0, 60))
+    tile = tile.rotate(angle, expand=1)
+
+    # Paste across
+    for y in range(-step, h + step, step):
+        for x in range(-step, w + step, step):
+            overlay.alpha_composite(tile, (x, y))
+
+    out = Image.alpha_composite(base, overlay)
+    return out.convert("RGB")
+
+
+def generate_note_preview(note: Note, max_pages: int = 4) -> tuple[list[int], list[str]]:
+    """Generate preview images for a note PDF (with watermark) and store paths.
+
+    Returns (pages, image_paths).
+    """
+    import random
+    import fitz  # PyMuPDF
+    from PIL import Image
+    from io import BytesIO
+
+    # Get local path to PDF
+    tmp_pdf = None
+    local_pdf = None
+    try:
+        if gcs_bucket and note.file_path and "/" in note.file_path:
+            tmp_pdf = gcs_download_to_temp(note.file_path)
+            local_pdf = tmp_pdf
+        else:
+            local_pdf = os.path.join(app.config["UPLOAD_FOLDER"], note.file_path)
+
+        doc = fitz.open(local_pdf)
+        total = doc.page_count
+        if total <= 0:
+            return ([], [])
+
+        pages = {0}
+        pages.add(max(0, total // 2))
+        # add a couple pseudo-random pages (excluding first)
+        if total > 2:
+            candidates = list(range(1, total))
+            random.shuffle(candidates)
+            for p in candidates:
+                pages.add(p)
+                if len(pages) >= max_pages:
+                    break
+        pages = sorted(pages)[:max_pages]
+
+        image_paths: list[str] = []
+        for idx, pno in enumerate(pages, start=1):
+            page = doc.load_page(pno)
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
+            img = Image.open(BytesIO(pix.tobytes("png")))
+            img = _watermark_image(img, text="APUNTESYA")
+
+            buf = BytesIO()
+            img.save(buf, format="JPEG", quality=82, optimize=True)
+            data = buf.getvalue()
+
+            if gcs_bucket:
+                blob_name = f"previews/{note.id}/{idx}.jpg"
+                gcs_upload_bytes(data, blob_name, content_type="image/jpeg")
+                image_paths.append(blob_name)
+            else:
+                prev_dir = os.path.join(app.config["UPLOAD_FOLDER"], "previews", str(note.id))
+                os.makedirs(prev_dir, exist_ok=True)
+                out_path = os.path.join(prev_dir, f"{idx}.jpg")
+                with open(out_path, "wb") as f:
+                    f.write(data)
+                # store relative path
+                image_paths.append(f"previews/{note.id}/{idx}.jpg")
+
+        return (pages, image_paths)
+    finally:
+        try:
+            if tmp_pdf and os.path.exists(tmp_pdf):
+                os.remove(tmp_pdf)
+        except Exception:
+            pass
+
+
+# ------------------------------ AI moderation ------------------------------
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
+
+
+def _extract_text_for_moderation(note: Note, max_pages: int = 2, max_chars: int = 9000) -> str:
+    """Extract a small text sample from the PDF (for AI moderation).
+
+    Uses PyMuPDF. If extraction fails, returns empty string.
+    """
+    import fitz
+    tmp_pdf = None
+    local_pdf = None
+    try:
+        if gcs_bucket and note.file_path and "/" in note.file_path:
+            tmp_pdf = gcs_download_to_temp(note.file_path)
+            local_pdf = tmp_pdf
+        else:
+            local_pdf = os.path.join(app.config["UPLOAD_FOLDER"], note.file_path)
+
+        doc = fitz.open(local_pdf)
+        parts = []
+        for pno in range(min(max_pages, doc.page_count)):
+            try:
+                parts.append(doc.load_page(pno).get_text("text"))
+            except Exception:
+                continue
+        text_sample = "\n\n".join(parts).strip()
+        if len(text_sample) > max_chars:
+            text_sample = text_sample[:max_chars]
+        return text_sample
+    except Exception:
+        return ""
+    finally:
+        try:
+            if tmp_pdf and os.path.exists(tmp_pdf):
+                os.remove(tmp_pdf)
+        except Exception:
+            pass
+
+
+def _gemini_moderate_note(text_sample: str, meta: dict) -> dict:
+    """Call Gemini (best-effort) to classify a note.
+
+    Returns a dict with keys:
+      decision: approve|review|deny
+      confidence: 0..1 float
+      quality_score / copyright_risk / mismatch_risk: 0..1 floats (optional)
+      summary: short string
+      reasons: list[str]
+    """
+    if not GEMINI_API_KEY:
+        return {
+            "decision": "review",
+            "confidence": 0.5,
+            "summary": "Gemini no configurado: enviado a revisión manual (hasta 12hs).",
+            "reasons": ["missing_gemini_api_key"],
+            "quality_score": 0.5,
+            "copyright_risk": 0.0,
+            "mismatch_risk": 0.0,
+        }
+
+    try:
+        from google import genai
+        from pydantic import BaseModel, Field
+        from typing import List, Literal
+        import json as _json
+
+        class _ModerationResult(BaseModel):
+            decision: Literal["approve", "review", "deny"]
+            confidence: int = Field(ge=0, le=100)
+            summary: str
+            reasons: List[str] = []
+            quality_score: int = Field(ge=0, le=100, default=50)
+            copyright_risk: int = Field(ge=0, le=100, default=0)
+            mismatch_risk: int = Field(ge=0, le=100, default=0)
+
+        client = genai.Client(api_key=GEMINI_API_KEY)
+
+        prompt = f"""
+Sos moderador de un marketplace de apuntes (Argentina). Evaluá el contenido y devolvé una decisión:
+- approve: apunte educativo válido
+- review: dudoso / posible copyright / requiere revisión humana
+- deny: claramente spam/no educativo/ilegal
+
+Metadatos del apunte (no confiar al 100%, solo contexto):
+{_json.dumps(meta, ensure_ascii=False)}
+
+Texto extraído (muestra):
+{text_sample}
+
+Devolvé SOLO JSON con los campos: decision, confidence (0-100), summary, reasons, quality_score, copyright_risk, mismatch_risk.
+"""
+
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": _ModerationResult,
+            },
+        )
+        parsed = resp.parsed
+        # Convert to legacy dict format
+        out = {
+            "decision": parsed.decision,
+            "confidence": parsed.confidence / 100.0,
+            "summary": parsed.summary,
+            "reasons": parsed.reasons,
+            "quality_score": parsed.quality_score / 100.0,
+            "copyright_risk": parsed.copyright_risk / 100.0,
+            "mismatch_risk": parsed.mismatch_risk / 100.0,
+        }
+        return out
+
+    except Exception as e:
+        return {
+            "decision": "review",
+            "confidence": 0.5,
+            "summary": f"Error Gemini: {type(e).__name__}. Enviado a revisión manual.",
+            "reasons": ["gemini_error"],
+            "quality_score": 0.5,
+            "copyright_risk": 0.0,
+            "mismatch_risk": 0.0,
+        }
+
+def _decision_to_status(ai: dict) -> tuple[str, str]:
+    """Map AI JSON to (moderation_status, reason)."""
+    decision = (ai.get("decision") or "review").lower().strip()
+    conf = float(ai.get("confidence") or 0.0)
+    # extra safety: if decision isn't recognized -> manual
+    if decision not in ("approve", "review", "deny"):
+        decision = "review"
+    if decision == "approve" and conf >= 0.70:
+        return ("approved", None)
+    if decision == "deny" and conf >= 0.70:
+        return ("rejected", (ai.get("summary") or "Rechazado por moderación automática").strip())
+    # default
+    return ("pending_manual", (ai.get("summary") or "Revisión manual requerida").strip())
+
+
+def _notify_users(session_db, user_ids: list[int], title: str, body: str, kind: str = "info"):
+    """Create in-app notifications for a list of users."""
+    for uid in user_ids:
+        try:
+            session_db.add(Notification(user_id=uid, kind=kind, title=title, body=body))
+        except Exception:
+            pass
+
 
 
 # ------------------------------ util contacto vendedor ------------------------------
@@ -439,13 +818,44 @@ def _promote_admin_once():
 @app.route("/")
 def index():
     with Session() as s:
+        # Home shows only approved & active notes
         notes = s.execute(
-            select(Note).where(Note.is_active == True).order_by(Note.created_at.desc()).limit(30)
+            select(Note)
+            .where(
+                Note.is_active == True,
+                Note.moderation_status == 'approved',
+                Note.deleted_at.is_(None)
+            )
+            .order_by(Note.created_at.desc())
+            .limit(30)
         ).scalars().all()
+
+        # Rankings
+        # - most downloaded
+        most_downloaded = s.execute(
+            select(Note, func.count(DownloadLog.id).label('dl'))
+            .join(DownloadLog, DownloadLog.note_id == Note.id)
+            .where(Note.is_active == True, Note.moderation_status == 'approved', Note.deleted_at.is_(None))
+            .group_by(Note.id)
+            .order_by(desc(func.count(DownloadLog.id)))
+            .limit(10)
+        ).all()
+
+        # - best rated
+        best_rated = s.execute(
+            select(Note, func.avg(Review.rating).label('avg'))
+            .join(Review, Review.note_id == Note.id)
+            .where(Note.is_active == True, Note.moderation_status == 'approved', Note.deleted_at.is_(None))
+            .group_by(Note.id)
+            .order_by(desc(func.avg(Review.rating)))
+            .limit(10)
+        ).all()
     # Siempre mandamos q y filters para no romper el template
     return render_template(
         "index.html",
         notes=notes,
+        most_downloaded=most_downloaded,
+        best_rated=best_rated,
         include_dynamic_selects=True,
         q="",
         filters={},
@@ -470,6 +880,8 @@ def search_quick():
                 select(Note)
                 .where(
                     Note.is_active == True,
+                    Note.moderation_status == 'approved',
+                    Note.deleted_at.is_(None),
                     or_(Note.title.ilike(like), Note.description.ilike(like))
                 )
                 .order_by(desc(Note.created_at))
@@ -498,7 +910,11 @@ def search_advanced():
     note_type  = (request.args.get("type") or "").strip()  # "free" | "paid" | ""
 
     with Session() as s:
-        stmt = select(Note).where(Note.is_active == True)
+        stmt = select(Note).where(
+            Note.is_active == True,
+            Note.moderation_status == 'approved',
+            Note.deleted_at.is_(None)
+        )
 
         if q:
             like = f"%{q}%"
@@ -712,23 +1128,61 @@ def profile():
         seller_contact = getattr(me, "seller_contact", "") or ""
         contact_url, contact_label = _build_contact_link(seller_contact)
 
+        # Structured contacts
+        contact_email = getattr(me, "contact_email", "") or ""
+        contact_whatsapp = getattr(me, "contact_whatsapp", "") or ""
+        contact_instagram = getattr(me, "contact_instagram", "") or ""
+        contact_visible_public = bool(getattr(me, "contact_visible_public", True))
+        contact_visible_buyers = bool(getattr(me, "contact_visible_buyers", True))
+
+        mp_connected = bool(getattr(me, "mp_access_token", None))
+
+        # Notifications (latest)
+        try:
+            notifications = s.execute(
+                select(Notification)
+                .where(Notification.user_id == current_user.id)
+                .order_by(Notification.created_at.desc())
+                .limit(10)
+            ).scalars().all()
+        except Exception:
+            notifications = []
+
     return render_template(
         "profile.html",
         my_notes=my_notes,
+        notifications=notifications,
         seller_contact=seller_contact,
         seller_contact_url=contact_url,
         seller_contact_label=contact_label,
+        contact_email=contact_email,
+        contact_whatsapp=contact_whatsapp,
+        contact_instagram=contact_instagram,
+        contact_visible_public=contact_visible_public,
+        contact_visible_buyers=contact_visible_buyers,
+        mp_connected=mp_connected,
     )
 
 @app.post("/profile/update_contact")
 @login_required
 def profile_update_contact():
     contact = (request.form.get("seller_contact") or "").strip()
+    contact_email = (request.form.get("contact_email") or "").strip()
+    contact_whatsapp = (request.form.get("contact_whatsapp") or "").strip()
+    contact_instagram = (request.form.get("contact_instagram") or "").strip()
+    visible_public = (request.form.get("contact_visible_public") == "1")
+    visible_buyers = (request.form.get("contact_visible_buyers") == "1")
     with Session() as s:
         u = s.get(User, current_user.id)
-        setattr(u, "seller_contact", contact)
+        setattr(u, "seller_contact", contact or None)
+        if hasattr(u, "contact_email"):
+            u.contact_email = contact_email or None
+            u.contact_whatsapp = contact_whatsapp or None
+            u.contact_instagram = contact_instagram or None
+            u.contact_visible_public = bool(visible_public)
+            u.contact_visible_buyers = bool(visible_buyers)
         s.commit()
-    flash("Contacto de vendedor actualizado.")
+    flash("Datos de contacto actualizados.")
     return redirect(url_for("profile"))
 
 @app.route("/profile/balance")
@@ -896,7 +1350,18 @@ def upload_note():
         faculty = request.form["faculty"].strip()
         career = request.form["career"].strip()
         price = request.form.get("price", "").strip()
+        # price == seller net (what they want to receive)
         price_cents = int(round(float(price) * 100)) if price else 0
+
+        # Moderation acknowledgement (required)
+        if request.form.get("moderation_ack") != "1":
+            flash("Antes de publicar, tenés que aceptar la leyenda de moderación (IA + posible revisión manual hasta 12hs).", "warning")
+            return redirect(url_for("upload_note"))
+
+        # Paid notes require Mercado Pago linked
+        if price_cents > 0 and not getattr(current_user, "mp_access_token", None):
+            flash("Para publicar apuntes pagos tenés que vincular tu cuenta de Mercado Pago primero.", "warning")
+            return redirect(url_for("profile"))
 
         file = request.files.get("file")
         if not file or file.filename == "":
@@ -933,9 +1398,86 @@ def upload_note():
                 seller_id=current_user.id
             )
 
+            # New uploads go through AI moderation
+            note.moderation_status = "pending_ai"
+
             s.add(note)
             s.commit()
-        flash("Apunte subido correctamente.")
+
+            # Generate preview images (best-effort)
+            try:
+                pages, imgs = generate_note_preview(note)
+                note.preview_pages = {"pages": pages}
+                note.preview_images = {"images": imgs}
+                s.commit()
+            except Exception as e:
+                app.logger.warning(f"preview generation failed: {e}")
+
+            # AI moderation (best-effort). If OpenAI isn't configured, it will fall back to manual review.
+            try:
+                text_sample = _extract_text_for_moderation(note)
+                meta = {
+                    "title": title,
+                    "description": description,
+                    "university": university,
+                    "faculty": faculty,
+                    "career": career,
+                    "seller_id": current_user.id,
+                    "price_net": price_cents / 100.0,
+                }
+                ai = _gemini_moderate_note(text_sample=text_sample, meta=meta)
+                status, reason = _decision_to_status(ai)
+
+                note.ai_decision = (ai.get("decision") or None)
+                note.ai_model = GEMINI_MODEL if GEMINI_API_KEY else None
+                note.ai_summary = (ai.get("summary") or None)
+                note.ai_raw = ai
+
+                # store float scores as 0..1000 integers for portability
+                def _to_i(x):
+                    try:
+                        return int(round(float(x) * 1000))
+                    except Exception:
+                        return None
+                note.ai_confidence = _to_i(ai.get("confidence"))
+                note.ai_score_quality = _to_i(ai.get("quality_score"))
+                note.ai_score_copyright = _to_i(ai.get("copyright_risk"))
+                note.ai_score_mismatch = _to_i(ai.get("mismatch_risk"))
+
+                note.moderation_status = status
+                note.moderation_reason = reason
+                if status == "pending_manual":
+                    note.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
+
+                # Notifications
+                admin_ids = [u.id for u in s.execute(select(User).where(User.is_admin == True)).scalars().all()]
+                if status == "approved":
+                    _notify_users(s, [current_user.id], "Apunte aprobado", "Tu apunte fue aprobado automáticamente y ya está publicado.", kind="success")
+                elif status == "pending_manual":
+                    _notify_users(s, [current_user.id], "Apunte en revisión manual", "La IA marcó tu apunte para revisión manual. Puede demorar hasta 12hs.", kind="warning")
+                    _notify_users(s, admin_ids, "Revisión manual requerida", f"Hay un apunte pendiente de revisión manual: #{note.id} — {note.title}", kind="warning")
+                elif status == "rejected":
+                    _notify_users(s, [current_user.id], "Apunte rechazado", f"Tu apunte fue rechazado por la moderación automática. Motivo: {reason or 'sin detalle'}", kind="danger")
+                    _notify_users(s, admin_ids, "Apunte rechazado por IA", f"Rechazo IA: #{note.id} — {note.title}. Motivo: {reason or 'sin detalle'}", kind="danger")
+
+                s.commit()
+            except Exception as e:
+                app.logger.warning(f"ai moderation failed: {e}")
+
+        # UX message based on status
+        msg = "Apunte subido."
+        try:
+            if note.moderation_status == "approved":
+                msg += " Fue aprobado automáticamente y ya está publicado."
+            elif note.moderation_status == "pending_manual":
+                msg += " Quedó en revisión manual (puede demorar hasta 12hs)."
+            elif note.moderation_status == "rejected":
+                msg += " Fue rechazado. Revisá el motivo en tu perfil."
+            else:
+                msg += " Quedó pendiente de revisión."
+        except Exception:
+            msg += ""
+        flash(msg)
         return redirect(url_for("note_detail", note_id=note.id))
     return render_template("upload.html")
 
@@ -947,6 +1489,13 @@ def note_detail(note_id):
         note = s.get(Note, note_id)
         if not note or not note.is_active:
             abort(404)
+
+        # Hide non-approved notes from the public (seller/admin can still view)
+        if getattr(note, "moderation_status", "approved") != "approved":
+            if not current_user.is_authenticated:
+                abort(404)
+            if current_user.id != note.seller_id and not getattr(current_user, "is_admin", False):
+                abort(404)
 
         # ¿Puede descargar?
         can_download = False
@@ -962,6 +1511,15 @@ def note_detail(note_id):
                     )
                 ).scalar_one_or_none()
                 can_download = p is not None
+
+        # Downloads metric
+        try:
+            dl = s.execute(
+                select(func.count(DownloadLog.id)).where(DownloadLog.note_id == note.id)
+            ).scalar_one()
+            note.download_count = int(dl or 0)
+        except Exception:
+            pass
 
         # Reseñas y nombres de usuarios
         rows = s.execute(
@@ -1004,14 +1562,40 @@ def note_detail(note_id):
 
                 can_review = not already_reviewed
 
-        # Contacto del vendedor
-        seller_contact_url = ""
-        seller_contact_label = ""
-        if note.seller_id:
-            seller = s.get(User, note.seller_id)
-            seller_contact_raw = getattr(seller, "seller_contact", "") or ""
-            if seller_contact_raw:
-                seller_contact_url, seller_contact_label = _build_contact_link(seller_contact_raw)
+        # Vendedor (para perfil + contacto)
+        seller = s.get(User, note.seller_id) if note.seller_id else None
+
+        # Contactos del vendedor
+        seller_contacts = []
+        if seller:
+            # Backward compatible: if legacy seller_contact is present, show it too
+            if getattr(seller, "seller_contact", None):
+                url, label = _build_contact_link(getattr(seller, "seller_contact"))
+                if url:
+                    seller_contacts.append((url, "Contacto"))
+
+            # Structured contacts
+            if getattr(seller, "contact_visible_public", True) or (can_download and getattr(seller, "contact_visible_buyers", True)):
+                if getattr(seller, "contact_email", None):
+                    seller_contacts.append((f"mailto:{seller.contact_email}", "Email"))
+                if getattr(seller, "contact_whatsapp", None):
+                    url, _ = _build_contact_link(seller.contact_whatsapp)
+                    if url:
+                        seller_contacts.append((url, "WhatsApp"))
+                if getattr(seller, "contact_instagram", None):
+                    ig = seller.contact_instagram.strip().lstrip("@").strip()
+                    if ig:
+                        seller_contacts.append((f"https://instagram.com/{ig}", "Instagram"))
+
+        # Verified seller badge (MP connected + at least 1 approved sale)
+        seller_verified = False
+        if seller and getattr(seller, "mp_access_token", None):
+            sold = s.execute(
+                select(func.count(Purchase.id))
+                .join(Note, Note.id == Purchase.note_id)
+                .where(Note.seller_id == seller.id, Purchase.status == "approved", Purchase.amount_cents > 0)
+            ).scalar_one()
+            seller_verified = (sold or 0) >= 1
 
         # -----------------------------------------------------
         # 👉 PRECIOS
@@ -1032,12 +1616,111 @@ def note_detail(note_id):
         avg_rating=avg_rating,
         can_review=can_review,
         already_reviewed=already_reviewed,
-        seller_contact_url=seller_contact_url,
-        seller_contact_label=seller_contact_label,
+        seller=seller,
+        seller_verified=seller_verified,
+        seller_contacts=seller_contacts,
         base_price=base_price,
         buyer_price=buyer_price,
         paid=(paid_param == "1"),
     )
+
+
+@app.route("/seller/<int:seller_id>")
+def seller_profile(seller_id: int):
+    """Public seller profile with catalog."""
+    with Session() as s:
+        seller = s.get(User, seller_id)
+        if not seller or not getattr(seller, "is_active", True):
+            abort(404)
+
+        notes = s.execute(
+            select(Note)
+            .where(
+                Note.seller_id == seller_id,
+                Note.is_active == True,
+                Note.moderation_status == "approved",
+                Note.deleted_at.is_(None)
+            )
+            .order_by(Note.created_at.desc())
+        ).scalars().all()
+
+        # Seller KPIs (paid sales, downloads)
+        paid_sales = s.execute(
+            select(func.count(Purchase.id))
+            .join(Note, Note.id == Purchase.note_id)
+            .where(Note.seller_id == seller_id, Purchase.status == "approved", Purchase.amount_cents > 0)
+        ).scalar_one()
+        total_downloads = s.execute(
+            select(func.count(DownloadLog.id))
+            .join(Note, Note.id == DownloadLog.note_id)
+            .where(Note.seller_id == seller_id)
+        ).scalar_one()
+
+        avg_rating = s.execute(
+            select(func.avg(Review.rating))
+            .join(Note, Note.id == Review.note_id)
+            .where(Note.seller_id == seller_id)
+        ).scalar_one()
+        avg_rating = round(float(avg_rating), 2) if avg_rating is not None else None
+
+        seller_verified = bool(getattr(seller, "mp_access_token", None)) and (paid_sales or 0) >= 1
+
+        # Public contacts (respect visibility)
+        contacts = []
+        if getattr(seller, "contact_visible_public", True):
+            if getattr(seller, "contact_email", None):
+                contacts.append((f"mailto:{seller.contact_email}", "Email"))
+            if getattr(seller, "contact_whatsapp", None):
+                url, _ = _build_contact_link(seller.contact_whatsapp)
+                if url:
+                    contacts.append((url, "WhatsApp"))
+            if getattr(seller, "contact_instagram", None):
+                ig = seller.contact_instagram.strip().lstrip("@").strip()
+                if ig:
+                    contacts.append((f"https://instagram.com/{ig}", "Instagram"))
+            # legacy fallback
+            if getattr(seller, "seller_contact", None):
+                url, _ = _build_contact_link(seller.seller_contact)
+                if url:
+                    contacts.append((url, "Contacto"))
+
+    return render_template(
+        "seller_profile.html",
+        seller=seller,
+        seller_verified=seller_verified,
+        notes=notes,
+        avg_rating=avg_rating,
+        paid_sales=int(paid_sales or 0),
+        total_downloads=int(total_downloads or 0),
+        contacts=contacts,
+    )
+
+
+@app.route("/preview/<int:note_id>/<int:idx>.jpg")
+def note_preview_image(note_id: int, idx: int):
+    """Serve protected preview images (watermarked) without exposing storage URLs."""
+    with Session() as s:
+        note = s.get(Note, note_id)
+        if not note or not note.is_active:
+            abort(404)
+        if getattr(note, "moderation_status", "approved") != "approved":
+            abort(404)
+        meta = getattr(note, "preview_images", None) or {}
+        imgs = (meta or {}).get("images") or []
+        if idx < 1 or idx > len(imgs):
+            abort(404)
+        path = imgs[idx - 1]
+
+        from io import BytesIO
+        if gcs_bucket and path and "/" in path:
+            data = gcs_download_bytes(path)
+            return send_file(BytesIO(data), mimetype="image/jpeg", as_attachment=False, download_name=f"preview_{note_id}_{idx}.jpg")
+
+        # local fallback
+        fpath = os.path.join(app.config["UPLOAD_FOLDER"], path)
+        if not os.path.exists(fpath):
+            abort(404)
+        return send_file(fpath, mimetype="image/jpeg", as_attachment=False)
 
 
 @app.post("/note/<int:note_id>/review")
@@ -1157,12 +1840,21 @@ def download_note(note_id):
         if not allowed:
             flash("No tenés acceso a este archivo.")
             return redirect(url_for("note_detail", note_id=note.id))
-        # ✅ Si está permitido, ahora sí devolvemos el archivo
+        # Log download for metrics (best-effort)
+        try:
+            s.add(DownloadLog(user_id=current_user.id, note_id=note.id, is_free=(note.price_cents == 0)))
+            s.commit()
+        except Exception:
+            pass
+
+        # ✅ Deliver file without exposing storage links
+        from io import BytesIO
         if gcs_bucket and note.file_path and "/" in note.file_path:
-            signed_url = gcs_generate_signed_url(note.file_path, seconds=600)  # 10 minutos
-            return redirect(signed_url)
-        else:
-            return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
+            data = gcs_download_bytes(note.file_path)
+            fname = os.path.basename(note.file_path) or f"apunte_{note.id}.pdf"
+            return send_file(BytesIO(data), mimetype="application/pdf", as_attachment=True, download_name=fname)
+
+        return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
 
 
 
@@ -1233,6 +1925,8 @@ def buy_note(note_id):
         note = s.get(Note, note_id)
         if not note or not note.is_active:
             abort(404)
+        if getattr(note, "moderation_status", "approved") != "approved":
+            abort(404)
         if note.seller_id == current_user.id:
             flash("No podés comprar tu propio apunte.")
             return redirect(url_for("note_detail", note_id=note.id))
@@ -1245,9 +1939,9 @@ def buy_note(note_id):
         s.add(p)
         s.commit()
 
-        price_base = note.price_cents / 100  # lo que quiere recibir el vendedor (X)
-        price_ars = round(price_base * GROSS_MULTIPLIER, 2)
-        platform_fee_percent = 0.12  # 12% de la ganancia del vendedor
+        price_base = note.price_cents / 100  # neto vendedor (N)
+        price_ars = round(price_base * GROSS_MULTIPLIER, 2)  # final comprador (P)
+        platform_fee_percent = 0.07  # 7% de P (comisión ApuntesYa)
         back_urls = {
             "success": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
             "failure": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
@@ -1257,12 +1951,11 @@ def buy_note(note_id):
         try:
             seller_token = get_valid_seller_token(seller)
             if seller_token is None:
-                use_token = app.config["MP_ACCESS_TOKEN_PLATFORM"]
-                marketplace_fee = 0.0
-                flash("El vendedor no tiene Mercado Pago vinculado. Se procesa con token de la plataforma y sin comisión.", "info")
-            else:
-                use_token = seller_token
-                marketplace_fee = round(price_ars * platform_fee_percent, 2)
+                flash("El vendedor no tiene Mercado Pago vinculado. No se puede procesar la compra.", "warning")
+                return redirect(url_for("note_detail", note_id=note.id))
+
+            use_token = seller_token
+            marketplace_fee = round(price_ars * platform_fee_percent, 2)
 
             pref = mp.create_preference_for_seller_token(
                 seller_access_token=use_token,
@@ -2080,6 +2773,110 @@ def update_academics_post():
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
+# ------------------------------ Combos ------------------------------
+
+def _combo_buyer_price_cents(combo: Combo) -> int:
+    # Buyer price includes 15% fees (seller enters net). If free, 0.
+    if not combo or (combo.price_cents or 0) <= 0:
+        return 0
+    return int(math.ceil((combo.price_cents / (1 - (MP_COMMISSION_RATE + APY_COMMISSION_RATE)))))
+
+@app.route("/profile/combos")
+@login_required
+def profile_combos():
+    with Session() as s:
+        combos = s.execute(
+            select(Combo).where(Combo.seller_id == current_user.id).order_by(Combo.created_at.desc())
+        ).scalars().all()
+    return render_template("profile_combos.html", combos=combos, buyer_price=_combo_buyer_price_cents)
+
+@app.route("/combos/create", methods=["GET", "POST"])
+@login_required
+def combo_create():
+    with Session() as s:
+        # seller can only include own approved active notes
+        notes = s.execute(
+            select(Note).where(Note.seller_id == current_user.id, Note.is_active == True).order_by(Note.created_at.desc())
+        ).scalars().all()
+
+        if request.method == "POST":
+            title = (request.form.get("title") or "").strip()
+            description = (request.form.get("description") or "").strip()
+            price_net = int(float((request.form.get("price_net") or "0").replace(",", ".")) * 100)
+            note_ids = request.form.getlist("note_ids") or []
+            note_ids = [int(x) for x in note_ids if str(x).isdigit()]
+
+            if not title or not description or len(note_ids) < 2:
+                flash("El combo debe tener título, descripción y al menos 2 apuntes.", "danger")
+                return render_template("combo_create.html", notes=notes)
+
+            combo = Combo(
+                seller_id=current_user.id,
+                title=title,
+                description=description,
+                price_cents=max(price_net, 0),
+                is_active=True,
+                moderation_status="pending_ai",
+            )
+            s.add(combo)
+            s.flush()  # get id
+
+            chosen = s.execute(
+                select(Note).where(Note.id.in_(note_ids), Note.seller_id == current_user.id)
+            ).scalars().all()
+
+            for n in chosen:
+                s.add(ComboNote(combo_id=combo.id, note_id=n.id))
+
+            # Auto-approve rule requested:
+            # If ALL notes are approved, approve combo immediately (no extra AI run).
+            if chosen and all((n.moderation_status == "approved") for n in chosen):
+                combo.moderation_status = "approved"
+                combo.ai_decision = "approve"
+                combo.ai_confidence = 1000
+                combo.ai_model = GEMINI_MODEL if GEMINI_API_KEY else None
+                combo.ai_summary = "Auto-aprobado: todos los apuntes del combo ya estaban aprobados."
+                combo.ai_raw = {"auto": True, "rule": "all_notes_approved"}
+            else:
+                combo.moderation_status = "pending_manual"
+                combo.moderation_reason = "Revisión manual: el combo incluye apuntes no aprobados."
+                combo.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
+                try:
+                    s.add(Notification(
+                        user_id=current_user.id,
+                        kind="warning",
+                        title="Combo en revisión manual",
+                        body="Tu combo quedó en revisión manual. Puede demorar hasta 12hs."
+                    ))
+                except Exception:
+                    pass
+
+            s.commit()
+            flash("Combo creado. Si está aprobado, ya se publicará en tu perfil.", "success")
+            return redirect(url_for("profile_combos"))
+
+    return render_template("combo_create.html", notes=notes)
+
+@app.route("/combos/<int:combo_id>")
+def combo_detail(combo_id: int):
+    with Session() as s:
+        combo = s.get(Combo, combo_id)
+        if not combo or not combo.is_active:
+            abort(404)
+
+        # Visibility: only approved combos for public; seller/admin can see all
+        is_owner = current_user.is_authenticated and current_user.id == combo.seller_id
+        is_admin = current_user.is_authenticated and getattr(current_user, "is_admin", False)
+        if combo.moderation_status != "approved" and not (is_owner or is_admin):
+            abort(404)
+
+        note_ids = [row.note_id for row in s.execute(select(ComboNote).where(ComboNote.combo_id == combo.id)).scalars().all()]
+        notes = []
+        if note_ids:
+            notes = s.execute(select(Note).where(Note.id.in_(note_ids))).scalars().all()
+
+    return render_template("combo_detail.html", combo=combo, notes=notes, buyer_price=_combo_buyer_price_cents(combo))
+
 if __name__ == "__main__":
     app.run(debug=True)
 

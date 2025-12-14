@@ -2,12 +2,12 @@
 from flask import Blueprint, request, jsonify, abort, render_template
 from flask_login import login_required, current_user
 from datetime import datetime
-from ..models import User, Note, AdminAction, Base
+from ..models import User, Note, Combo, AdminAction, Base, Notification
 from ..app import Session
 from sqlalchemy.orm import joinedload
 from flask_login import login_required, current_user
 from sqlalchemy import select, func, desc
-from apuntesya2.models import User, Note, Purchase
+from apuntesya2.models import User, Note, Combo, Purchase
 from ..app import Session, MP_COMMISSION_RATE, APY_COMMISSION_RATE
 
 
@@ -26,6 +26,122 @@ def dashboard():
         users_count = s.query(User).count()
         notes_count = s.query(Note).count()
         return render_template("admin/dashboard.html", users_count=users_count, notes_count=notes_count)
+
+
+@admin_bp.route("/moderation")
+@login_required
+def moderation_queue():
+    """List notes pending moderation."""
+    _require_admin()
+    status = (request.args.get("status") or "pending_manual").strip()
+    with Session() as s:
+        notes = (
+            s.query(Note)
+            .options(joinedload(Note.seller))
+            .filter(Note.deleted_at.is_(None))
+            .filter(getattr(Note, "moderation_status", "approved") == status)
+            .order_by(getattr(Note, "created_at", Note.id).desc())
+            .limit(300)
+            .all()
+        )
+    return render_template("admin/moderation.html", notes=notes, combos=combos, status=status)
+
+
+@admin_bp.route("/moderation/<int:note_id>/approve", methods=["POST"])
+@login_required
+def moderation_approve(note_id: int):
+    _require_admin()
+    with Session() as s:
+        n = s.get(Note, note_id)
+        if not n:
+            abort(404)
+        n.moderation_status = "approved"
+        n.moderation_reason = None
+        if hasattr(n, "moderated_by_admin_id"):
+            n.moderated_by_admin_id = current_user.id
+        if hasattr(n, "moderated_at"):
+            n.moderated_at = datetime.utcnow()
+        s.add(AdminAction(admin_id=current_user.id, action="approve_note", target_type="note",
+                          target_id=n.id, reason=None, ip=request.remote_addr))
+        # notify seller
+        try:
+            s.add(Notification(user_id=n.seller_id, kind="success", title="Apunte aprobado", body="Tu apunte fue aprobado por moderación manual y ya está publicado."))
+        except Exception:
+            pass
+        s.commit()
+    return jsonify(ok=True)
+
+
+@admin_bp.route("/moderation/<int:note_id>/reject", methods=["POST"])
+@login_required
+def moderation_reject(note_id: int):
+    _require_admin()
+    reason = request.json.get("reason") if request.is_json else request.form.get("reason")
+    reason = (reason or "").strip() or None
+    with Session() as s:
+        n = s.get(Note, note_id)
+        if not n:
+            abort(404)
+        n.moderation_status = "rejected"
+        n.moderation_reason = reason
+        if hasattr(n, "moderated_by_admin_id"):
+            n.moderated_by_admin_id = current_user.id
+        if hasattr(n, "moderated_at"):
+            n.moderated_at = datetime.utcnow()
+        s.add(AdminAction(admin_id=current_user.id, action="reject_note", target_type="note",
+                          target_id=n.id, reason=reason, ip=request.remote_addr))
+        # notify seller
+        try:
+            msg = "Tu apunte fue denegado por moderación manual."
+            if reason:
+                msg += f" Motivo: {reason}"
+            s.add(Notification(user_id=n.seller_id, kind="danger", title="Apunte denegado", body=msg))
+        except Exception:
+            pass
+        s.commit()
+    return jsonify(ok=True)
+
+@admin_bp.route("/moderation/combo/<int:combo_id>/approve", methods=["POST"])
+@login_required
+def moderation_combo_approve(combo_id: int):
+    _require_admin()
+    with Session() as s:
+        c = s.get(Combo, combo_id)
+        if not c:
+            abort(404)
+        c.moderation_status = "approved"
+        c.moderation_reason = None
+        c.moderated_by_admin_id = current_user.id
+        c.moderated_at = datetime.utcnow()
+        try:
+            s.add(Notification(user_id=c.seller_id, kind="success", title="Combo aprobado", body="Tu combo fue aprobado y publicado."))
+        except Exception:
+            pass
+        s.commit()
+    return jsonify(ok=True)
+
+@admin_bp.route("/moderation/combo/<int:combo_id>/reject", methods=["POST"])
+@login_required
+def moderation_combo_reject(combo_id: int):
+    _require_admin()
+    reason = (request.form.get("reason") or "").strip()
+    with Session() as s:
+        c = s.get(Combo, combo_id)
+        if not c:
+            abort(404)
+        c.moderation_status = "rejected"
+        c.moderation_reason = reason or "Denegado por moderación manual."
+        c.moderated_by_admin_id = current_user.id
+        c.moderated_at = datetime.utcnow()
+        try:
+            msg = "Tu combo fue denegado por moderación manual."
+            if reason:
+                msg += f" Motivo: {reason}"
+            s.add(Notification(user_id=c.seller_id, kind="danger", title="Combo denegado", body=msg))
+        except Exception:
+            pass
+        s.commit()
+    return jsonify(ok=True)
 
 @admin_bp.route("/users")
 @login_required

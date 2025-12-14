@@ -154,6 +154,20 @@
     font-weight: 600;
   }
 
+  .badge-status {
+    padding: 3px 9px;
+    font-size: 11px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .status-approved { background: #e8fff0; color: #166534; border-color: #bbf7d0; }
+  .status-pending_ai { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
+  .status-pending_manual { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+  .status-rejected { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
   .badge-free {
     background: #e8fff0;
     color: #166534;
@@ -300,7 +314,7 @@
     <div class="profile-tabs">
       <a href="{{ url_for('profile_purchases') }}" class="profile-tab">
         📥 <span>Mis compras / descargas</span>
-      </a>
+      </a> <a class="tab" href="/profile/combos">Mis combos</a> 
       <a href="{{ url_for('profile') }}" class="profile-tab active">
         📚 <span>Mis apuntes subidos</span>
       </a>
@@ -351,6 +365,10 @@
             </div>
           </div>
           <div class="note-actions">
+            {% set st = (n.moderation_status or 'approved') %}
+            <span class="badge-status status-{{ st }}">
+              {% if st == 'approved' %}Aprobado{% elif st == 'pending_ai' %}Pendiente IA{% elif st == 'pending_manual' %}Revisión{% elif st == 'rejected' %}Denegado{% else %}{{ st }}{% endif %}
+            </span>
             {% if n.price_cents == 0 %}
             <span class="badge-free">Gratis</span>
             {% else %}
@@ -369,6 +387,18 @@
 
       <!-- Columna derecha: datos de cuenta -->
       <div class="profile-col">
+        {% if notifications and notifications|length > 0 %}
+        <div class="profile-right-box">
+          <h4>Notificaciones</h4>
+          {% for n in notifications %}
+            <div style="padding:8px 0;border-bottom:1px solid #eef2ff;">
+              <div style="font-weight:700;font-size:13px;color:#111827;">{{ n.title }}</div>
+              {% if n.body %}<div class="muted" style="margin-top:2px;">{{ n.body }}</div>{% endif %}
+              <div class="muted" style="margin-top:2px;font-size:12px;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '' }}</div>
+            </div>
+          {% endfor %}
+        </div>
+        {% endif %}
         <div class="profile-right-box">
           <h4>Datos de mi cuenta</h4>
 

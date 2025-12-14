@@ -335,6 +335,47 @@
   </div>
 </div>
 
+{% if most_downloaded or best_rated %}
+<div class="results-shell card mt-3">
+  <div class="results-header">
+    <h3>Rankings</h3>
+    <span class="muted">Lo más elegido y lo mejor valorado</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">
+    <div class="card" style="padding:14px;">
+      <h4 style="margin:0 0 10px;">Más descargados</h4>
+      {% if most_downloaded %}
+        <ol style="margin:0;padding-left:18px;">
+          {% for n, cnt in most_downloaded %}
+            <li style="margin:6px 0;">
+              <a class="link-strong" href="{{ url_for('note_detail', note_id=n.id) }}">{{ n.title }}</a>
+              <span class="muted">({{ cnt }} descargas)</span>
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="muted" style="margin:0;">Todavía no hay datos suficientes.</p>
+      {% endif %}
+    </div>
+    <div class="card" style="padding:14px;">
+      <h4 style="margin:0 0 10px;">Mejor valorados</h4>
+      {% if best_rated %}
+        <ol style="margin:0;padding-left:18px;">
+          {% for n, avg in best_rated %}
+            <li style="margin:6px 0;">
+              <a class="link-strong" href="{{ url_for('note_detail', note_id=n.id) }}">{{ n.title }}</a>
+              <span class="muted">(⭐ {{ '%.2f' % avg }})</span>
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <p class="muted" style="margin:0;">Todavía no hay reseñas suficientes.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- ===========================
      Resultados (tarjetas)
      =========================== -->
