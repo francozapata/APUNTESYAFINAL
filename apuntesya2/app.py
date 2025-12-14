@@ -2774,6 +2774,7 @@ def update_academics_post():
 # Main
 # -----------------------------------------------------------------------------
 # ------------------------------ Combos ------------------------------
+from ..models import ComboNote
 
 def _combo_buyer_price_cents(combo: Combo) -> int:
     # Buyer price includes 15% fees (seller enters net). If free, 0.
@@ -2790,7 +2791,7 @@ def profile_combos():
         ).scalars().all()
     return render_template("profile_combos.html", combos=combos, buyer_price=_combo_buyer_price_cents)
 
-@app.route("/combos/create", methods=["GET", "POST"])
+@app.route("/combos/create", methods=["GET", "POST"], endpoint="create_combo")
 @login_required
 def combo_create():
     with Session() as s:

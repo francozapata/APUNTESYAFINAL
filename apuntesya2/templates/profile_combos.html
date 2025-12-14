@@ -1,14 +1,66 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-.shell{max-width:980px;margin:28px auto;}
-.head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-h1{font-size:22px;margin:0}
-a.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:12px;background:#4478ff;color:#fff;text-decoration:none}
-.card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:14px;margin-top:14px}
-.row{display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid #eef2ff;border-radius:12px;padding:12px;margin-top:10px}
-.meta{color:#6b7280;font-size:13px}
-.badge{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid #e5e7f5;background:#f8fafc}
+  .shell {
+    max-width: 980px;
+    margin: 28px auto;
+  }
+
+  .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap
+  }
+
+  h1 {
+    font-size: 22px;
+    margin: 0
+  }
+
+  a.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: #4478ff;
+    color: #fff;
+    text-decoration: none
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e5e7f5;
+    border-radius: 16px;
+    padding: 14px;
+    margin-top: 14px
+  }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    border: 1px solid #eef2ff;
+    border-radius: 12px;
+    padding: 12px;
+    margin-top: 10px
+  }
+
+  .meta {
+    color: #6b7280;
+    font-size: 13px
+  }
+
+  .badge {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid #e5e7f5;
+    background: #f8fafc
+  }
 </style>
 <div class="shell">
   <div class="head">
@@ -18,26 +70,26 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px
 
   <div class="card">
     {% if combos %}
-      {% for c in combos %}
-        <div class="row">
-          <div>
-            <div style="font-weight:800">{{ c.title }}</div>
-            <div class="meta">{{ c.description[:90] }}{% if c.description|length>90 %}…{% endif %}</div>
-            <div class="meta">Estado: <span class="badge">{{ c.moderation_status }}</span></div>
-          </div>
-          <div style="text-align:right">
-            {% if c.seller_net_cents == 0 %}
-              <div style="font-weight:800">Gratis</div>
-            {% else %}
-              <div style="font-weight:800">${{ "%.2f"|format((c.seller_net_cents/100.0) * GROSS_MULTIPLIER) }}</div>
-              <div class="meta">precio final</div>
-            {% endif %}
-            <a class="btn" style="margin-top:8px" href="{{ url_for('combo_detail', combo_id=c.id) }}">Ver</a>
-          </div>
-        </div>
-      {% endfor %}
+    {% for c in combos %}
+    <div class="row">
+      <div>
+        <div style="font-weight:800">{{ c.title }}</div>
+        <div class="meta">{{ c.description[:90] }}{% if c.description|length>90 %}…{% endif %}</div>
+        <div class="meta">Estado: <span class="badge">{{ c.moderation_status }}</span></div>
+      </div>
+      <div style="text-align:right">
+        {% if c.seller_net_cents == 0 %}
+        <div style="font-weight:800">Gratis</div>
+        {% else %}
+        <div style="font-weight:800">${{ "%.2f"|format((c.seller_net_cents/100.0) * GROSS_MULTIPLIER) }}</div>
+        <div class="meta">precio final</div>
+        {% endif %}
+        <a class="btn" style="margin-top:8px" href="{{ url_for('combo_detail', combo_id=c.id) }}">Ver</a>
+      </div>
+    </div>
+    {% endfor %}
     {% else %}
-      <div class="meta">Todavía no creaste combos.</div>
+    <div class="meta">Todavía no creaste combos.</div>
     {% endif %}
   </div>
 </div>
