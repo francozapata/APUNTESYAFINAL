@@ -1,6 +1,7 @@
 # apuntesya2/app.py
 
 import os
+import io
 import secrets
 import math
 import json
@@ -31,7 +32,7 @@ from firebase_admin import credentials, auth as fb_auth
 
 # modelos
 from apuntesya2.models import (
-    Base, User, Note, Purchase, University, Faculty, Career, WebhookEvent, Review
+    Base, User, Note, Combo, ComboNote, Purchase, University, Faculty, Career, WebhookEvent, Review, DownloadLog, Coupon
 )
 
 # helpers MP
@@ -133,6 +134,11 @@ def fees_ctx():
         except Exception:
             return 0.0
     return dict(MP_FEE_IMMEDIATE_TOTAL_PCT=MP_FEE_IMMEDIATE_TOTAL_PCT, mp_fee_estimate=mp_fee_estimate)
+
+@app.context_processor
+def commission_ctx():
+    return dict(GROSS_MULTIPLIER=GROSS_MULTIPLIER, MP_COMMISSION_RATE=MP_COMMISSION_RATE, APY_COMMISSION_RATE=APY_COMMISSION_RATE)
+
 
 # -----------------------------------------------------------------------------
 # Paths (Render usa /tmp; local usa ./data)
@@ -237,10 +243,10 @@ app.config["BASE_URL"] = os.getenv("BASE_URL", "")
 app.config["PLATFORM_FEE_PERCENT"] = float(os.getenv("MP_PLATFORM_FEE_PERCENT", "12.8"))
 
 # Comisión estimada de MP (ej: 7,74% para acreditación inmediata)
-app.config["MP_COMMISSION_RATE"] = float(os.getenv("MP_COMMISSION_RATE", "0.0774"))
+app.config["MP_COMMISSION_RATE"] = float(os.getenv("MP_COMMISSION_RATE", "0.08"))
 
 # Comisión real de ApuntesYa sobre el monto base que quiere recibir el vendedor (12,8% = 0.128)
-app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.128"))
+app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.07"))
 
 app.config["IIBB_ENABLED"] = os.getenv("IIBB_ENABLED", "false").lower() in ("1", "true", "yes")
 app.config["IIBB_RATE"] = float(os.getenv("IIBB_RATE", "0.0"))
@@ -249,7 +255,7 @@ MP_COMMISSION_RATE = app.config["MP_COMMISSION_RATE"]
 APY_COMMISSION_RATE = app.config["APY_COMMISSION_RATE"]
 IIBB_ENABLED = app.config["IIBB_ENABLED"]
 IIBB_RATE = app.config["IIBB_RATE"]
-GROSS_MULTIPLIER = 1 + APY_COMMISSION_RATE + (1 + APY_COMMISSION_RATE) * MP_COMMISSION_RATE
+GROSS_MULTIPLIER = 1 / (1 - (APY_COMMISSION_RATE + MP_COMMISSION_RATE))
 
 app.config["MP_ACCESS_TOKEN_PLATFORM"] = os.getenv("MP_ACCESS_TOKEN", "")
 app.config["MP_OAUTH_REDIRECT_URL"] = os.getenv("MP_OAUTH_REDIRECT_URL")
@@ -349,6 +355,81 @@ def gcs_upload_file(file_storage, blob_name: str) -> str:
     )
     return blob_name
 
+
+
+
+# -----------------------------------------------------------------------------
+# Preview (thumbnails) con marca de agua "ApuntesYa"
+# -----------------------------------------------------------------------------
+def _watermark_image_pil(img, text="APUNTESYA"):
+    from PIL import Image, ImageDraw, ImageFont
+    import math
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+    overlay = Image.new("RGBA", img.size, (255,255,255,0))
+    draw = ImageDraw.Draw(overlay)
+
+    # Fuente simple (fallback)
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", max(18, int(min(img.size)*0.05)))
+    except Exception:
+        font = ImageFont.load_default()
+
+    w, h = img.size
+    step = max(160, int(min(w,h)*0.25))
+    angle = -30
+
+    # Dibujar texto repetido
+    for y in range(-h, h*2, step):
+        for x in range(-w, w*2, step):
+            draw.text((x, y), text, font=font, fill=(255,255,255,70))
+
+    overlay = overlay.rotate(angle, expand=1)
+    # Recortar al tamaño original centrado
+    ow, oh = overlay.size
+    cx = (ow - w)//2
+    cy = (oh - h)//2
+    overlay = overlay.crop((cx, cy, cx+w, cy+h))
+
+    out = Image.alpha_composite(img, overlay).convert("RGB")
+    return out
+
+def generate_preview_from_pdf_bytes(pdf_bytes: bytes, max_pages=5):
+    """
+    Renderiza 3-5 páginas (1, medio y aleatorias) a imágenes bytes (PNG/JPG),
+    aplica marca de agua y devuelve (pages, images_bytes_list).
+    """
+    import random
+    import fitz  # PyMuPDF
+    from io import BytesIO
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    n = doc.page_count
+    if n <= 0:
+        return [], []
+    pages = set()
+    pages.add(0)
+    pages.add(max(0, n//2))
+    while len(pages) < min(max_pages, n) and len(pages) < 3:
+        pages.add(random.randint(0, n-1))
+    while len(pages) < min(max_pages, n):
+        pages.add(random.randint(0, n-1))
+
+    pages = sorted(pages)[:min(max_pages, n)]
+    images = []
+    for pno in pages:
+        page = doc.load_page(pno)
+        # resolución moderada
+        pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2), alpha=False)
+        img_bytes = pix.tobytes("png")
+        # watermark
+        from PIL import Image
+        img = Image.open(BytesIO(img_bytes))
+        img = _watermark_image_pil(img, "APUNTESYA")
+        out = BytesIO()
+        img.save(out, format="JPEG", quality=85, optimize=True)
+        images.append(out.getvalue())
+    return [p+1 for p in pages], images
 
 def gcs_generate_signed_url(blob_name: str, seconds: int = 600) -> str:
     """
@@ -895,8 +976,17 @@ def upload_note():
         university = request.form["university"].strip()
         faculty = request.form["faculty"].strip()
         career = request.form["career"].strip()
-        price = request.form.get("price", "").strip()
-        price_cents = int(round(float(price) * 100)) if price else 0
+
+        price = request.form.get("price", "").strip()  # neto que quiere recibir el vendedor
+        try:
+            price_cents = int(round(float(price) * 100)) if price else 0
+        except Exception:
+            price_cents = 0
+
+        # MP obligatorio para apuntes pagos
+        if price_cents > 0 and not getattr(current_user, "mp_access_token", None):
+            flash("Para subir apuntes pagos necesitás vincular Mercado Pago.", "warning")
+            return redirect(url_for("help_mp"))
 
         file = request.files.get("file")
         if not file or file.filename == "":
@@ -909,17 +999,47 @@ def upload_note():
         base_name = secure_filename(file.filename)
         unique_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{base_name}"
 
+        # Preview
+        try:
+            pdf_bytes = file.read()
+            file.stream.seek(0)
+            preview_pages, preview_imgs_bytes = generate_preview_from_pdf_bytes(pdf_bytes, max_pages=5)
+        except Exception:
+            preview_pages, preview_imgs_bytes = [], []
+            try:
+                file.stream.seek(0)
+            except Exception:
+                pass
+
+        # Guardar PDF
         if gcs_bucket:
-            # Guardamos en GCS bajo notes/<seller_id>/<archivo>
             blob_name = f"notes/{current_user.id}/{unique_name}"
             gcs_upload_file(file, blob_name)
             stored_path = blob_name
         else:
-            # Fallback local (por ejemplo, entorno de desarrollo sin GCS)
             ensure_dirs()
             fpath = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
             file.save(fpath)
             stored_path = unique_name
+
+        # Guardar previews
+        preview_images = []
+        if preview_imgs_bytes:
+            if gcs_bucket:
+                for i, b in enumerate(preview_imgs_bytes, start=1):
+                    p_blob = f"previews/notes/{current_user.id}/{unique_name}_p{i}.jpg"
+                    blob = gcs_bucket.blob(p_blob)
+                    blob.upload_from_string(b, content_type="image/jpeg")
+                    preview_images.append(p_blob)
+            else:
+                prev_dir = os.path.join(app.config["UPLOAD_FOLDER"], "previews")
+                os.makedirs(prev_dir, exist_ok=True)
+                for i, b in enumerate(preview_imgs_bytes, start=1):
+                    fname = f"{unique_name}_p{i}.jpg"
+                    fpath = os.path.join(prev_dir, fname)
+                    with open(fpath, "wb") as f:
+                        f.write(b)
+                    preview_images.append(os.path.join("previews", fname))
 
         with Session() as s:
             note = Note(
@@ -928,16 +1048,22 @@ def upload_note():
                 university=university,
                 faculty=faculty,
                 career=career,
-                price_cents=price_cents,
+                price_cents=price_cents,          # neto vendedor
+                seller_net_cents=price_cents,
                 file_path=stored_path,
-                seller_id=current_user.id
+                seller_id=current_user.id,
+                preview_pages=preview_pages,
+                preview_images=preview_images,
+                moderation_status="pending_review",
             )
-
             s.add(note)
             s.commit()
-        flash("Apunte subido correctamente.")
+
+        flash("Apunte subido correctamente. Queda pendiente de moderación.", "success")
         return redirect(url_for("note_detail", note_id=note.id))
+
     return render_template("upload.html")
+
 
 @app.route("/note/<int:note_id>")
 def note_detail(note_id):
@@ -1159,13 +1285,283 @@ def download_note(note_id):
             return redirect(url_for("note_detail", note_id=note.id))
         # ✅ Si está permitido, ahora sí devolvemos el archivo
         if gcs_bucket and note.file_path and "/" in note.file_path:
-            signed_url = gcs_generate_signed_url(note.file_path, seconds=600)  # 10 minutos
-            return redirect(signed_url)
+            blob = gcs_bucket.blob(note.file_path)
+            data = blob.download_as_bytes()
+            return send_file(
+                io.BytesIO(data),
+                mimetype="application/pdf",
+                as_attachment=True,
+                download_name=secure_filename(note.title) + ".pdf"
+            )
         else:
             return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
 
 
 
+
+
+
+# -----------------------------------------------------------------------------
+# Preview protected
+# -----------------------------------------------------------------------------
+@app.route("/preview/note/<int:note_id>/<int:img_index>")
+@login_required
+def note_preview_image(note_id, img_index):
+    with Session() as s:
+        note = s.get(Note, note_id)
+        if not note or not note.is_active:
+            abort(404)
+        imgs = note.preview_images or []
+        if not isinstance(imgs, list) or img_index < 0 or img_index >= len(imgs):
+            abort(404)
+        path = imgs[img_index]
+        if gcs_bucket and isinstance(path, str) and "/" in path:
+            blob = gcs_bucket.blob(path)
+            data = blob.download_as_bytes()
+            return send_file(io.BytesIO(data), mimetype="image/jpeg")
+        # local
+        prev_path = os.path.join(app.config["UPLOAD_FOLDER"], path)
+        if not os.path.exists(prev_path):
+            abort(404)
+        return send_file(prev_path, mimetype="image/jpeg")
+
+
+# -----------------------------------------------------------------------------
+# Perfil público del vendedor + catálogo (apuntes y combos)
+# -----------------------------------------------------------------------------
+@app.route("/seller/<int:seller_id>")
+def seller_profile(seller_id):
+    with Session() as s:
+        seller = s.get(User, seller_id)
+        if not seller or not seller.is_active or seller.deleted_at:
+            abort(404)
+
+        notes = s.execute(
+            select(Note).where(
+                Note.seller_id == seller_id,
+                Note.is_active == True,
+                Note.deleted_at.is_(None),
+                Note.moderation_status == "approved"
+            ).order_by(Note.created_at.desc())
+        ).scalars().all()
+
+        combos = s.execute(
+            select(Combo).where(
+                Combo.seller_id == seller_id,
+                Combo.is_active == True,
+                Combo.moderation_status == "approved"
+            ).order_by(Combo.created_at.desc())
+        ).scalars().all()
+
+        # verificado: MP vinculado + al menos 1 venta aprobada
+        verified = bool(getattr(seller, "mp_access_token", None))
+        if verified:
+            has_sale = s.execute(
+                select(Purchase).where(Purchase.status == "approved").limit(1)
+            ).first()
+            verified = has_sale is not None
+
+        # rating vendedor (promedio de sus apuntes)
+        avg = s.execute(
+            select(func.avg(Review.rating)).join(Note, Review.note_id == Note.id).where(Note.seller_id == seller_id)
+        ).scalar()
+        avg_rating = float(avg) if avg else None
+
+        return render_template(
+            "seller_profile.html",
+            seller=seller,
+            notes=notes,
+            combos=combos,
+            verified=verified,
+            avg_rating=avg_rating,
+        )
+
+
+# -----------------------------------------------------------------------------
+# Combos (panel vendedor)
+# -----------------------------------------------------------------------------
+@app.route("/profile/combos")
+@login_required
+def profile_combos():
+    with Session() as s:
+        combos = s.execute(
+            select(Combo).where(Combo.seller_id == current_user.id).order_by(Combo.created_at.desc())
+        ).scalars().all()
+    return render_template("profile_combos.html", combos=combos)
+
+@app.route("/combo/create", methods=["GET","POST"])
+@login_required
+def create_combo():
+    with Session() as s:
+        my_notes = s.execute(
+            select(Note).where(
+                Note.seller_id == current_user.id,
+                Note.is_active == True,
+                Note.deleted_at.is_(None),
+                Note.moderation_status == "approved"
+            ).order_by(Note.created_at.desc())
+        ).scalars().all()
+
+    if request.method == "POST":
+        title = request.form.get("title","").strip()
+        description = request.form.get("description","").strip()
+        net = request.form.get("price","").strip()  # neto
+        selected = request.form.getlist("note_ids")
+        try:
+            net_cents = int(round(float(net)*100)) if net else 0
+        except Exception:
+            net_cents = 0
+
+        if not title or not description:
+            flash("Completá título y descripción.", "warning")
+            return redirect(url_for("create_combo"))
+        if len(selected) < 2:
+            flash("Seleccioná al menos 2 apuntes para el combo.", "warning")
+            return redirect(url_for("create_combo"))
+
+        # Validar MP si es pago
+        if net_cents > 0 and not getattr(current_user, "mp_access_token", None):
+            flash("Para publicar combos pagos necesitás vincular Mercado Pago.", "warning")
+            return redirect(url_for("help_mp"))
+
+        with Session() as s:
+            combo = Combo(
+                seller_id=current_user.id,
+                title=title,
+                description=description,
+                seller_net_cents=net_cents,
+                price_cents=net_cents,  # neto (se convierte a bruto en checkout, igual que note.price_cents)
+                moderation_status="pending_review"
+            )
+            s.add(combo)
+            s.flush()
+            for nid in selected:
+                try:
+                    nid_int = int(nid)
+                except Exception:
+                    continue
+                s.add(ComboNote(combo_id=combo.id, note_id=nid_int))
+            s.commit()
+            flash("Combo creado. Queda pendiente de moderación.", "success")
+            return redirect(url_for("profile_combos"))
+
+    return render_template("combo_create.html", my_notes=my_notes)
+
+@app.route("/combo/<int:combo_id>")
+def combo_detail(combo_id):
+    with Session() as s:
+        combo = s.get(Combo, combo_id)
+        if not combo or not combo.is_active or combo.moderation_status != "approved":
+            abort(404)
+        items = s.execute(select(ComboNote).where(ComboNote.combo_id==combo_id)).scalars().all()
+        notes = [s.get(Note, it.note_id) for it in items]
+        seller = s.get(User, combo.seller_id)
+        # precio final al comprador
+        base_price = combo.seller_net_cents/100.0 if combo.seller_net_cents else 0.0
+        buyer_price = round(base_price * GROSS_MULTIPLIER, 2) if base_price>0 else 0.0
+
+        can_download = False
+        if current_user.is_authenticated and current_user.id == combo.seller_id:
+            can_download = True
+
+        return render_template("combo_detail.html", combo=combo, notes=notes, seller=seller, base_price=base_price, buyer_price=buyer_price, can_download=can_download)
+
+@app.post("/combo/<int:combo_id>/buy")
+@login_required
+def buy_combo(combo_id):
+    with Session() as s:
+        combo = s.get(Combo, combo_id)
+        if not combo or not combo.is_active or combo.moderation_status != "approved":
+            abort(404)
+        if combo.seller_id == current_user.id:
+            flash("No podés comprar tu propio combo.", "warning")
+            return redirect(url_for("combo_detail", combo_id=combo_id))
+        if combo.seller_net_cents == 0:
+            # registro de descarga "gratis"
+            flash("Combo gratuito. Podés descargar los archivos.", "success")
+            # crear compra gratis para habilitar descarga zip
+            p = Purchase(buyer_id=current_user.id, item_type="combo", combo_id=combo.id, status="approved", amount_cents=0)
+            s.add(p)
+            s.commit()
+            return redirect(url_for("download_combo", purchase_id=p.id))
+
+        seller = s.get(User, combo.seller_id)
+        if not getattr(seller, "mp_access_token", None):
+            flash("Este vendedor todavía no vinculó Mercado Pago. No se puede comprar este combo.", "warning")
+            return redirect(url_for("combo_detail", combo_id=combo_id))
+
+        base_price = combo.seller_net_cents/100.0
+        price_ars = round(base_price * GROSS_MULTIPLIER, 2)
+        marketplace_fee = round(price_ars * float(APY_COMMISSION_RATE), 2)
+
+        p = Purchase(buyer_id=current_user.id, item_type="combo", combo_id=combo.id, status="pending", amount_cents=combo.seller_net_cents)
+        s.add(p)
+        s.commit()
+
+        back_urls = {
+            "success": url_for("combo_detail", combo_id=combo.id, _external=True) + f"?paid=1&external_reference=purchase:{p.id}",
+            "failure": url_for("combo_detail", combo_id=combo.id, _external=True) + f"?external_reference=purchase:{p.id}",
+            "pending": url_for("combo_detail", combo_id=combo.id, _external=True) + f"?external_reference=purchase:{p.id}",
+        }
+
+        seller_token = get_valid_seller_token(seller)
+        if seller_token is None:
+            flash("Este vendedor todavía no vinculó Mercado Pago. No se puede comprar este combo.", "warning")
+            return redirect(url_for("combo_detail", combo_id=combo.id))
+
+        pref = mp.create_preference_for_seller_token(
+            seller_access_token=seller_token,
+            title=combo.title,
+            unit_price=price_ars,
+            quantity=1,
+            marketplace_fee=marketplace_fee,
+            external_reference=f"purchase:{p.id}",
+            back_urls=back_urls,
+            notification_url=url_for("mp_webhook", _external=True),
+        )
+        with Session() as s2:
+            p2 = s2.get(Purchase, p.id)
+            if p2:
+                p2.preference_id = pref.get("id") or pref.get("preference_id")
+                s2.commit()
+        init_point = pref.get("init_point") or pref.get("sandbox_init_point")
+        return redirect(init_point)
+
+@app.route("/combo/download/<int:purchase_id>")
+@login_required
+def download_combo(purchase_id):
+    with Session() as s:
+        p = s.get(Purchase, purchase_id)
+        if not p or p.buyer_id != current_user.id:
+            abort(404)
+        if p.status != "approved" or p.item_type != "combo":
+            flash("La compra todavía no está aprobada.", "warning")
+            return redirect(url_for("profile_purchases"))
+
+        combo = s.get(Combo, p.combo_id)
+        if not combo:
+            abort(404)
+        # armar zip de archivos de notas incluidas
+        items = s.execute(select(ComboNote).where(ComboNote.combo_id==combo.id)).scalars().all()
+        note_ids = [it.note_id for it in items]
+        notes = s.execute(select(Note).where(Note.id.in_(note_ids))).scalars().all()
+
+    import zipfile, tempfile
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    tmp.close()
+    with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
+        for note in notes:
+            # obtener bytes pdf
+            if gcs_bucket and note.file_path and "/" in note.file_path:
+                blob = gcs_bucket.blob(note.file_path)
+                data = blob.download_as_bytes()
+                fname = secure_filename(note.title) + ".pdf"
+                zf.writestr(fname, data)
+            else:
+                local_path = os.path.join(app.config["UPLOAD_FOLDER"], note.file_path)
+                if os.path.exists(local_path):
+                    zf.write(local_path, arcname=secure_filename(note.title) + ".pdf")
+    return send_file(tmp.name, as_attachment=True, download_name=secure_filename(combo.title)+".zip")
 
 # -----------------------------------------------------------------------------
 # MP OAuth
@@ -1247,7 +1643,7 @@ def buy_note(note_id):
 
         price_base = note.price_cents / 100  # lo que quiere recibir el vendedor (X)
         price_ars = round(price_base * GROSS_MULTIPLIER, 2)
-        platform_fee_percent = 0.12  # 12% de la ganancia del vendedor
+        platform_fee_percent = float(APY_COMMISSION_RATE)  # comisión ApuntesYa
         back_urls = {
             "success": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
             "failure": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",

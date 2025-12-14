@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:1100px;margin:28px auto;">
+  <div class="card" style="padding:18px;">
+    <h1 style="margin:0 0 6px;">Moderación</h1>
+    <p class="muted" style="margin:0;">Estado actual: <strong>{{ status }}</strong></p>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='pending_review') }}">Pendientes</a>
+      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='approved') }}">Aprobados</a>
+      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='rejected') }}">Rechazados</a>
+    </div>
+  </div>
+
+  <div class="card" style="padding:18px;margin-top:14px;">
+    {% if notes and notes|length > 0 %}
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid #eee;">Apunte</th>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid #eee;">Vendedor</th>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid #eee;">Precio</th>
+            <th style="text-align:left;padding:10px;border-bottom:1px solid #eee;">Fecha</th>
+            <th style="text-align:right;padding:10px;border-bottom:1px solid #eee;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for n in notes %}
+            <tr>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;">
+                <a class="link-strong" href="{{ url_for('note_detail', note_id=n.id) }}" target="_blank" rel="noopener noreferrer">{{ n.title }}</a>
+                {% if n.moderation_reason %}<div class="muted" style="margin-top:6px;">Motivo: {{ n.moderation_reason }}</div>{% endif %}
+              </td>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;">{{ n.seller.name if n.seller else '-' }}</td>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;">
+                {% if n.price_cents == 0 %}Gratis{% else %}${{ '%.2f' % (n.price_cents/100) }} (neto){% endif %}
+              </td>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '' }}</td>
+              <td style="padding:10px;border-bottom:1px solid #f1f1f1;text-align:right;">
+                {% if n.moderation_status != 'approved' %}
+                  <button class="btn primary" onclick="act('approve', {{ n.id }})">Aprobar</button>
+                {% endif %}
+                {% if n.moderation_status != 'rejected' %}
+                  <button class="btn ghost" onclick="act('reject', {{ n.id }})">Rechazar</button>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted" style="margin:0;">No hay apuntes en este estado.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+async function act(type, noteId){
+  let reason = null;
+  if(type === 'reject'){
+    reason = prompt('Motivo de rechazo (opcional):') || '';
+  }
+  const url = type === 'approve'
+    ? `{{ url_for('admin.moderation_approve', note_id=0) }}`.replace('/0/', `/${noteId}/`)
+    : `{{ url_for('admin.moderation_reject', note_id=0) }}`.replace('/0/', `/${noteId}/`);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: type === 'reject' ? JSON.stringify({reason}) : null
+  });
+  if(res.ok){
+    location.reload();
+  } else {
+    alert('No se pudo ejecutar la acción.');
+  }
+}
+</script>
+{% endblock %}

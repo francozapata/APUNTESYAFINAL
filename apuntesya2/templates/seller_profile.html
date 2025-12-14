@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.container{max-width:980px;margin:28px auto;}
+.header{background:#fff;border:1px solid #e5e7f5;border-radius:18px;padding:18px 18px;box-shadow:0 10px 30px rgba(15,23,42,.05);}
+.header-top{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.seller-id{display:flex;gap:12px;align-items:center}
+.avatar{width:54px;height:54px;border-radius:999px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-weight:700;color:#1f2937}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#ecfeff;border:1px solid #a5f3fc;font-size:13px}
+.grid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:16px}
+@media(min-width:860px){.grid{grid-template-columns:1fr 1fr}}
+.card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:14px 14px}
+.item{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;border-radius:12px;border:1px solid #eef2ff;margin-top:10px}
+.meta{color:#6b7280;font-size:13px}
+.price{font-weight:700}
+a.btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:12px;background:#4478ff;color:#fff;text-decoration:none}
+</style>
+
+<div class="container">
+  <div class="header">
+    <div class="header-top">
+      <div class="seller-id">
+        <div class="avatar">{{ seller.name[:1].upper() }}</div>
+        <div>
+          <div style="font-size:20px;font-weight:800">{{ seller.name }}</div>
+          <div class="meta">{{ seller.university }} · {{ seller.faculty }} · {{ seller.career }}</div>
+          {% if avg_rating %}
+            <div class="meta">⭐ {{ "%.1f"|format(avg_rating) }}</div>
+          {% endif %}
+        </div>
+      </div>
+      <div>
+        {% if verified %}
+          <span class="badge">✅ Vendedor verificado</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div style="font-weight:800">Apuntes</div>
+      {% if notes %}
+        {% for n in notes %}
+          <div class="item">
+            <div>
+              <div style="font-weight:700">{{ n.title }}</div>
+              <div class="meta">{{ n.university }} · {{ n.faculty }} · {{ n.career }}</div>
+            </div>
+            <div style="text-align:right">
+              {% if n.price_cents == 0 %}
+                <div class="price">Gratis</div>
+              {% else %}
+                <div class="price">${{ "%.2f"|format((n.price_cents/100.0) * (1/(1-(MP_COMMISSION_RATE+APY_COMMISSION_RATE)))) }}</div>
+                <div class="meta">precio final</div>
+              {% endif %}
+              <a class="btn" href="{{ url_for('note_detail', note_id=n.id) }}">Ver</a>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="meta" style="margin-top:10px">Este vendedor todavía no publicó apuntes.</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div style="font-weight:800">Combos</div>
+      {% if combos %}
+        {% for c in combos %}
+          <div class="item">
+            <div>
+              <div style="font-weight:700">{{ c.title }}</div>
+              <div class="meta">{{ c.description[:80] }}{% if c.description|length > 80 %}…{% endif %}</div>
+            </div>
+            <div style="text-align:right">
+              {% if c.seller_net_cents == 0 %}
+                <div class="price">Gratis</div>
+              {% else %}
+                <div class="price">${{ "%.2f"|format((c.seller_net_cents/100.0) * (1/(1-(MP_COMMISSION_RATE+APY_COMMISSION_RATE)))) }}</div>
+                <div class="meta">precio final</div>
+              {% endif %}
+              <a class="btn" href="{{ url_for('combo_detail', combo_id=c.id) }}">Ver</a>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="meta" style="margin-top:10px">Este vendedor todavía no publicó combos.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

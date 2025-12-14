@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.shell{max-width:980px;margin:28px auto;}
+.top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:18px}
+.meta{color:#6b7280;font-size:13px}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:12px;background:#4478ff;color:#fff;border:none;cursor:pointer;text-decoration:none}
+.list{margin-top:12px}
+.item{border:1px solid #eef2ff;border-radius:12px;padding:10px;margin-top:10px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.price{font-weight:900;font-size:20px}
+</style>
+<div class="shell">
+  <div class="top">
+    <div class="card" style="flex:1">
+      <div style="font-size:22px;font-weight:900">{{ combo.title }}</div>
+      <div class="meta" style="margin-top:6px">Vendedor: <a href="{{ url_for('seller_profile', seller_id=seller.id) }}">{{ seller.name }}</a></div>
+      <div style="margin-top:10px">{{ combo.description }}</div>
+
+      <div class="list">
+        <div style="font-weight:800;margin-top:12px">Incluye</div>
+        {% for n in notes %}
+          <div class="item">
+            <div>
+              <div style="font-weight:800">{{ n.title }}</div>
+              <div class="meta">{{ n.university }} · {{ n.faculty }} · {{ n.career }}</div>
+            </div>
+            <a class="btn" style="background:#111827" href="{{ url_for('note_detail', note_id=n.id) }}">Ver</a>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card" style="width:320px">
+      {% if combo.seller_net_cents == 0 %}
+        <div class="price">Gratis</div>
+        <div class="meta">Disponible para usuarios registrados.</div>
+        <form method="post" action="{{ url_for('buy_combo', combo_id=combo.id) }}" style="margin-top:12px">
+          <button class="btn" type="submit" style="width:100%">Descargar</button>
+        </form>
+      {% else %}
+        <div class="meta">Precio final</div>
+        <div class="price">${{ "%.2f"|format(buyer_price) }}</div>
+        <div class="meta" style="margin-top:8px">Incluye comisiones. El vendedor recibe el neto.</div>
+        <form method="post" action="{{ url_for('buy_combo', combo_id=combo.id) }}" style="margin-top:12px">
+          <button class="btn" type="submit" style="width:100%">Comprar con Mercado Pago</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

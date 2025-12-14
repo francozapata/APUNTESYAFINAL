@@ -323,9 +323,37 @@
       <!-- COLUMNA IZQUIERDA: descripción y detalle -->
       <div class="note-main">
         {% if note.description %}
-        <p class="note-description">
-          {{ note.description }}
-        </p>
+        <p class="note-description">{{ note.description }}</p>
+
+{% if note.preview_images %}
+<div style="margin-top:16px;padding:14px;border:1px solid #e5e7f5;border-radius:14px;background:#fff">
+  <h3 style="margin:0 0 10px 0">Vista previa</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+    {% for _img in note.preview_images %}
+      <a href="{{ url_for('note_preview_image', note_id=note.id, img_index=loop.index0) }}" target="_blank" style="text-decoration:none">
+        <img src="{{ url_for('note_preview_image', note_id=note.id, img_index=loop.index0) }}" alt="preview {{ loop.index }}" style="width:100%;border-radius:12px;border:1px solid #e5e7f5"/>
+      </a>
+    {% endfor %}
+  </div>
+  <div style="margin-top:8px;color:#6b7280;font-size:13px">Muestra con marca de agua. El PDF completo se habilita al comprar.</div>
+</div>
+{% endif %}
+
+
+{% if note.preview_images %}
+<div style="margin-top:16px;padding:14px;border:1px solid #e5e7f5;border-radius:14px;background:#fff">
+  <h3 style="margin:0 0 10px 0">Vista previa</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+    {% for _img in note.preview_images %}
+      <a href="{{ url_for('note_preview_image', note_id=note.id, img_index=loop.index0) }}" target="_blank" style="text-decoration:none">
+        <img src="{{ url_for('note_preview_image', note_id=note.id, img_index=loop.index0) }}" alt="preview {{ loop.index }}" style="width:100%;border-radius:12px;border:1px solid #e5e7f5"/>
+      </a>
+    {% endfor %}
+  </div>
+  <div style="margin-top:8px;color:#6b7280;font-size:13px">Muestra con marca de agua. El PDF completo se habilita al comprar.</div>
+</div>
+{% endif %}
+
         {% else %}
         <p class="muted">
           El autor no agregó una descripción detallada para este apunte.
@@ -448,6 +476,10 @@
               <a href="{{ seller_contact_url }}" target="_blank">
                 {{ seller_contact_label }}
               </a>
+
+{% if note.seller_id %}
+  <a class="btn btn-outline" href="{{ url_for('seller_profile', seller_id=note.seller_id) }}" style="margin-top:8px;display:inline-block">Ver perfil del vendedor</a>
+{% endif %}
             </p>
           </div>
           {% endif %}

@@ -1,4 +1,4 @@
-from sqlalchemy.dialects.sqlite import JSON
+from sqlalchemy import JSON
 from sqlalchemy import Column, Integer, String, DateTime
 from datetime import datetime
 from flask_login import UserMixin
@@ -35,6 +35,12 @@ class User(Base, UserMixin):
     mp_token_expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     seller_contact: Mapped[str] = mapped_column(String(255), nullable=True)
+    contact_email: Mapped[str] = mapped_column(String(255), nullable=True)
+    contact_whatsapp: Mapped[str] = mapped_column(String(64), nullable=True)
+    contact_instagram: Mapped[str] = mapped_column(String(80), nullable=True)
+    contact_visible_public: Mapped[bool] = mapped_column(Boolean, default=True)
+    contact_visible_buyers: Mapped[bool] = mapped_column(Boolean, default=True)
+
 
     notes = relationship("Note", back_populates="seller")
 
@@ -46,10 +52,17 @@ class Note(Base):
     university: Mapped[str] = mapped_column(String(120), nullable=False)
     faculty: Mapped[str] = mapped_column(String(120), nullable=False)
     career: Mapped[str] = mapped_column(String(120), nullable=False)
+    # Precio visible al comprador (incluye comisiones)
     price_cents: Mapped[int] = mapped_column(Integer, default=0)
+    # Neto que quiere recibir el vendedor
+    seller_net_cents: Mapped[int] = mapped_column(Integer, default=0)
     file_path: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_reported: Mapped[bool] = mapped_column(Boolean, default=False)
+    moderation_status: Mapped[str] = mapped_column(String(32), default="approved")
+    moderation_reason: Mapped[str] = mapped_column(Text, nullable=True)
+    preview_pages: Mapped[dict] = mapped_column(JSON, nullable=True)
+    preview_images: Mapped[dict] = mapped_column(JSON, nullable=True)
 
     seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     seller = relationship("User", back_populates="notes")
@@ -57,15 +70,59 @@ class Note(Base):
     deleted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+class Combo(Base):
+    __tablename__ = "combos"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    # Precio visible al comprador (incluye comisiones)
+    price_cents: Mapped[int] = mapped_column(Integer, default=0)
+    seller_net_cents: Mapped[int] = mapped_column(Integer, default=0)
+    moderation_status: Mapped[str] = mapped_column(String(32), default="approved")
+    moderation_reason: Mapped[str] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    seller = relationship("User")
+    items = relationship("ComboNote", back_populates="combo", cascade="all, delete-orphan")
+
+
+class ComboNote(Base):
+    __tablename__ = "combo_notes"
+    combo_id: Mapped[int] = mapped_column(ForeignKey("combos.id"), primary_key=True)
+    note_id: Mapped[int] = mapped_column(ForeignKey("notes.id"), primary_key=True)
+
+    combo = relationship("Combo", back_populates="items")
+    note = relationship("Note")
+
+
 class Purchase(Base):
     __tablename__ = "purchases"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    note_id: Mapped[int] = mapped_column(ForeignKey("notes.id"), nullable=False)
+    item_type: Mapped[str] = mapped_column(String(16), default="note")  # note|combo
+    note_id: Mapped[int] = mapped_column(ForeignKey("notes.id"), nullable=True)
+    combo_id: Mapped[int] = mapped_column(ForeignKey("combos.id"), nullable=True)
     payment_id: Mapped[str] = mapped_column(String(64), nullable=True)
     preference_id: Mapped[str] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="pending")  # pending, approved, rejected, cancelled
     amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Coupon(Base):
+    __tablename__ = "coupons"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True, index=True)
+    scope: Mapped[str] = mapped_column(String(16), default="seller")  # seller|platform
+    seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    discount_type: Mapped[str] = mapped_column(String(8), default="percent")  # percent|fixed
+    discount_value: Mapped[int] = mapped_column(Integer, default=0)  # percent 1-100 or cents
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    max_uses: Mapped[int] = mapped_column(Integer, nullable=True)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -115,11 +172,21 @@ class WebhookEvent(Base):
 
 class Review(Base):
     __tablename__ = "reviews"
+    __table_args__ = (UniqueConstraint("note_id","buyer_id", name="uq_review_note_buyer"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     note_id: Mapped[int] = mapped_column(ForeignKey("notes.id"), nullable=False, index=True)
     buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1..5
     comment: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DownloadLog(Base):
+    __tablename__ = "download_logs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    note_id: Mapped[int] = mapped_column(ForeignKey("notes.id"), nullable=False, index=True)
+    is_free: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
