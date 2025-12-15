@@ -2791,36 +2791,22 @@ def profile_combos():
         ).scalars().all()
     return render_template("profile_combos.html", combos=combos, buyer_price=_combo_buyer_price_cents)
 
+import math
+from datetime import datetime, timedelta
+from flask import render_template, request, flash, redirect, url_for, abort
+from flask_login import login_required, current_user
+from sqlalchemy import select
+
+# Asegurate de tener ComboNote importado correctamente:
+# from apuntesya2.models import ComboNote
+# (NO uses from ..models dentro de app.py si te rompe imports)
+from apuntesya2.models import Note, Combo, ComboNote, Notification
+
 @app.route("/combos/create", methods=["GET", "POST"], endpoint="create_combo")
 @login_required
 def combo_create():
-    from datetime import datetime, timedelta
-    import math
-    from flask import flash, redirect, url_for, render_template, request, abort
-    from sqlalchemy import select
-
-    # Convierte "1234,56" o "1234.56" a centavos
-    def _to_cents(value: str) -> int:
-        value = (value or "").strip().replace(",", ".")
-        if value == "":
-            return 0
-        try:
-            return int(round(float(value) * 100))
-        except Exception:
-            return 0
-
-    # Calcula precio FINAL comprador (gross) desde neto vendedor
-    def _gross_from_net(net_cents: int) -> int:
-        if net_cents <= 0:
-            return 0
-        fee = float(MP_COMMISSION_RATE) + float(APY_COMMISSION_RATE)
-        denom = 1.0 - fee
-        if denom <= 0:
-            return net_cents
-        return int(math.ceil(net_cents / denom))
-
     with Session() as s:
-        # Mostrar SOLO apuntes aptos para combos: propios, activos, no borrados, aprobados
+        # 1) Traer apuntes del usuario que realmente puedan ir en combo
         notes = s.execute(
             select(Note)
             .where(
@@ -2836,9 +2822,12 @@ def combo_create():
             title = (request.form.get("title") or "").strip()
             description = (request.form.get("description") or "").strip()
 
-            # OJO: tu HTML usa name="price_net"
-            seller_net_cents = _to_cents(request.form.get("price_net"))
-            price_cents = _gross_from_net(seller_net_cents)
+            # "price_net" llega en ARS (string)
+            raw_price = (request.form.get("price_net") or "0").strip().replace(",", ".")
+            try:
+                price_net_cents = int(round(float(raw_price) * 100))
+            except Exception:
+                price_net_cents = 0
 
             note_ids = request.form.getlist("note_ids") or []
             note_ids = [int(x) for x in note_ids if str(x).isdigit()]
@@ -2847,64 +2836,64 @@ def combo_create():
                 flash("El combo debe tener título, descripción y al menos 2 apuntes.", "danger")
                 return render_template("combo_create.html", notes=notes)
 
+            # 2) Validar que esos apuntes sean del usuario y aprobados
             chosen = s.execute(
                 select(Note).where(
                     Note.id.in_(note_ids),
                     Note.seller_id == current_user.id,
                     Note.deleted_at.is_(None),
+                    Note.is_active == True,
+                    Note.moderation_status == "approved",
                 )
             ).scalars().all()
 
             if len(chosen) < 2:
-                flash("Tenés que elegir al menos 2 apuntes válidos.", "danger")
+                flash("Seleccioná al menos 2 apuntes aprobados.", "danger")
                 return render_template("combo_create.html", notes=notes)
 
+            # 3) Calcular precio final comprador (si neto = 0, es gratis)
+            fee = float(MP_COMMISSION_RATE) + float(APY_COMMISSION_RATE)
+            if price_net_cents <= 0:
+                buyer_price_cents = 0
+            else:
+                buyer_price_cents = int(math.ceil(price_net_cents / (1 - fee)))
+
+            # 4) Crear combo (IMPORTANTÍSIMO: setear seller_net_cents)
             combo = Combo(
                 seller_id=current_user.id,
                 title=title,
                 description=description,
-                price_cents=price_cents,               # precio final comprador
-                seller_net_cents=seller_net_cents,     # neto vendedor (NO NULL)
+                seller_net_cents=max(price_net_cents, 0),
+                price_cents=buyer_price_cents,
                 is_active=True,
-                moderation_status="pending_ai",
+                moderation_status="approved",  # ya que solo deja elegir aprobados
+                moderation_reason=None,
                 created_at=datetime.utcnow(),
             )
 
             s.add(combo)
-            s.flush()  # obtiene combo.id
+            s.flush()  # para obtener combo.id
 
-            # Relación combo_notes (tabla puente)
+            # 5) Crear relación combo_notes
             for n in chosen:
                 s.add(ComboNote(combo_id=combo.id, note_id=n.id))
 
-            # Auto-approve si todos los apuntes están approved
-            if all((getattr(n, "moderation_status", None) == "approved") for n in chosen):
-                combo.moderation_status = "approved"
-                combo.moderation_reason = None
-                combo.ai_decision = "approve"
-                combo.ai_confidence = 1000
-                combo.ai_summary = "Auto-aprobado: todos los apuntes del combo ya estaban aprobados."
-                combo.ai_raw = {"auto": True, "rule": "all_notes_approved"}
-            else:
-                combo.moderation_status = "pending_manual"
-                combo.moderation_reason = "Revisión manual: el combo incluye apuntes no aprobados."
-                combo.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
-                try:
-                    s.add(Notification(
-                        user_id=current_user.id,
-                        kind="warning",
-                        title="Combo en revisión manual",
-                        body="Tu combo quedó en revisión manual. Puede demorar hasta 12hs."
-                    ))
-                except Exception:
-                    pass
+            # 6) Notificación opcional
+            try:
+                s.add(Notification(
+                    user_id=current_user.id,
+                    kind="success",
+                    title="Combo creado",
+                    body="Tu combo fue creado y ya está publicado."
+                ))
+            except Exception:
+                pass
 
             s.commit()
             flash("Combo creado correctamente.", "success")
             return redirect(url_for("profile_combos"))
 
-    return render_template("combo_create.html", notes=notes)
-
+        return render_template("combo_create.html", notes=notes)
 
 
 @app.route("/combos/<int:combo_id>")
