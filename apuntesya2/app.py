@@ -17,6 +17,8 @@ from flask import (
     Flask, render_template, request, redirect, url_for, flash,
     send_from_directory, abort, jsonify, session
 )
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, abort, send_file
+
 from flask_login import (
     LoginManager, login_user, logout_user, current_user, login_required
 )
@@ -865,44 +867,72 @@ def index():
 # ------------------------------
 # BÚSQUEDA
 # ------------------------------
+
+from sqlalchemy import select, desc, or_, distinct
+
 @app.get("/search/quick", endpoint="search_quick")
 def search_quick():
-    """
-    Búsqueda rápida: solo 'q' (palabras en título o descripción).
-    """
     q = (request.args.get("q") or "").strip()
 
     notes = []
+    combos = []
+
     if q:
         with Session() as s:
             like = f"%{q}%"
-            stmt = (
+
+            # Notes
+            notes_stmt = (
                 select(Note)
                 .where(
                     Note.is_active == True,
-                    Note.moderation_status == 'approved',
+                    Note.moderation_status == "approved",
                     Note.deleted_at.is_(None),
-                    or_(Note.title.ilike(like), Note.description.ilike(like))
+                    or_(Note.title.ilike(like), Note.description.ilike(like)),
                 )
                 .order_by(desc(Note.created_at))
                 .limit(100)
             )
-            notes = s.execute(stmt).scalars().all()
+            notes = s.execute(notes_stmt).scalars().all()
+
+            # Combos (match por titulo/descripcion O por notas dentro del combo)
+            combos_stmt = (
+                select(Combo)
+                .distinct()
+                .join(ComboNote, ComboNote.combo_id == Combo.id)
+                .join(Note, Note.id == ComboNote.note_id)
+                .where(
+                    Combo.is_active == True,
+                    Combo.moderation_status == "approved",
+                    Note.is_active == True,
+                    Note.moderation_status == "approved",
+                    Note.deleted_at.is_(None),
+                    or_(
+                        Combo.title.ilike(like),
+                        Combo.description.ilike(like),
+                        Note.title.ilike(like),
+                        Note.description.ilike(like),
+                    ),
+                )
+                .order_by(desc(Combo.created_at))
+                .limit(100)
+            )
+            combos = s.execute(combos_stmt).scalars().all()
 
     return render_template(
-        "index.html",
-        notes=notes,
-        show_tab="quick",
-        q=q,
-        filters={"university": "", "faculty": "", "career": "", "type": ""},
-        include_dynamic_selects=True
-    )
+    "index.html",
+    notes=notes,
+    combos=[],  # por ahora vacío si no buscás combos acá
+    buyer_price=_combo_buyer_price_cents,
+    show_tab="quick",
+    q=q,
+    filters={"university": "", "faculty": "", "career": "", "type": ""},
+    include_dynamic_selects=True
+)
+
 
 @app.get("/search/advanced", endpoint="search_advanced")
 def search_advanced():
-    """
-    Búsqueda avanzada: q opcional + universidad, facultad y carrera.
-    """
     q          = (request.args.get("q") or "").strip()
     university = (request.args.get("university") or "").strip()
     faculty    = (request.args.get("faculty") or "").strip()
@@ -910,38 +940,83 @@ def search_advanced():
     note_type  = (request.args.get("type") or "").strip()  # "free" | "paid" | ""
 
     with Session() as s:
-        stmt = select(Note).where(
+        # ---------------- Notes ----------------
+        notes_stmt = select(Note).where(
             Note.is_active == True,
-            Note.moderation_status == 'approved',
-            Note.deleted_at.is_(None)
+            Note.moderation_status == "approved",
+            Note.deleted_at.is_(None),
         )
 
         if q:
             like = f"%{q}%"
-            stmt = stmt.where(or_(Note.title.ilike(like), Note.description.ilike(like)))
+            notes_stmt = notes_stmt.where(or_(Note.title.ilike(like), Note.description.ilike(like)))
 
         if university:
-            stmt = stmt.where(Note.university.ilike(f"%{university}%"))
+            notes_stmt = notes_stmt.where(Note.university.ilike(f"%{university}%"))
         if faculty:
-            stmt = stmt.where(Note.faculty.ilike(f"%{faculty}%"))
+            notes_stmt = notes_stmt.where(Note.faculty.ilike(f"%{faculty}%"))
         if career:
-            stmt = stmt.where(Note.career.ilike(f"%{career}%"))
+            notes_stmt = notes_stmt.where(Note.career.ilike(f"%{career}%"))
 
         if note_type == "free":
-            stmt = stmt.where(Note.price_cents == 0)
+            notes_stmt = notes_stmt.where(Note.price_cents == 0)
         elif note_type == "paid":
-            stmt = stmt.where(Note.price_cents > 0)
+            notes_stmt = notes_stmt.where(Note.price_cents > 0)
 
-        notes = s.execute(stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
+        notes = s.execute(notes_stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
+
+        # ---------------- Combos ----------------
+        combos_stmt = (
+            select(Combo)
+            .distinct()
+            .join(ComboNote, ComboNote.combo_id == Combo.id)
+            .join(Note, Note.id == ComboNote.note_id)
+            .where(
+                Combo.is_active == True,
+                Combo.moderation_status == "approved",
+                Note.is_active == True,
+                Note.moderation_status == "approved",
+                Note.deleted_at.is_(None),
+            )
+        )
+
+        if q:
+            like = f"%{q}%"
+            combos_stmt = combos_stmt.where(
+                or_(
+                    Combo.title.ilike(like),
+                    Combo.description.ilike(like),
+                    Note.title.ilike(like),
+                    Note.description.ilike(like),
+                )
+            )
+
+        if university:
+            combos_stmt = combos_stmt.where(Note.university.ilike(f"%{university}%"))
+        if faculty:
+            combos_stmt = combos_stmt.where(Note.faculty.ilike(f"%{faculty}%"))
+        if career:
+            combos_stmt = combos_stmt.where(Note.career.ilike(f"%{career}%"))
+
+        if note_type == "free":
+            combos_stmt = combos_stmt.where(Combo.price_cents == 0)
+        elif note_type == "paid":
+            combos_stmt = combos_stmt.where(Combo.price_cents > 0)
+
+        combos = s.execute(combos_stmt.order_by(desc(Combo.created_at)).limit(100)).scalars().all()
 
     return render_template(
-        "index.html",
-        notes=notes,
-        show_tab="advanced",
-        q=q,
-        filters={"university": university, "faculty": faculty, "career": career, "type": note_type},
-        include_dynamic_selects=True
-    )
+    "index.html",
+    notes=notes,
+    combos=[],
+    buyer_price=_combo_buyer_price_cents,
+    show_tab="advanced",
+    q=q,
+    filters={"university": university, "faculty": faculty, "career": career, "type": note_type},
+    include_dynamic_selects=True
+)
+
+
 
 # Ruta de compatibilidad (si querés mantener /search genérico).
 @app.get("/search", endpoint="search")
@@ -953,37 +1028,85 @@ def search():
     t   = (request.args.get("type") or "").strip()
 
     with Session() as s:
-        stmt = select(Note).where(Note.is_active == True)
+        # Notes
+        notes_stmt = select(Note).where(
+            Note.is_active == True,
+            Note.moderation_status == "approved",
+            Note.deleted_at.is_(None),
+        )
 
         if q:
             like = f"%{q}%"
-            stmt = stmt.where(or_(Note.title.ilike(like), Note.description.ilike(like)))
+            notes_stmt = notes_stmt.where(or_(Note.title.ilike(like), Note.description.ilike(like)))
 
         if uni:
-            stmt = stmt.where(Note.university.ilike(f"%{uni}%"))
+            notes_stmt = notes_stmt.where(Note.university.ilike(f"%{uni}%"))
         if fac:
-            stmt = stmt.where(Note.faculty.ilike(f"%{fac}%"))
+            notes_stmt = notes_stmt.where(Note.faculty.ilike(f"%{fac}%"))
         if car:
-            stmt = stmt.where(Note.career.ilike(f"%{car}%"))
+            notes_stmt = notes_stmt.where(Note.career.ilike(f"%{car}%"))
 
         if t == "free":
-            stmt = stmt.where(Note.price_cents == 0)
+            notes_stmt = notes_stmt.where(Note.price_cents == 0)
         elif t == "paid":
-            stmt = stmt.where(Note.price_cents > 0)
+            notes_stmt = notes_stmt.where(Note.price_cents > 0)
 
-        notes = s.execute(stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
+        notes = s.execute(notes_stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
 
-    # Mostramos la pestaña avanzada si vino algún filtro; si no, la rápida.
+        # Combos
+        combos_stmt = (
+            select(Combo)
+            .distinct()
+            .join(ComboNote, ComboNote.combo_id == Combo.id)
+            .join(Note, Note.id == ComboNote.note_id)
+            .where(
+                Combo.is_active == True,
+                Combo.moderation_status == "approved",
+                Note.is_active == True,
+                Note.moderation_status == "approved",
+                Note.deleted_at.is_(None),
+            )
+        )
+
+        if q:
+            like = f"%{q}%"
+            combos_stmt = combos_stmt.where(
+                or_(
+                    Combo.title.ilike(like),
+                    Combo.description.ilike(like),
+                    Note.title.ilike(like),
+                    Note.description.ilike(like),
+                )
+            )
+
+        if uni:
+            combos_stmt = combos_stmt.where(Note.university.ilike(f"%{uni}%"))
+        if fac:
+            combos_stmt = combos_stmt.where(Note.faculty.ilike(f"%{fac}%"))
+        if car:
+            combos_stmt = combos_stmt.where(Note.career.ilike(f"%{car}%"))
+
+        if t == "free":
+            combos_stmt = combos_stmt.where(Combo.price_cents == 0)
+        elif t == "paid":
+            combos_stmt = combos_stmt.where(Combo.price_cents > 0)
+
+        combos = s.execute(combos_stmt.order_by(desc(Combo.created_at)).limit(100)).scalars().all()
+
     show_tab = "advanced" if (uni or fac or car or t) else "quick"
 
     return render_template(
-        "index.html",
-        notes=notes,
-        show_tab=show_tab,
-        q=q,
-        filters={"university": uni, "faculty": fac, "career": car, "type": t},
-        include_dynamic_selects=True
-    )
+    "index.html",
+    notes=notes,
+    combos=[],
+    buyer_price=_combo_buyer_price_cents,
+    show_tab=show_tab,
+    q=q,
+    filters={"university": uni, "faculty": fac, "career": car, "type": t},
+    include_dynamic_selects=True
+)
+
+
 
 # -----------------------------------------------------------------------------
 # Auth (sólo Google con Firebase)
@@ -2896,25 +3019,62 @@ def combo_create():
         return render_template("combo_create.html", notes=notes)
 
 
-@app.route("/combos/<int:combo_id>")
+from flask import render_template, abort
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+
+@app.route("/combos/<int:combo_id>", endpoint="combo_detail")
 def combo_detail(combo_id: int):
     with Session() as s:
-        combo = s.get(Combo, combo_id)
+        # Trae combo + vendedor en la misma query
+        combo = (
+            s.execute(
+                select(Combo)
+                .options(joinedload(Combo.seller))
+                .where(Combo.id == combo_id)
+            )
+            .scalars()
+            .first()
+        )
+
         if not combo or not combo.is_active:
             abort(404)
 
-        # Visibility: only approved combos for public; seller/admin can see all
-        is_owner = current_user.is_authenticated and current_user.id == combo.seller_id
-        is_admin = current_user.is_authenticated and getattr(current_user, "is_admin", False)
+        # Visibilidad: público solo ve approved
+        is_owner = getattr(current_user, "is_authenticated", False) and current_user.id == combo.seller_id
+        is_admin = getattr(current_user, "is_authenticated", False) and getattr(current_user, "is_admin", False)
+
         if combo.moderation_status != "approved" and not (is_owner or is_admin):
             abort(404)
 
-        note_ids = [row.note_id for row in s.execute(select(ComboNote).where(ComboNote.combo_id == combo.id)).scalars().all()]
+        # Notas del combo
+        note_ids = (
+            s.execute(select(ComboNote.note_id).where(ComboNote.combo_id == combo.id))
+            .scalars()
+            .all()
+        )
+
         notes = []
         if note_ids:
-            notes = s.execute(select(Note).where(Note.id.in_(note_ids))).scalars().all()
+            notes = (
+                s.execute(
+                    select(Note)
+                    .where(Note.id.in_(note_ids))
+                )
+                .scalars()
+                .all()
+            )
 
-    return render_template("combo_detail.html", combo=combo, notes=notes, buyer_price=_combo_buyer_price_cents(combo))
+        seller = combo.seller  # ya viene por joinedload
+
+    return render_template(
+        "combo_detail.html",
+        combo=combo,
+        seller=seller,          # <- ESTO arregla el error del template
+        notes=notes,
+        buyer_price=_combo_buyer_price_cents(combo),
+    )
+
 
 if __name__ == "__main__":
     app.run(debug=True)

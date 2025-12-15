@@ -8,11 +8,11 @@
   }
 
   .search-card {
-    background: #ffffff;
+    background: #fff;
     border-radius: 16px;
     border: 1px solid #e5e7f5;
     padding: 18px 18px 20px;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .05);
   }
 
   .muted {
@@ -20,7 +20,6 @@
     font-size: 13px;
   }
 
-  /* Tabs búsqueda */
   .tabs.as-buttons {
     display: inline-flex;
     padding: 4px;
@@ -47,11 +46,10 @@
 
   .tabs.as-buttons .tab.btn.ghost.active {
     background: #4478ff;
-    color: #ffffff;
-    box-shadow: 0 8px 20px rgba(68, 120, 255, 0.3);
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(68, 120, 255, .3);
   }
 
-  /* Búsqueda rápida */
   .search-bar {
     margin-top: 4px;
   }
@@ -68,7 +66,6 @@
     font-weight: 600;
   }
 
-  /* Búsqueda avanzada */
   #tab-advanced h2 {
     margin: 6px 0 10px;
     font-size: 18px;
@@ -108,15 +105,14 @@
     padding: 8px 16px;
   }
 
-  /* Resultados */
   .results-shell {
     max-width: 980px;
     margin: 16px auto 32px;
-    background: #ffffff;
+    background: #fff;
     border-radius: 16px;
     border: 1px solid #e5e7f5;
     padding: 18px 18px 20px;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .05);
   }
 
   .results-header {
@@ -213,6 +209,18 @@
     color: #166534;
   }
 
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    background: #fff0db;
+    color: #92400e;
+    border: 1px solid #ffe1b3;
+  }
+
   .btn.secondary {
     border-radius: 999px;
     padding: 7px 14px;
@@ -221,14 +229,14 @@
   }
 
   .mt-1 {
-    margin-top: 0.25rem;
+    margin-top: .25rem;
   }
 
   .mt-2 {
-    margin-top: 0.5rem;
+    margin-top: .5rem;
   }
 
-  @media (max-width: 720px) {
+  @media(max-width:720px) {
 
     .search-card,
     .results-shell {
@@ -262,9 +270,7 @@
           placeholder="Buscar por título, descripción o materia..." />
         <button type="submit" class="btn primary">Buscar</button>
       </form>
-      <p class="muted mt-1">
-        Tip: podés buscar por nombre de materia, tema, parcial, final, etc.
-      </p>
+      <p class="muted mt-1">Tip: podés buscar por nombre de materia, tema, parcial, final, etc.</p>
     </div>
 
     <!-- -------- BÚSQUEDA AVANZADA -------- -->
@@ -272,13 +278,11 @@
       <h2 class="mt-2">Buscar apuntes</h2>
 
       <form id="advanced-search" action="{{ url_for('search_advanced') }}" method="get" class="stack gap">
-        <!-- palabra clave opcional -->
         <div class="field">
           <label>Palabra clave (opcional)</label>
           <input class="input" type="text" name="q" value="{{ q or '' }}" placeholder="Ej: Álgebra, parcial, guía..." />
         </div>
 
-        <!-- Selects académicos (por nombre) -->
         <div class="grid-3 gap">
           <div class="field">
             <label>Universidad</label>
@@ -314,7 +318,6 @@
           </div>
         </div>
 
-        <!-- Tipo (opcional) -->
         <div class="field">
           <label>Tipo</label>
           <select name="type" class="input">
@@ -325,9 +328,7 @@
         </div>
 
         <div class="actions mt-2 row gap">
-          <button type="submit" class="btn primary" onclick="return beforeSubmitAdvanced()">
-            Aplicar filtros
-          </button>
+          <button type="submit" class="btn primary" onclick="return beforeSubmitAdvanced()">Aplicar filtros</button>
           <a href="{{ url_for('index') }}" class="btn ghost">Limpiar</a>
         </div>
       </form>
@@ -341,35 +342,37 @@
     <h3>Rankings</h3>
     <span class="muted">Lo más elegido y lo mejor valorado</span>
   </div>
+
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">
     <div class="card" style="padding:14px;">
       <h4 style="margin:0 0 10px;">Más descargados</h4>
       {% if most_downloaded %}
-        <ol style="margin:0;padding-left:18px;">
-          {% for n, cnt in most_downloaded %}
-            <li style="margin:6px 0;">
-              <a class="link-strong" href="{{ url_for('note_detail', note_id=n.id) }}">{{ n.title }}</a>
-              <span class="muted">({{ cnt }} descargas)</span>
-            </li>
-          {% endfor %}
-        </ol>
+      <ol style="margin:0;padding-left:18px;">
+        {% for n, cnt in most_downloaded %}
+        <li style="margin:6px 0;">
+          <a class="link-strong" href="{{ url_for('note_detail', note_id=n.id) }}">{{ n.title }}</a>
+          <span class="muted">({{ cnt }} descargas)</span>
+        </li>
+        {% endfor %}
+      </ol>
       {% else %}
-        <p class="muted" style="margin:0;">Todavía no hay datos suficientes.</p>
+      <p class="muted" style="margin:0;">Todavía no hay datos suficientes.</p>
       {% endif %}
     </div>
+
     <div class="card" style="padding:14px;">
       <h4 style="margin:0 0 10px;">Mejor valorados</h4>
       {% if best_rated %}
-        <ol style="margin:0;padding-left:18px;">
-          {% for n, avg in best_rated %}
-            <li style="margin:6px 0;">
-              <a class="link-strong" href="{{ url_for('note_detail', note_id=n.id) }}">{{ n.title }}</a>
-              <span class="muted">(⭐ {{ '%.2f' % avg }})</span>
-            </li>
-          {% endfor %}
-        </ol>
+      <ol style="margin:0;padding-left:18px;">
+        {% for n, avg in best_rated %}
+        <li style="margin:6px 0;">
+          <a class="link-strong" href="{{ url_for('note_detail', note_id=n.id) }}">{{ n.title }}</a>
+          <span class="muted">(⭐ {{ '%.2f' % avg }})</span>
+        </li>
+        {% endfor %}
+      </ol>
       {% else %}
-        <p class="muted" style="margin:0;">Todavía no hay reseñas suficientes.</p>
+      <p class="muted" style="margin:0;">Todavía no hay reseñas suficientes.</p>
       {% endif %}
     </div>
   </div>
@@ -377,15 +380,66 @@
 {% endif %}
 
 <!-- ===========================
-     Resultados (tarjetas)
+     Resultados
      =========================== -->
 <div class="results-shell card mt-3">
-  {% if notes and notes|length > 0 %}
+
+  {% set combos_count = (combos|length) if combos is defined and combos else 0 %}
+  {% set notes_count = (notes|length) if notes is defined and notes else 0 %}
+
+  {% if combos_count > 0 or notes_count > 0 %}
   <div class="results-header">
     <h3>Resultados</h3>
-    <span>{{ notes|length }} resultado(s)</span>
+    <span>{{ combos_count }} combo(s) · {{ notes_count }} apunte(s)</span>
   </div>
+  {% endif %}
 
+  <!-- ---- COMBOS ---- -->
+  {% if combos_count > 0 %}
+  <h4 style="margin:0 0 8px;">Combos</h4>
+  <div class="notes-grid" style="margin-bottom:18px;">
+    {% for c in combos %}
+    <article class="note-card card">
+      <header class="note-card__header"
+        style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+        <a href="{{ url_for('combo_detail', combo_id=c.id) }}" class="note-title link-strong">
+          {{ c.title }}
+        </a>
+        <span class="badge">Combo</span>
+      </header>
+
+      {% if c.description %}
+      <p class="note-card__desc">{{ c.description }}</p>
+      {% endif %}
+
+      <div class="note-card__meta">
+        <span>Incluye varios apuntes</span>
+      </div>
+
+      <footer class="note-card__footer">
+        <span class="price-tag {% if (c.price_cents or 0) == 0 %}free{% endif %}">
+          {% if (c.price_cents or 0) > 0 %}
+          {% if buyer_price is defined %}
+          ${{ '%.2f' % (buyer_price(c) / 100.0) }}
+          {% else %}
+          ${{ '%.2f' % gross_price(c.price_cents) }}
+          {% endif %}
+          {% else %}
+          Gratis
+          {% endif %}
+        </span>
+        <a class="btn secondary" href="{{ url_for('combo_detail', combo_id=c.id) }}">
+          Ver combo
+        </a>
+      </footer>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ---- APUNTES ---- -->
+  {% if notes_count > 0 %}
+  <h4 style="margin:0 0 8px;">Apuntes</h4>
   <div class="notes-grid">
     {% for n in notes %}
     <article class="note-card card">
@@ -396,9 +450,7 @@
       </header>
 
       {% if n.description %}
-      <p class="note-card__desc">
-        {{ n.description }}
-      </p>
+      <p class="note-card__desc">{{ n.description }}</p>
       {% endif %}
 
       <div class="note-card__meta">
@@ -422,7 +474,9 @@
     </article>
     {% endfor %}
   </div>
-  {% else %}
+  {% endif %}
+
+  {% if combos_count == 0 and notes_count == 0 %}
   <p class="muted mt-2">No hay resultados.</p>
   {% endif %}
 </div>
@@ -433,7 +487,6 @@
 {% if include_dynamic_selects %}
 <script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=2"></script>
 <script>
-  // Tabs
   function toggleTab(which) {
     const quick = document.getElementById('tab-quick');
     const adv = document.getElementById('tab-advanced');
