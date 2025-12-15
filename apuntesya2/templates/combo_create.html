@@ -10,24 +10,24 @@
     background: #fff;
     border: 1px solid #e5e7f5;
     border-radius: 16px;
-    padding: 18px
+    padding: 18px;
   }
 
   .grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 14px
+    gap: 14px;
   }
 
-  @media(min-width:860px) {
+  @media (min-width: 860px) {
     .grid {
-      grid-template-columns: 1fr 1fr
+      grid-template-columns: 1fr 1fr;
     }
   }
 
   label {
     font-weight: 700;
-    font-size: 13px
+    font-size: 13px;
   }
 
   input,
@@ -35,11 +35,11 @@
     width: 100%;
     padding: 10px 12px;
     border-radius: 12px;
-    border: 1px solid #dbe2ff
+    border: 1px solid #dbe2ff;
   }
 
   textarea {
-    min-height: 90px
+    min-height: 90px;
   }
 
   .btn {
@@ -51,7 +51,12 @@
     background: #4478ff;
     color: #fff;
     border: none;
-    cursor: pointer
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .btn.cancel {
+    background: #111827;
   }
 
   .note {
@@ -61,12 +66,12 @@
     border: 1px solid #eef2ff;
     border-radius: 12px;
     padding: 10px;
-    margin-top: 10px
+    margin-top: 10px;
   }
 
   .meta {
     color: #6b7280;
-    font-size: 13px
+    font-size: 13px;
   }
 </style>
 
@@ -104,27 +109,33 @@
         <label class="note">
           <input type="checkbox" name="note_ids" value="{{ n.id }}" />
           <div>
-            <div style="font-weight:800">{{ n.title }}</div>
+            <div style="font-weight:800">
+              {{ n.title }}
+            </div>
             <div class="meta">
-              {{ n.university or "" }}{% if n.university %} · {% endif %}
-              {{ n.faculty or "" }}{% if n.faculty %} · {% endif %}
+              {{ n.university or "" }}
+              {% if n.university %} · {% endif %}
+              {{ n.faculty or "" }}
+              {% if n.faculty %} · {% endif %}
               {{ n.career or "" }}
             </div>
           </div>
         </label>
         {% endfor %}
         {% else %}
-        <div class="meta">
-          No tenés apuntes disponibles para combos.
-          (Tip: si tenés apuntes “aprobados” pero no aparecen acá, suele ser por filtros de estado/activo.)
+        <div class="meta" style="margin-top:6px">
+          No tenés apuntes aprobados disponibles para armar combos.
         </div>
         {% endif %}
       </div>
 
       <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
-        <a class="btn" style="background:#111827;text-decoration:none"
-          href="{{ url_for('profile_combos') }}">Cancelar</a>
-        <button class="btn" type="submit">Crear combo</button>
+        <a class="btn cancel" href="{{ url_for('profile_combos') }}">
+          Cancelar
+        </a>
+        <button class="btn" type="submit">
+          Crear combo
+        </button>
       </div>
     </form>
   </div>
