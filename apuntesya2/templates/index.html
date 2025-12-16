@@ -407,8 +407,12 @@
       </div>
 
       <footer class="note-card__footer">
-        <span class="price-tag">
-          ${{ '%.2f' % gross_price(combo_buyer_price_cents(c)) }}
+        <span class="price-tag {% if (c.price_cents or 0) == 0 %}free{% endif %}">
+          {% if (c.price_cents or 0) > 0 %}
+          ${{ '%.2f' % gross_price(c.price_cents) }}
+          {% else %}
+          Gratis
+          {% endif %}
         </span>
         <a class="btn secondary" href="{{ url_for('combo_detail', combo_id=c.id) }}">Ver combo</a>
       </footer>
