@@ -198,12 +198,28 @@ class Purchase(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    note_id: Mapped[int] = mapped_column(ForeignKey("notes.id"), nullable=False)
+
+    note_id: Mapped[int | None] = mapped_column(ForeignKey("notes.id"), nullable=True)
+    combo_id: Mapped[int | None] = mapped_column(ForeignKey("combos.id"), nullable=True)
 
     payment_id: Mapped[str] = mapped_column(String(64), nullable=True)
     preference_id: Mapped[str] = mapped_column(String(64), nullable=True)
 
-    status: Mapped[str] = mapped_column(String(32), default="pending")  # pending, approved, rejected, cancelled
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class ComboPurchase(Base):
+    __tablename__ = "combo_purchases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    buyer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    combo_id: Mapped[int | None] = mapped_column(ForeignKey("combos.id"), nullable=True)
+
+    payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    preference_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(32), default="pending")
     amount_cents: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

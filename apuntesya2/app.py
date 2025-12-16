@@ -34,7 +34,7 @@ from firebase_admin import credentials, auth as fb_auth
 
 # modelos
 from apuntesya2.models import (
-    Base, User, Note, Purchase, University, Faculty, Career, WebhookEvent, Review, DownloadLog, Notification, Combo, ComboNote
+    Base, User, Note, Purchase, University, Faculty, Career, WebhookEvent, Review, DownloadLog, Notification, Combo, ComboNote, ComboPurchase
 )
 
 # helpers MP
@@ -2218,17 +2218,41 @@ def _upsert_purchase_from_payment(pay: dict):
     try:
         status = (pay or {}).get("status")
         external_reference = (pay or {}).get("external_reference") or ""
+        payment_id = str(pay.get("id") or "")
+
+        # =========================
+        # APUNTES (LO ACTUAL)
+        # =========================
         if external_reference.startswith("purchase:"):
-            pid = int(external_reference.split(":")[1])
+            pid = int(external_reference.split(":", 1)[1])
             with Session() as s:
                 p = s.get(Purchase, pid)
                 if p:
-                    p.payment_id = str(pay.get("id") or "")
+                    p.payment_id = payment_id
                     if status:
                         p.status = status
                     s.commit()
-    except Exception:
-        pass
+            return
+
+        # =========================
+        # COMBOS (NUEVO)
+        # =========================
+        if external_reference.startswith("combo_purchase:"):
+            cp_id = int(external_reference.split(":", 1)[1])
+            with Session() as s:
+                cp = s.get(ComboPurchase, cp_id)
+                if cp:
+                    cp.payment_id = payment_id
+                    if status:
+                        cp.status = status
+                    s.commit()
+            return
+
+    except Exception as e:
+        try:
+            app.logger.exception("upsert purchase error")
+        except Exception:
+            pass
 
 def mp_webhook():
     if request.method == "GET":
@@ -3004,20 +3028,89 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 
-@app.route("/combos/<int:combo_id>/buy", methods=["POST"], endpoint="buy_combo")
+@app.route("/combos/<int:combo_id>/buy")
 @login_required
-def buy_combo(combo_id: int):
-    """
-    Compra de combos (MVP).
-    Por ahora, si no tenés implementado MercadoPago para combos, evitamos 500 y mostramos mensaje.
-    """
-    flash("La compra de combos todavía está en desarrollo. Próximamente vas a poder comprarlos desde acá.", "info")
+def buy_combo(combo_id):
+    with Session() as s:
+        combo = s.get(Combo, combo_id)
+        if not combo or (hasattr(combo, "is_active") and combo.is_active is False):
+            abort(404)
+
+        if getattr(combo, "moderation_status", "approved") != "approved":
+            abort(404)
+
+        if combo.seller_id == current_user.id:
+            flash("No podés comprar tu propio combo.")
+            return redirect(url_for("combo_detail", combo_id=combo.id))
+
+        price_cents = int(getattr(combo, "price_cents", 0) or 0)
+        if price_cents <= 0:
+            flash("Este combo es gratuito.")
+            return redirect(url_for("combo_detail", combo_id=combo.id))
+
+        seller = s.get(User, combo.seller_id)
+
+        cp = ComboPurchase(
+            buyer_id=current_user.id,
+            combo_id=combo.id,
+            status="pending",
+            amount_cents=price_cents
+        )
+        s.add(cp)
+        s.commit()
+
+        price_ars = round(price_cents / 100.0, 2)
+        platform_fee_percent = 0.07
+        marketplace_fee = round(price_ars * platform_fee_percent, 2)
+
+        back_urls = {
+            "success": url_for("mp_return_combo", combo_id=combo.id, _external=True) + f"?external_reference=combo_purchase:{cp.id}",
+            "failure": url_for("mp_return_combo", combo_id=combo.id, _external=True) + f"?external_reference=combo_purchase:{cp.id}",
+            "pending": url_for("mp_return_combo", combo_id=combo.id, _external=True) + f"?external_reference=combo_purchase:{cp.id}",
+        }
+
+        try:
+            seller_token = get_valid_seller_token(seller)
+            if seller_token is None:
+                flash("El vendedor no tiene Mercado Pago vinculado. No se puede procesar la compra.", "warning")
+                return redirect(url_for("combo_detail", combo_id=combo.id))
+
+            pref = mp.create_preference_for_seller_token(
+                seller_access_token=seller_token,
+                title=f"Combo: {combo.title}",
+                unit_price=price_ars,
+                quantity=1,
+                marketplace_fee=marketplace_fee,
+                external_reference=f"combo_purchase:{cp.id}",
+                back_urls=back_urls,
+                notification_url=url_for("mp_webhook", _external=True)
+            )
+
+            with Session() as s2:
+                cp2 = s2.get(ComboPurchase, cp.id)
+                if cp2:
+                    cp2.preference_id = pref.get("id") or pref.get("preference_id")
+                    s2.commit()
+
+            init_point = pref.get("init_point") or pref.get("sandbox_init_point")
+            return redirect(init_point)
+
+        except Exception as e:
+            flash(f"Error al crear preferencia en Mercado Pago: {e}")
+            return redirect(url_for("combo_detail", combo_id=combo.id))
+
+
+@app.route("/mp/return/combo/<int:combo_id>")
+@login_required
+def mp_return_combo(combo_id):
+    flash("Pago en proceso. Si fue aprobado, el combo quedará disponible.", "info")
     return redirect(url_for("combo_detail", combo_id=combo_id))
+
+
 
 @app.route("/combos/<int:combo_id>", endpoint="combo_detail")
 def combo_detail(combo_id: int):
     with Session() as s:
-        # Trae combo + vendedor en la misma query
         combo = (
             s.execute(
                 select(Combo)
@@ -3028,17 +3121,21 @@ def combo_detail(combo_id: int):
             .first()
         )
 
-        if not combo or not combo.is_active:
+        if not combo:
             abort(404)
 
-        # Visibilidad: público solo ve approved
+        # is_active puede ser NULL en tu DB -> tratamos NULL como activo
+        if hasattr(combo, "is_active") and (combo.is_active is False):
+            abort(404)
+
         is_owner = getattr(current_user, "is_authenticated", False) and current_user.id == combo.seller_id
         is_admin = getattr(current_user, "is_authenticated", False) and getattr(current_user, "is_admin", False)
 
-        if combo.moderation_status != "approved" and not (is_owner or is_admin):
-            abort(404)
+        # Público: solo approved. Dueño/admin pueden ver pending_review.
+        if hasattr(combo, "moderation_status"):
+            if combo.moderation_status != "approved" and not (is_owner or is_admin):
+                abort(404)
 
-        # Notas del combo
         note_ids = (
             s.execute(select(ComboNote.note_id).where(ComboNote.combo_id == combo.id))
             .scalars()
@@ -3048,22 +3145,23 @@ def combo_detail(combo_id: int):
         notes = []
         if note_ids:
             notes = (
-                s.execute(
-                    select(Note)
-                    .where(Note.id.in_(note_ids))
-                )
+                s.execute(select(Note).where(Note.id.in_(note_ids)))
                 .scalars()
                 .all()
             )
 
-        seller = combo.seller  # ya viene por joinedload
+        seller = combo.seller
+
+        buyer_price_cents = int(getattr(combo, "price_cents", 0) or 0)
+        buyer_price = buyer_price_cents / 100.0  # <- precio final real (sin gross_price)
 
     return render_template(
         "combo_detail.html",
         combo=combo,
-        seller=seller,          # <- ESTO arregla el error del template
+        seller=seller,
         notes=notes,
-        buyer_price=int(getattr(combo, 'price_cents', 0) or 0),
+        buyer_price_cents=buyer_price_cents,
+        buyer_price=buyer_price,
     )
 
 
