@@ -3049,7 +3049,7 @@ def combo_detail(combo_id: int):
         combo=combo,
         seller=seller,          # <- ESTO arregla el error del template
         notes=notes,
-        buyer_price=_combo_buyer_price_cents(combo),
+        buyer_price=int(getattr(combo, 'price_cents', 0) or 0),
     )
 
 
