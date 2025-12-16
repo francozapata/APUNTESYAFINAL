@@ -539,7 +539,7 @@ def generate_note_preview(note: Note, max_pages: int = 4) -> tuple[list[int], li
     tmp_pdf = None
     local_pdf = None
     try:
-        if gcs_bucket and note.file_path and "/" in note.file_path:
+        if gcs_bucket and note_file_path and "/" in note_file_path:
             tmp_pdf = gcs_download_to_temp(note.file_path)
             local_pdf = tmp_pdf
         else:
@@ -610,7 +610,7 @@ def _extract_text_for_moderation(note: Note, max_pages: int = 2, max_chars: int 
     tmp_pdf = None
     local_pdf = None
     try:
-        if gcs_bucket and note.file_path and "/" in note.file_path:
+        if gcs_bucket and note_file_path and "/" in note_file_path:
             tmp_pdf = gcs_download_to_temp(note.file_path)
             local_pdf = tmp_pdf
         else:
@@ -920,15 +920,15 @@ def search_quick():
             combos = s.execute(combos_stmt).scalars().all()
 
     return render_template(
-    "index.html",
-    notes=notes,
-    combos=[],  # por ahora vacío si no buscás combos acá
-    buyer_price=_combo_buyer_price_cents,
-    show_tab="quick",
-    q=q,
-    filters={"university": "", "faculty": "", "career": "", "type": ""},
-    include_dynamic_selects=True
-)
+        "index.html",
+        notes=notes,
+        combos=combos,
+        buyer_price=_combo_buyer_price_cents,
+        show_tab="quick",
+        q=q,
+        filters={"university": "", "faculty": "", "career": "", "type": ""},
+        include_dynamic_selects=True,
+    )
 
 
 @app.get("/search/advanced", endpoint="search_advanced")
@@ -964,6 +964,20 @@ def search_advanced():
             notes_stmt = notes_stmt.where(Note.price_cents > 0)
 
         notes = s.execute(notes_stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
+
+        # ---- combos (búsqueda por texto; sin filtros académicos)
+        combos = []
+        if q:
+            combos_stmt = (
+                select(Combo)
+                .where(Combo.is_active == True)  # noqa: E712
+                .where(Combo.moderation_status == 'approved')
+                .where(or_(
+                    Combo.title.ilike(f"%{q}%"),
+                    Combo.description.ilike(f"%{q}%"),
+                ))
+            )
+            combos = s.execute(combos_stmt.order_by(desc(Combo.created_at)).limit(100)).scalars().all()
 
         # ---------------- Combos ----------------
         combos_stmt = (
@@ -1006,107 +1020,67 @@ def search_advanced():
         combos = s.execute(combos_stmt.order_by(desc(Combo.created_at)).limit(100)).scalars().all()
 
     return render_template(
-    "index.html",
-    notes=notes,
-    combos=[],
-    buyer_price=_combo_buyer_price_cents,
-    show_tab="advanced",
-    q=q,
-    filters={"university": university, "faculty": faculty, "career": career, "type": note_type},
-    include_dynamic_selects=True
-)
+        "index.html",
+        notes=notes,
+        combos=combos,
+        buyer_price=_combo_buyer_price_cents,
+        show_tab="advanced",
+        q=q,
+        filters={"university": university, "faculty": faculty, "career": career, "type": note_type},
+        include_dynamic_selects=True,
+    )
 
 
 
-# Ruta de compatibilidad (si querés mantener /search genérico).
-@app.get("/search", endpoint="search")
+# Ruta de compatibilidad (si querés mantener /search)
+@app.route("/search", methods=["GET"])
 def search():
-    q   = (request.args.get("q") or "").strip()
-    uni = (request.args.get("university") or "").strip()
-    fac = (request.args.get("faculty") or "").strip()
-    car = (request.args.get("career") or "").strip()
-    t   = (request.args.get("type") or "").strip()
+    q = (request.args.get("q") or "").strip()
+    show_tab = request.args.get("tab") or "quick"
 
-    with Session() as s:
-        # Notes
-        notes_stmt = select(Note).where(
-            Note.is_active == True,
-            Note.moderation_status == "approved",
-            Note.deleted_at.is_(None),
+    # mantener parámetros para que no rompa el front viejo
+    uni = request.args.get("university", "")
+    fac = request.args.get("faculty", "")
+    car = request.args.get("career", "")
+    t = request.args.get("type", "")
+
+    with Session(engine) as s:
+        # ---- notes
+        notes_stmt = (
+            select(Note)
+            .where(Note.moderation_status == "approved")
+            .where(or_(
+                Note.title.ilike(f"%{q}%"),
+                Note.description.ilike(f"%{q}%"),
+                Note.subject.ilike(f"%{q}%"),
+            ))
         )
-
-        if q:
-            like = f"%{q}%"
-            notes_stmt = notes_stmt.where(or_(Note.title.ilike(like), Note.description.ilike(like)))
-
-        if uni:
-            notes_stmt = notes_stmt.where(Note.university.ilike(f"%{uni}%"))
-        if fac:
-            notes_stmt = notes_stmt.where(Note.faculty.ilike(f"%{fac}%"))
-        if car:
-            notes_stmt = notes_stmt.where(Note.career.ilike(f"%{car}%"))
-
-        if t == "free":
-            notes_stmt = notes_stmt.where(Note.price_cents == 0)
-        elif t == "paid":
-            notes_stmt = notes_stmt.where(Note.price_cents > 0)
-
         notes = s.execute(notes_stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
 
-        # Combos
-        combos_stmt = (
-            select(Combo)
-            .distinct()
-            .join(ComboNote, ComboNote.combo_id == Combo.id)
-            .join(Note, Note.id == ComboNote.note_id)
-            .where(
-                Combo.is_active == True,
-                Combo.moderation_status == "approved",
-                Note.is_active == True,
-                Note.moderation_status == "approved",
-                Note.deleted_at.is_(None),
-            )
-        )
-
+        # ---- combos (búsqueda por texto; sin filtros académicos)
+        combos = []
         if q:
-            like = f"%{q}%"
-            combos_stmt = combos_stmt.where(
-                or_(
-                    Combo.title.ilike(like),
-                    Combo.description.ilike(like),
-                    Note.title.ilike(like),
-                    Note.description.ilike(like),
-                )
+            combos_stmt = (
+                select(Combo)
+                .where(Combo.is_active == True)  # noqa: E712
+                .where(Combo.moderation_status == "approved")
+                .where(or_(
+                    Combo.title.ilike(f"%{q}%"),
+                    Combo.description.ilike(f"%{q}%"),
+                ))
             )
-
-        if uni:
-            combos_stmt = combos_stmt.where(Note.university.ilike(f"%{uni}%"))
-        if fac:
-            combos_stmt = combos_stmt.where(Note.faculty.ilike(f"%{fac}%"))
-        if car:
-            combos_stmt = combos_stmt.where(Note.career.ilike(f"%{car}%"))
-
-        if t == "free":
-            combos_stmt = combos_stmt.where(Combo.price_cents == 0)
-        elif t == "paid":
-            combos_stmt = combos_stmt.where(Combo.price_cents > 0)
-
-        combos = s.execute(combos_stmt.order_by(desc(Combo.created_at)).limit(100)).scalars().all()
-
-    show_tab = "advanced" if (uni or fac or car or t) else "quick"
+            combos = s.execute(combos_stmt.order_by(desc(Combo.created_at)).limit(100)).scalars().all()
 
     return render_template(
-    "index.html",
-    notes=notes,
-    combos=[],
-    buyer_price=_combo_buyer_price_cents,
-    show_tab=show_tab,
-    q=q,
-    filters={"university": uni, "faculty": fac, "career": car, "type": t},
-    include_dynamic_selects=True
-)
-
-
+        "index.html",
+        notes=notes,
+        combos=combos,
+        buyer_price=_combo_buyer_price_cents,
+        show_tab=show_tab,
+        q=q,
+        filters={"university": uni, "faculty": fac, "career": car, "type": t},
+        include_dynamic_selects=True,
+    )
 
 # -----------------------------------------------------------------------------
 # Auth (sólo Google con Firebase)
@@ -1914,77 +1888,69 @@ def submit_review(note_id):
 @app.route("/download/<int:note_id>")
 @login_required
 def download_note(note_id):
-    with Session() as s:
-        note = s.get(Note, note_id)
-        if not note or not note.is_active:
-            abort(404)
+    note = Note.query.get_or_404(note_id)
 
-        allowed = False
+    # Access control
+    allowed = False
+    is_free = False
 
-        # El vendedor siempre puede descargar su propio apunte
-        if note.seller_id == current_user.id:
+    # Premium users can download everything
+    if current_user.is_premium:
+        allowed = True
+    else:
+        # Notes marked free can be downloaded by anyone logged-in
+        if getattr(note, "is_free", False):
             allowed = True
-
-        # Apuntes gratuitos: permitir y registrar una "descarga gratuita"
-        elif note.price_cents == 0:
-            allowed = True
-
-            # Registrar una sola vez la descarga gratuita
-            existing = s.execute(
-                select(Purchase).where(
-                    Purchase.buyer_id == current_user.id,
-                    Purchase.note_id == note.id,
-                    Purchase.status == "approved",
-                    Purchase.amount_cents == 0,
-                )
-            ).scalar_one_or_none()
-
-            if existing is None:
-                free_purchase = Purchase(
-                    buyer_id=current_user.id,
-                    note_id=note.id,
-                    status="approved",
-                    amount_cents=0,
-                )
-                s.add(free_purchase)
-                s.commit()
-
-        # Apuntes pagos: solo si tiene compra aprobada
+            is_free = True
         else:
-            p = s.execute(
-                select(Purchase).where(
-                    Purchase.buyer_id == current_user.id,
-                    Purchase.note_id == note.id,
-                    Purchase.status == "approved",
-                )
-            ).scalar_one_or_none()
-            allowed = p is not None
+            # Otherwise, only the buyer can download
+            purchase = Purchase.query.filter_by(note_id=note.id, buyer_id=current_user.id).first()
+            if purchase and purchase.status == "approved":
+                allowed = True
 
-        if not allowed:
-            flash("No tenés acceso a este archivo.")
-            return redirect(url_for("note_detail", note_id=note.id))
-        # Log download for metrics (best-effort)
+    if not allowed:
+        flash("No tenés acceso a este archivo.", "danger")
+        return redirect(url_for("note_detail", note_id=note.id))
+
+    # Snapshot file_path early (avoid lazy-load issues if session errors)
+    note_file_path = getattr(note, "file_path", None)
+
+    # Log download (non-blocking: if logging fails, still allow download)
+    try:
+        dl = DownloadLog(
+            user_id=current_user.id,
+            note_id=note.id,
+            combo_id=None,
+            is_free=is_free,
+        )
+        db.session.add(dl)
+        db.session.commit()
+    except Exception as e:
         try:
-            s.add(DownloadLog(user_id=current_user.id, note_id=note.id, is_free=(note.price_cents == 0)))
-            s.commit()
+            db.session.rollback()
         except Exception:
             pass
+        app.logger.warning("DownloadLog insert failed: %s", e)
 
-        # ✅ Deliver file without exposing storage links
-        from io import BytesIO
-        if gcs_bucket and note.file_path and "/" in note.file_path:
-            data = gcs_download_bytes(note.file_path)
-            fname = os.path.basename(note.file_path) or f"apunte_{note.id}.pdf"
-            return send_file(BytesIO(data), mimetype="application/pdf", as_attachment=True, download_name=fname)
+    # Deliver file without exposing storage links
+    from io import BytesIO
 
-        return send_from_directory(app.config["UPLOAD_FOLDER"], note.file_path, as_attachment=True)
+    if gcs_bucket and note_file_path and "/" in note_file_path:
+        data = gcs_download_bytes(note_file_path)
+        fname = os.path.basename(note_file_path) or f"apunte_{note.id}.pdf"
+        return send_file(
+            BytesIO(data),
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=fname,
+        )
 
+    if not note_file_path:
+        flash("No se encontró el archivo asociado a este apunte.", "danger")
+        return redirect(url_for("note_detail", note_id=note.id))
 
+    return send_from_directory(app.config["UPLOAD_FOLDER"], note_file_path, as_attachment=True)
 
-
-# -----------------------------------------------------------------------------
-# MP OAuth
-# -----------------------------------------------------------------------------
 @app.route("/mp/connect")
 @login_required
 def connect_mp():
@@ -3022,6 +2988,17 @@ def combo_create():
 from flask import render_template, abort
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
+
+
+@app.route("/combos/<int:combo_id>/buy", methods=["POST"], endpoint="buy_combo")
+@login_required
+def buy_combo(combo_id: int):
+    """
+    Compra de combos (MVP).
+    Por ahora, si no tenés implementado MercadoPago para combos, evitamos 500 y mostramos mensaje.
+    """
+    flash("La compra de combos todavía está en desarrollo. Próximamente vas a poder comprarlos desde acá.", "info")
+    return redirect(url_for("combo_detail", combo_id=combo_id))
 
 @app.route("/combos/<int:combo_id>", endpoint="combo_detail")
 def combo_detail(combo_id: int):

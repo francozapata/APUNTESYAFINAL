@@ -66,6 +66,14 @@ class User(Base, UserMixin):
 
     notes = relationship("Note", back_populates="seller")
 
+    # Combos creados por este vendedor
+    combos = relationship(
+        "Combo",
+        back_populates="seller",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
 
 class Note(Base):
     __tablename__ = "notes"
@@ -114,6 +122,16 @@ class Note(Base):
     seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     seller = relationship("User", back_populates="notes")
 
+    # Relación con combos (vía tabla puente combo_notes)
+    combo_notes = relationship(
+        "ComboNote",
+        back_populates="note",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    # Conveniencia (solo lectura): lista de combos donde aparece este apunte
+    combos = relationship("Combo", secondary="combo_notes", viewonly=True)
+
     deleted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -150,6 +168,17 @@ class Combo(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    # Relaciones
+    seller = relationship("User", back_populates="combos")
+    combo_notes = relationship(
+        "ComboNote",
+        back_populates="combo",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    # Conveniencia (solo lectura)
+    notes = relationship("Note", secondary="combo_notes", viewonly=True)
+
 
 class ComboNote(Base):
     __tablename__ = "combo_notes"
@@ -159,6 +188,9 @@ class ComboNote(Base):
     note_id: Mapped[int] = mapped_column(
         ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True
     )
+
+    combo = relationship("Combo", back_populates="combo_notes")
+    note = relationship("Note", back_populates="combo_notes")
 
 
 class Purchase(Base):
