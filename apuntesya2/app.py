@@ -2044,7 +2044,7 @@ def buy_note(note_id):
 
         price_base = note.price_cents / 100  # neto vendedor (N)
         price_ars = round(price_base * GROSS_MULTIPLIER, 2)  # final comprador (P)
-        platform_fee_percent = 0.07  # 7% de P (comisión ApuntesYa)
+        platform_fee_percent = float(APY_COMMISSION_RATE)  # 7% de P (comisión ApuntesYa)
         back_urls = {
             "success": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
             "failure": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
@@ -2904,10 +2904,18 @@ def update_academics_post():
 from apuntesya2.models import ComboNote
 
 def _combo_buyer_price_cents(combo: Combo) -> int:
-    # Buyer price includes 15% fees (seller enters net). If free, 0.
-    if not combo or (combo.price_cents or 0) <= 0:
+    """Precio final al comprador para un combo.
+
+    Regla: el vendedor ingresa el NETO (lo que quiere recibir) y al comprador se le
+    suma el % de comisiones configurado (TOTAL_FEE_RATE). Si es gratis => 0.
+    """
+    if not combo:
         return 0
-    return int(math.ceil((combo.price_cents / (1 - (MP_COMMISSION_RATE + APY_COMMISSION_RATE)))))
+    net = int(getattr(combo, "seller_net_cents", 0) or 0)
+    if net <= 0:
+        return 0
+    return int(math.ceil(net * (1.0 + float(TOTAL_FEE_RATE))))
+
 
 @app.route("/profile/combos")
 @login_required
@@ -2979,11 +2987,10 @@ def combo_create():
                 return render_template("combo_create.html", notes=notes)
 
             # 3) Calcular precio final comprador (si neto = 0, es gratis)
-            fee = float(MP_COMMISSION_RATE) + float(APY_COMMISSION_RATE)
             if price_net_cents <= 0:
                 buyer_price_cents = 0
             else:
-                buyer_price_cents = int(math.ceil(price_net_cents / (1 - fee)))
+                buyer_price_cents = int(math.ceil(price_net_cents * (1.0 + float(TOTAL_FEE_RATE))))
 
             # 4) Crear combo (IMPORTANTÍSIMO: setear seller_net_cents)
             combo = Combo(
@@ -3028,7 +3035,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 
-@app.route("/combos/<int:combo_id>/buy")
+@app.route("/combos/<int:combo_id>/buy", methods=["GET","POST"])
 @login_required
 def buy_combo(combo_id):
     with Session() as s:
@@ -3043,7 +3050,15 @@ def buy_combo(combo_id):
             flash("No podés comprar tu propio combo.")
             return redirect(url_for("combo_detail", combo_id=combo.id))
 
-        price_cents = int(getattr(combo, "price_cents", 0) or 0)
+        price_cents = _combo_buyer_price_cents(combo)
+
+        # Mantener consistencia en DB (por si existen combos viejos)
+        if (getattr(combo, "price_cents", 0) or 0) != price_cents:
+            try:
+                combo.price_cents = price_cents
+                s.commit()
+            except Exception:
+                s.rollback()
         if price_cents <= 0:
             flash("Este combo es gratuito.")
             return redirect(url_for("combo_detail", combo_id=combo.id))
@@ -3152,7 +3167,15 @@ def combo_detail(combo_id: int):
 
         seller = combo.seller
 
-        buyer_price_cents = int(getattr(combo, "price_cents", 0) or 0)
+        buyer_price_cents = _combo_buyer_price_cents(combo)
+
+        # Si el combo es viejo y el price_cents no coincide, lo actualizamos (best-effort)
+        if (getattr(combo, "price_cents", 0) or 0) != buyer_price_cents:
+            try:
+                combo.price_cents = buyer_price_cents
+                s.commit()
+            except Exception:
+                s.rollback()
         buyer_price = buyer_price_cents / 100.0  # <- precio final real (sin gross_price)
 
     return render_template(
