@@ -817,51 +817,65 @@ def _promote_admin_once():
 # -----------------------------------------------------------------------------
 # Rutas principales
 # -----------------------------------------------------------------------------
+from sqlalchemy import select, desc
+
 @app.route("/")
 def index():
     with Session() as s:
-        # Home shows only approved & active notes
-        notes = s.execute(
-            select(Note)
-            .where(
-                Note.is_active == True,
-                Note.moderation_status == 'approved',
-                Note.deleted_at.is_(None)
-            )
-            .order_by(Note.created_at.desc())
-            .limit(30)
+        # Notes (solo aprobados/activos si existen esos campos)
+        q_notes = select(Note).order_by(desc(Note.created_at)).limit(30)
+
+        if hasattr(Note, "is_active"):
+            q_notes = q_notes.where(Note.is_active == True)
+
+        if hasattr(Note, "moderation_status"):
+            q_notes = q_notes.where(Note.moderation_status == "approved")
+
+        if hasattr(Note, "deleted_at"):
+            q_notes = q_notes.where(Note.deleted_at.is_(None))
+
+        notes = s.execute(q_notes).scalars().all()
+
+        # Combos (SIN filtros para que aparezcan sí o sí)
+        combos = s.execute(
+            select(Combo).order_by(desc(Combo.created_at)).limit(30)
         ).scalars().all()
 
-        # Rankings
-        # - most downloaded
-        most_downloaded = s.execute(
-            select(Note, func.count(DownloadLog.id).label('dl'))
-            .join(DownloadLog, DownloadLog.note_id == Note.id)
-            .where(Note.is_active == True, Note.moderation_status == 'approved', Note.deleted_at.is_(None))
-            .group_by(Note.id)
-            .order_by(desc(func.count(DownloadLog.id)))
-            .limit(10)
-        ).all()
+        # Rankings (si tenés estos modelos)
+        most_downloaded = []
+        best_rated = []
+        try:
+            most_downloaded = s.execute(
+                select(Note, func.count(DownloadLog.id).label("dl"))
+                .join(DownloadLog, DownloadLog.note_id == Note.id)
+                .group_by(Note.id)
+                .order_by(desc(func.count(DownloadLog.id)))
+                .limit(10)
+            ).all()
+        except Exception:
+            pass
 
-        # - best rated
-        best_rated = s.execute(
-            select(Note, func.avg(Review.rating).label('avg'))
-            .join(Review, Review.note_id == Note.id)
-            .where(Note.is_active == True, Note.moderation_status == 'approved', Note.deleted_at.is_(None))
-            .group_by(Note.id)
-            .order_by(desc(func.avg(Review.rating)))
-            .limit(10)
-        ).all()
-    # Siempre mandamos q y filters para no romper el template
+        try:
+            best_rated = s.execute(
+                select(Note, func.avg(Review.rating).label("avg"))
+                .join(Review, Review.note_id == Note.id)
+                .group_by(Note.id)
+                .order_by(desc(func.avg(Review.rating)))
+                .limit(10)
+            ).all()
+        except Exception:
+            pass
+
     return render_template(
         "index.html",
         notes=notes,
+        combos=combos,  # <- ESTO ES CLAVE
         most_downloaded=most_downloaded,
         best_rated=best_rated,
         include_dynamic_selects=True,
         q="",
         filters={},
-        show_tab="quick"
+        show_tab="quick",
     )
 
 # ------------------------------
