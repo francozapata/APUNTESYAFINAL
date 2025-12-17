@@ -457,14 +457,7 @@
 
       <!-- Columna derecha: datos de cuenta -->
       <div class="profile-col">
-        {% if notifications and notifications|length > 0 %}
-        <div class="profile-right-box">
-          <h4>Notificaciones</h4>
-          {% for n in notifications %}
-          <div style="padding:8px 0;border-bottom:1px solid #eef2ff;">
-            <div style="font-weight:700;font-size:13px;color:#111827;">{{ n.title }}</div>
-            {% if n.body %}<div class="muted" style="margin-top:2px;">{{ n.body }}</div>{% endif %}
-            <div class="muted" style="margin-top:2px;font-size:12px;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if
+<div class="muted" style="margin-top:2px;font-size:12px;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if
               n.created_at else '' }}</div>
           </div>
           {% endfor %}

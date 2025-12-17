@@ -402,6 +402,33 @@ def pricing_ctx():
 def get_valid_seller_token(seller: User) -> str | None:
     return seller.mp_access_token if (seller and seller.mp_access_token) else None
 
+
+
+@app.context_processor
+def inject_nav_notifications():
+    """Expose latest notifications + unread count for navbar dropdown."""
+    if not getattr(current_user, "is_authenticated", False):
+        return dict(nav_notifications=[], nav_notif_unread=0)
+
+    try:
+        with Session() as s:
+            nav_notifications = s.execute(
+                select(Notification)
+                .where(Notification.user_id == current_user.id)
+                .order_by(Notification.created_at.desc())
+                .limit(8)
+            ).scalars().all()
+
+            nav_notif_unread = s.execute(
+                select(func.count(Notification.id))
+                .where(Notification.user_id == current_user.id, Notification.is_read == False)
+            ).scalar_one()
+    except Exception:
+        nav_notifications = []
+        nav_notif_unread = 0
+
+    return dict(nav_notifications=nav_notifications, nav_notif_unread=int(nav_notif_unread or 0))
+
 # -----------------------------------------------------------------------------
 # Admin blueprint (si existe) + auth_reset (legacy)
 # -----------------------------------------------------------------------------
@@ -1328,6 +1355,27 @@ def profile():
         contact_visible_buyers=contact_visible_buyers,
         mp_connected=mp_connected,
     )
+
+
+
+# -----------------------------------------------------------------------------
+# Notifications
+# -----------------------------------------------------------------------------
+@app.post("/notifications/mark_read")
+@login_required
+def notifications_mark_read():
+    """Mark current user's notifications as read."""
+    try:
+        with Session() as s:
+            s.query(Notification).filter(
+                Notification.user_id == current_user.id,
+                Notification.is_read == False
+            ).update({Notification.is_read: True}, synchronize_session=False)
+            s.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 @app.post("/profile/update_contact")
 @login_required

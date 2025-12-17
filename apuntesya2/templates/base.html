@@ -265,6 +265,78 @@
         margin-top: 20px;
       }
     }
+  
+
+    /* Notifications dropdown (navbar) */
+    .notif-wrap { position: relative; display: inline-flex; align-items: center; }
+    .notif-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 38px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.06);
+      cursor: pointer;
+      transition: transform .08s ease, background .15s ease, border-color .15s ease;
+    }
+    .notif-btn:hover { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.16); }
+    .notif-btn:active { transform: scale(0.98); }
+    .notif-icon { width: 18px; height: 18px; fill: #e5e7eb; }
+    .notif-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 18px;
+      background: #ef4444;
+      color: #fff;
+      box-shadow: 0 8px 18px rgba(239,68,68,0.30);
+    }
+    .notif-dropdown {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      width: 340px;
+      max-width: calc(100vw - 24px);
+      background: rgba(17,24,39,0.95);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 16px;
+      box-shadow: 0 22px 60px rgba(0,0,0,0.40);
+      overflow: hidden;
+      display: none;
+      z-index: 80;
+      backdrop-filter: blur(10px);
+    }
+    .notif-dropdown.open { display: block; }
+    .notif-dd-head {
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 12px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      font-weight: 800;
+      color: #f3f4f6;
+    }
+    .notif-dd-link { font-weight: 700; font-size: 12px; opacity: .85; }
+    .notif-dd-link:hover { opacity: 1; text-decoration: underline; }
+    .notif-dd-list { max-height: 360px; overflow:auto; }
+    .notif-item {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      color: #e5e7eb;
+    }
+    .notif-item.unread { background: rgba(59,130,246,0.10); }
+    .notif-title { font-weight: 800; font-size: 13px; margin-bottom: 2px; }
+    .notif-body { font-size: 12px; opacity: .92; margin-bottom: 6px; }
+    .notif-meta { font-size: 11px; opacity: .70; }
+    .notif-empty { padding: 14px 12px; color: rgba(229,231,235,0.85); font-size: 13px; }
+
   </style>
 </head>
 
@@ -291,12 +363,40 @@
 
         <a href="{{ url_for('logout') }}" class="btn">Salir</a>
 
-        <a href="{{ url_for('profile') }}" class="nav-profile-link" aria-label="Ver perfil">
-          <img
-            src="{% if (current_user.imagen_de_perfil or current_user.profile_image) %}{{ url_for('static', filename='uploads/profile_images/' ~ (current_user.imagen_de_perfil or current_user.profile_image)) }}{% else %}{{ url_for('static', filename='img/default_profile.png') }}{% endif %}"
-            class="nav-profile-pic" alt="Foto de perfil">
-        </a>
-        {% else %}
+        <div class="notif-wrap" id="notifWrap">
+          <button class="notif-btn" id="notifBtn" aria-haspopup="true" aria-expanded="false" aria-label="Notificaciones">
+            <!-- Bell icon (inline SVG) -->
+            <svg class="notif-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 22a2.5 2.5 0 0 0 2.45-2H9.55A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 1 0-14 0v5l-2 2v1h18v-1l-2-2Zm-2 1H7v-6a5 5 0 1 1 10 0v6Z"/>
+            </svg>
+            {% if nav_notif_unread and nav_notif_unread > 0 %}
+              <span class="notif-badge" id="notifBadge">{{ nav_notif_unread }}</span>
+            {% endif %}
+          </button>
+
+          <div class="notif-dropdown" id="notifDropdown">
+            <div class="notif-dd-head">
+              <span>Notificaciones</span>
+              <a href="{{ url_for('profile') }}" class="notif-dd-link">Ver perfil</a>
+            </div>
+
+            {% if nav_notifications and nav_notifications|length > 0 %}
+              <div class="notif-dd-list">
+                {% for n in nav_notifications %}
+                  <div class="notif-item {% if not n.is_read %}unread{% endif %}">
+                    <div class="notif-title">{{ n.title }}</div>
+                    {% if n.body %}<div class="notif-body">{{ n.body }}</div>{% endif %}
+                    <div class="notif-meta">{{ n.created_at.strftime('%d/%m/%Y %H:%M') if n.created_at else '' }}</div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="notif-empty">No tenés notificaciones por ahora.</div>
+            {% endif %}
+          </div>
+        </div>
+
+{% else %}
         <a href="{{ url_for('login') }}" class="btn">Ingresar / Registrarse</a>
         {% endif %}
       </div>
@@ -428,6 +528,54 @@
 
       overlay.addEventListener('click', closeWidget);
     });
+  </script>
+
+
+  <script>
+    (function () {
+      const btn = document.getElementById('notifBtn');
+      const dd = document.getElementById('notifDropdown');
+      const badge = document.getElementById('notifBadge');
+      const wrap = document.getElementById('notifWrap');
+
+      if (!btn || !dd || !wrap) return;
+
+      function closeDD() {
+        dd.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+
+      async function markRead() {
+        try {
+          const res = await fetch("{{ url_for('notifications_mark_read') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ all: true })
+          });
+          if (res.ok && badge) badge.remove();
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const isOpen = dd.classList.toggle('open');
+        btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        if (isOpen) {
+          await markRead();
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!wrap.contains(e.target)) closeDD();
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeDD();
+      });
+    })();
   </script>
 
 </body>
