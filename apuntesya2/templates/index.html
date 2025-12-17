@@ -389,41 +389,8 @@
     <span>{{ combos|length }} combo(s)</span>
   </div>
 
-  <div class="notes-grid">
-    {% for c in combos %}
-    <article class="note-card card">
-      <header class="note-card__header">
-        <a href="{{ url_for('combo_detail', combo_id=c.id) }}" class="note-title link-strong">
-          {{ c.title }}
-        </a>
-      </header>
-
-      {% if c.description %}
-      <p class="note-card__desc">{{ c.description }}</p>
-      {% endif %}
-
-      <div class="note-card__meta">
-        <span>Descuento {{ (c.discount_pct or 0) }}%</span>
-      </div>
-
-      <footer class="note-card__footer">
-        <span class="price-tag {% if (c.price_cents or 0) == 0 %}free{% endif %}">
-          {% if (c.price_cents or 0) > 0 %}
-          ${{ '%.2f' % gross_price(c.price_cents) }}
-          {% else %}
-          Gratis
-          {% endif %}
-        </span>
-        <a class="btn secondary" href="{{ url_for('combo_detail', combo_id=c.id) }}">Ver combo</a>
-      </footer>
-    </article>
-    {% endfor %}
-  </div>
-
   <div style="height:12px"></div>
   {% endif %}
-
-
 
   {% set combos_count = (combos|length) if combos is defined and combos else 0 %}
   {% set notes_count = (notes|length) if notes is defined and notes else 0 %}
@@ -458,7 +425,9 @@
       <div class="note-card__meta">
         <span>Incluye varios apuntes</span>
       </div>
-
+      <div class="note-card__meta">
+        <span>Descuento {{ (c.discount_pct or 0) }}%</span>
+      </div>
       <footer class="note-card__footer">
         <span class="price-tag {% if (c.price_cents or 0) == 0 %}free{% endif %}">
           {% if (c.price_cents or 0) > 0 %}
