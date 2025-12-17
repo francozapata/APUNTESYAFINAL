@@ -371,7 +371,7 @@ app.config.setdefault("PASSWORD_RESET_EXPIRATION", int(os.getenv("PASSWORD_RESET
 app.config.setdefault("ENABLE_SMTP", os.getenv("ENABLE_SMTP", "false"))
 
 app.config["CONTACT_EMAILS"] = os.getenv("CONTACT_EMAILS", "soporte.apuntesya@gmail.com")
-app.config["CONTACT_WHATSAPP"] = os.getenv("CONTACT_WHATSAPP", "+543510000000")
+app.config["CONTACT_WHATSAPP"] = os.getenv("CONTACT_WHATSAPP", "+543516788775")
 app.config["SUGGESTIONS_URL"] = os.getenv("SUGGESTIONS_URL",
     "https://docs.google.com/forms/d/e/1FAIpQLScDEukn0sLtjOoWgmvTNaF_qG0iDHue9EOqCYxz_z6bGxzErg/viewform?usp=header"
 )
