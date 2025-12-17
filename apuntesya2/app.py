@@ -1225,21 +1225,26 @@ def profile():
     with Session() as s:
         # Notas del usuario + cantidad de descargas (compras aprobadas)
         rows = s.execute(
-            select(
-                Note,
-                func.count(Purchase.id).label("download_count"),
-            )
-            .outerjoin(
-                Purchase,
-                and_(
-                    Purchase.note_id == Note.id,
-                    Purchase.status == "approved",
-                ),
-            )
-            .where(Note.seller_id == current_user.id)
-            .group_by(Note.id)
-            .order_by(Note.created_at.desc())
-        ).all()
+    select(
+        Note,
+        func.count(Purchase.id).label("download_count"),
+    )
+    .outerjoin(
+        Purchase,
+        and_(
+            Purchase.note_id == Note.id,
+            Purchase.status == "approved",
+        ),
+    )
+    .where(
+        Note.seller_id == current_user.id,
+        Note.is_active == True,
+        Note.deleted_at.is_(None),
+    )
+    .group_by(Note.id)
+    .order_by(Note.created_at.desc())
+).all()
+
 
         my_notes = []
         for note, download_count in rows:
@@ -3241,7 +3246,12 @@ def _combo_buyer_price_cents(combo: Combo) -> int:
 def profile_combos():
     with Session() as s:
         combos = s.execute(
-            select(Combo).where(Combo.seller_id == current_user.id).order_by(Combo.created_at.desc())
+        select(Combo)
+        .where(
+            Combo.seller_id == current_user.id,
+            Combo.is_active == True,
+        )
+        .order_by(Combo.created_at.desc())
         ).scalars().all()
     return render_template("profile_combos.html", combos=combos, buyer_price=_combo_buyer_price_cents)
 
