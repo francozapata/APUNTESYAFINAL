@@ -1,9 +1,5 @@
 {% extends "base.html" %}
 {% block content %}
-<div style="margin:12px 0 18px;display:flex;gap:10px;flex-wrap:wrap;">
-  <a href="/admin/moderation" style="padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;background:#111827;color:#fff;text-decoration:none;font-weight:700;">🛡️ Moderador</a>
-  <a href="/admin/users" style="padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;background:#fff;color:#111827;text-decoration:none;font-weight:700;">Usuarios</a>
-</div>
 
 <style>
     .admin-shell {
@@ -180,15 +176,9 @@
         </div>
 
         <div class="tabs">
-            <button id="tabUsers" class="tab active">
-                👥 <span>Usuarios</span>
-            </button>
-            <button id="tabNotes" class="tab">
-                📚 <span>Apuntes</span>
-            </button>
-            <button id="tabFiles" class="tab">
-                📄 <span>Archivos</span>
-            </button>
+            <button id="tabUsers" class="tab active">👥 <span>Usuarios</span></button>
+            <button id="tabContent" class="tab">📚 <span>Apuntes y archivos</span></button>
+            <a id="tabModeration" class="tab" href="/admin/moderation" style="text-decoration:none;">🛡️ <span>Moderador</span></a>
         </div>
 
         <!-- BUSCADOR -->
@@ -196,47 +186,39 @@
 
         <!-- CONTENEDORES -->
         <div id="usersPane" style="margin-top:14px;"></div>
-        <div id="notesPane" style="display:none;margin-top:14px;"></div>
-        <div id="filesPane" style="display:none;margin-top:14px;"></div>
+        <div id="contentPane" style="display:none;margin-top:14px;"></div>
     </div>
 </div>
 
 <script>
     (function () {
         const tabUsers = document.getElementById('tabUsers');
-        const tabNotes = document.getElementById('tabNotes');
-        const tabFiles = document.getElementById('tabFiles');
+        const tabContent = document.getElementById('tabContent');
         const searchBox = document.getElementById('searchBox');
         const usersPane = document.getElementById('usersPane');
-        const notesPane = document.getElementById('notesPane');
-        const filesPane = document.getElementById('filesPane');
+        const contentPane = document.getElementById('contentPane');
 
-        let activeTab = 'users'; // 'users' | 'notes' | 'files'
+        let activeTab = 'users'; // 'users' | 'content'
         let timer = null;
 
         function sw(tab) {
             activeTab = tab;
             tabUsers.classList.toggle('active', tab === 'users');
-            tabNotes.classList.toggle('active', tab === 'notes');
-            tabFiles.classList.toggle('active', tab === 'files');
+            tabContent.classList.toggle('active', tab === 'content');
 
             usersPane.style.display = tab === 'users' ? '' : 'none';
-            notesPane.style.display = tab === 'notes' ? '' : 'none';
-            filesPane.style.display = tab === 'files' ? '' : 'none';
+            contentPane.style.display = tab === 'content' ? '' : 'none';
 
             searchBox.placeholder =
                 tab === 'users'
                     ? 'Buscar usuario (nombre/email)'
-                    : tab === 'notes'
-                        ? 'Buscar por título, descripción, universidad, facultad o carrera'
-                        : 'Buscar archivos por título, universidad, facultad o carrera';
+                    : 'Buscar por título, descripción, universidad, facultad o carrera';
 
             load();
         }
 
         tabUsers.addEventListener('click', () => sw('users'));
-        tabNotes.addEventListener('click', () => sw('notes'));
-        tabFiles.addEventListener('click', () => sw('files'));
+        tabContent.addEventListener('click', () => sw('content'));
 
         searchBox.addEventListener('input', () => {
             clearTimeout(timer);
@@ -250,16 +232,11 @@
                 const r = await fetch(`/admin/api/users?q=${q}`);
                 const js = await r.json();
                 renderUsers(js.items || []);
-            } else if (activeTab === 'notes') {
-                notesPane.innerHTML = '<div class="muted">Cargando…</div>';
-                const r = await fetch(`/admin/api/notes?q=${q}`);
-                const js = await r.json();
-                renderNotes(js.items || []);
             } else {
-                filesPane.innerHTML = '<div class="muted">Cargando…</div>';
-                const r = await fetch(`/admin/api/files?q=${q}`);
+                contentPane.innerHTML = '<div class="muted">Cargando…</div>';
+                const r = await fetch(`/admin/api/content?q=${q}`);
                 const js = await r.json();
-                renderFiles(js.items || []);
+                renderContent(js.items || []);
             }
         }
 
@@ -317,58 +294,39 @@
             }).join('');
         }
 
-        function renderNotes(items) {
+        function renderContent(items) {
             if (!items.length) {
-                notesPane.innerHTML = '<div class="muted">Sin resultados.</div>';
+                contentPane.innerHTML = '<div class="muted">Sin resultados.</div>';
                 return;
             }
-            notesPane.innerHTML = items.map(n => `
+
+            contentPane.innerHTML = items.map(it => `
         <div class="row-card">
           <div class="row-main">
             <div>
-              <strong>${escapeHtml(n.title)}</strong>
-              <span class="muted">
-                ${n.seller_name ? escapeHtml(n.seller_name) : ''}
-              </span>
+              <strong>${escapeHtml(it.title)}</strong>
+              ${it.seller_name ? `<span class="muted">${escapeHtml(it.seller_name)}</span>` : ''}
             </div>
-            <span class="muted">
-              ${escapeHtml(n.university || '')} • ${escapeHtml(n.faculty || '')} • ${escapeHtml(n.career || '')}
-            </span>
-          </div>
-          <div class="right">
-            <span class="muted">$${(n.price_cents / 100).toFixed(2)}</span>
-            <button class="btn ghost" onclick="deleteNote(${n.id})">Eliminar</button>
-          </div>
-        </div>
-      `).join('');
-        }
-
-        function renderFiles(items) {
-            if (!items.length) {
-                filesPane.innerHTML = '<div class="muted">Sin resultados.</div>';
-                return;
-            }
-            filesPane.innerHTML = items.map(it => `
-        <div class="row-card">
-          <div class="row-main">
-            <div><strong>${escapeHtml(it.title)}</strong></div>
             <span class="muted">
               ${escapeHtml(it.university || '')} • ${escapeHtml(it.faculty || '')} • ${escapeHtml(it.career || '')}
             </span>
+            ${it.file_path ? `<span class="muted">Archivo: ${escapeHtml(it.file_path)}</span>` : ''}
           </div>
           <div class="right">
-            <a class="btn" href="${it.download_url}">Descargar PDF</a>
+            <span class="muted">$${((it.price_cents || 0) / 100).toFixed(2)}</span>
+            <a class="btn" href="${it.download_url}">Descargar</a>
+            <button class="btn ghost" onclick="deleteContent(${it.id})">Borrar</button>
           </div>
         </div>
       `).join('');
         }
 
-        // ---------- Acciones de apuntes ----------
-        window.deleteNote = async function (id) {
-            if (!confirm('¿Eliminar este apunte?')) return;
-            const r = await fetch(`/admin/api/notes/${id}/delete`, { method: 'POST' });
+        // ---------- Acciones de contenido (apunte + archivo) ----------
+        window.deleteContent = async function (id) {
+            if (!confirm('¿Borrar este apunte y su archivo asociado?')) return;
+            const r = await fetch(`/admin/api/content/${id}/delete`, { method: 'POST' });
             const js = await r.json().catch(() => ({ ok: false }));
-            if (js.ok) { load(); } else { alert('No se pudo eliminar.'); }
+            if (js.ok) { load(); } else { alert('No se pudo borrar.'); }
         }
 
         // ---------- Acciones de usuarios ----------

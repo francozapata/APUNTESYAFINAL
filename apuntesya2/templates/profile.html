@@ -379,6 +379,12 @@
             <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill">
               Ver
             </a>
+            <a href="{{ url_for('seller_edit_note_get', note_id=n.id) }}" class="btn-pill ghost">
+              Editar
+            </a>
+            <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline" onsubmit="return confirm('¿Eliminar este apunte? Se despublicará y se borrará el archivo asociado.');">
+              <button type="submit" class="btn-pill" style="background:#ef4444;border:0;">Borrar</button>
+            </form>
           </div>
         </div>
         {% endfor %}

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .shell{max-width:980px;margin:28px auto;}
+  .card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:18px;}
+  .grid{display:grid;grid-template-columns:1fr;gap:14px;}
+  @media (min-width:860px){.grid{grid-template-columns:1fr 1fr;}}
+  label{font-weight:700;font-size:13px;}
+  input,textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid #dbe2ff;}
+  textarea{min-height:120px;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:12px;background:#4478ff;color:#fff;border:none;cursor:pointer;text-decoration:none;}
+  .btn.cancel{background:#111827;}
+  .meta{color:#6b7280;font-size:13px;}
+</style>
+
+<div class="shell">
+  <div class="card">
+    <h2 style="margin:0 0 12px 0">Editar apunte</h2>
+    <div class="meta" style="margin-bottom:12px">
+      Si reemplazás el PDF, el apunte vuelve a <b>revisión manual</b>.
+    </div>
+
+    <form method="post" enctype="multipart/form-data">
+      <div class="grid">
+        <div>
+          <label>Título</label>
+          <input name="title" required value="{{ note.title }}" />
+        </div>
+        <div>
+          <label>Precio neto (ARS)</label>
+          <input name="price" value="{{ '%.2f' % ((note.price_cents or 0) / 100) }}" placeholder="0 para gratis" />
+          <div class="meta" style="margin-top:6px">Este es el monto que querés recibir.</div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <label>Descripción</label>
+        <textarea name="description" required>{{ note.description or '' }}</textarea>
+      </div>
+
+      <div class="grid" style="margin-top:12px">
+        <div>
+          <label>Universidad</label>
+          <input name="university" value="{{ note.university or '' }}" />
+        </div>
+        <div>
+          <label>Facultad</label>
+          <input name="faculty" value="{{ note.faculty or '' }}" />
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:12px">
+        <div>
+          <label>Carrera</label>
+          <input name="career" value="{{ note.career or '' }}" />
+        </div>
+        <div>
+          <label>Reemplazar PDF (opcional)</label>
+          <input type="file" name="file" accept="application/pdf" />
+        </div>
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+        <a class="btn cancel" href="{{ url_for('profile') }}">Cancelar</a>
+        <button class="btn" type="submit">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

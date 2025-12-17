@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .shell{max-width:980px;margin:28px auto;}
+  .card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:18px;}
+  .grid{display:grid;grid-template-columns:1fr;gap:14px;}
+  @media (min-width:860px){.grid{grid-template-columns:1fr 1fr;}}
+  label{font-weight:700;font-size:13px;}
+  input,textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid #dbe2ff;}
+  textarea{min-height:90px;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:12px;background:#4478ff;color:#fff;border:none;cursor:pointer;text-decoration:none;}
+  .btn.cancel{background:#111827;}
+  .note{display:flex;gap:10px;align-items:flex-start;border:1px solid #eef2ff;border-radius:12px;padding:10px;margin-top:10px;}
+  .meta{color:#6b7280;font-size:13px;}
+</style>
+
+<div class="shell">
+  <div class="card">
+    <h2 style="margin:0 0 12px 0">Editar combo</h2>
+    <div class="meta" style="margin-bottom:12px">Al editar el combo, vuelve a <b>revisión manual</b>.</div>
+
+    <form method="post">
+      <div class="grid">
+        <div>
+          <label>Título</label>
+          <input name="title" required value="{{ combo.title }}" />
+        </div>
+
+        <div>
+          <label>Neto que quiero recibir (ARS)</label>
+          <input name="price_net" value="{{ '%.2f' % ((combo.seller_net_cents or 0) / 100) }}" placeholder="0 para gratis" />
+          <div class="meta" style="margin-top:6px">El comprador verá el precio final con comisión incluida.</div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <label>Descripción</label>
+        <textarea name="description" required>{{ combo.description or '' }}</textarea>
+      </div>
+
+      <div style="margin-top:14px">
+        <label>Seleccioná al menos 2 apuntes</label>
+
+        {% if notes and notes|length > 0 %}
+          {% for n in notes %}
+          <label class="note">
+            <input type="checkbox" name="note_ids" value="{{ n.id }}" {% if n.id in selected_ids %}checked{% endif %} />
+            <div>
+              <div style="font-weight:800">{{ n.title }}</div>
+              <div class="meta">
+                {{ n.university or "" }}{% if n.university %} · {% endif %}
+                {{ n.faculty or "" }}{% if n.faculty %} · {% endif %}
+                {{ n.career or "" }}
+              </div>
+            </div>
+          </label>
+          {% endfor %}
+        {% else %}
+          <div class="meta" style="margin-top:6px">No tenés apuntes aprobados disponibles para armar combos.</div>
+        {% endif %}
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+        <a class="btn cancel" href="{{ url_for('profile_combos') }}">Cancelar</a>
+        <button class="btn" type="submit">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

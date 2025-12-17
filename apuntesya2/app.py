@@ -461,6 +461,17 @@ def gcs_generate_signed_url(blob_name: str, seconds: int = 600) -> str:
     return url
 
 
+def gcs_delete_blob(blob_name: str) -> bool:
+    """Elimina un blob de GCS (best-effort). Devuelve True si intenta borrar."""
+    if not gcs_bucket:
+        return False
+    try:
+        gcs_bucket.blob(blob_name).delete()
+        return True
+    except Exception:
+        return False
+
+
 def gcs_download_to_temp(blob_name: str) -> str:
     """Download a blob to a temporary file and return the local path."""
     if not gcs_bucket:
@@ -1294,6 +1305,132 @@ def profile_update_contact():
             u.contact_visible_buyers = bool(visible_buyers)
         s.commit()
     flash("Datos de contacto actualizados.")
+    return redirect(url_for("profile"))
+
+
+# -----------------------------------------------------------------------------
+# Vendedor: editar / borrar apuntes
+# -----------------------------------------------------------------------------
+
+@app.get("/profile/notes/<int:note_id>/edit")
+@login_required
+def seller_edit_note_get(note_id: int):
+    with Session() as s:
+        note = s.get(Note, note_id)
+        if not note or note.seller_id != current_user.id:
+            abort(404)
+        return render_template("note_edit.html", note=note)
+
+
+@app.post("/profile/notes/<int:note_id>/edit")
+@login_required
+def seller_edit_note_post(note_id: int):
+    title = (request.form.get("title") or "").strip()
+    description = (request.form.get("description") or "").strip()
+    university = (request.form.get("university") or "").strip()
+    faculty = (request.form.get("faculty") or "").strip()
+    career = (request.form.get("career") or "").strip()
+    price_raw = (request.form.get("price") or "").strip().replace(",", ".")
+    try:
+        price_cents = int(round(float(price_raw) * 100)) if price_raw else 0
+    except Exception:
+        price_cents = 0
+
+    # Paid notes require Mercado Pago linked
+    if price_cents > 0 and not getattr(current_user, "mp_access_token", None):
+        flash("Para publicar apuntes pagos tenés que vincular tu cuenta de Mercado Pago primero.", "warning")
+        return redirect(url_for("profile"))
+
+    new_file = request.files.get("file")
+    replace_file = bool(new_file and new_file.filename)
+    if replace_file and not allowed_pdf(new_file.filename):
+        flash("Sólo PDF.", "danger")
+        return redirect(url_for("seller_edit_note_get", note_id=note_id))
+
+    with Session() as s:
+        note = s.get(Note, note_id)
+        if not note or note.seller_id != current_user.id:
+            abort(404)
+
+        note.title = title or note.title
+        note.description = description
+        note.university = university
+        note.faculty = faculty
+        note.career = career
+        note.price_cents = max(price_cents, 0)
+
+        # Reemplazar archivo (best-effort)
+        if replace_file:
+            old_path = getattr(note, "file_path", None)
+            base_name = secure_filename(new_file.filename)
+            unique_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{base_name}"
+
+            if gcs_bucket:
+                blob_name = f"notes/{current_user.id}/{unique_name}"
+                gcs_upload_file(new_file, blob_name)
+                note.file_path = blob_name
+                # borrar anterior si era de GCS
+                try:
+                    if old_path:
+                        gcs_delete_blob(old_path)
+                except Exception:
+                    pass
+            else:
+                ensure_dirs()
+                fpath = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
+                new_file.save(fpath)
+                note.file_path = unique_name
+                # borrar anterior local
+                try:
+                    if old_path:
+                        old_local = os.path.join(app.config["UPLOAD_FOLDER"], old_path)
+                        if os.path.exists(old_local):
+                            os.remove(old_local)
+                except Exception:
+                    pass
+
+            # si reemplaza archivo → volver a revisión (conservador)
+            try:
+                note.moderation_status = "pending_manual"
+                note.moderation_reason = "Archivo actualizado por el vendedor (requiere revisión)."
+                note.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
+            except Exception:
+                pass
+
+        s.commit()
+
+    flash("Apunte actualizado.", "success")
+    return redirect(url_for("profile"))
+
+
+@app.post("/profile/notes/<int:note_id>/delete")
+@login_required
+def seller_delete_note(note_id: int):
+    with Session() as s:
+        note = s.get(Note, note_id)
+        if not note or note.seller_id != current_user.id:
+            abort(404)
+
+        # Soft delete
+        note.is_active = False
+        if hasattr(note, "deleted_at"):
+            note.deleted_at = datetime.utcnow()
+
+        # borrar archivo (best-effort)
+        try:
+            fp = getattr(note, "file_path", None)
+            if fp:
+                if gcs_bucket:
+                    gcs_delete_blob(fp)
+                else:
+                    local = os.path.join(app.config["UPLOAD_FOLDER"], fp)
+                    if os.path.exists(local):
+                        os.remove(local)
+        except Exception:
+            pass
+
+        s.commit()
+    flash("Apunte eliminado.", "success")
     return redirect(url_for("profile"))
 
 @app.route("/profile/balance")
@@ -2815,6 +2952,85 @@ def admin_api_files():
     return jsonify({"items": data})
 
 
+# Admin HUB - contenido unificado (apunte + archivo)
+@app.get("/admin/api/content")
+@login_required
+@admin_required
+def admin_api_content():
+    q = (request.args.get("q") or "").strip()
+    limit = request.args.get("limit", type=int) or 120
+
+    with Session() as s:
+        stmt = select(Note).where(Note.is_active == True)
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(
+                Note.title.ilike(like),
+                Note.description.ilike(like),
+                Note.university.ilike(like),
+                Note.faculty.ilike(like),
+                Note.career.ilike(like),
+            ))
+
+        stmt = stmt.order_by(desc(Note.created_at)).limit(limit)
+        notes = s.execute(stmt).scalars().all()
+
+        seller_ids = list({n.seller_id for n in notes if n.seller_id})
+        sellers = {}
+        if seller_ids:
+            sellers_rows = s.execute(select(User.id, User.name).where(User.id.in_(seller_ids))).all()
+            sellers = {i: n for i, n in sellers_rows}
+
+        items = []
+        for n in notes:
+            items.append({
+                "id": n.id,
+                "title": n.title,
+                "price_cents": int(getattr(n, "price_cents", 0) or 0),
+                "seller_name": sellers.get(n.seller_id, ""),
+                "university": n.university,
+                "faculty": n.faculty,
+                "career": n.career,
+                "file_path": getattr(n, "file_path", None),
+                "download_url": url_for("admin_download_note", note_id=n.id),
+                "created_at": (n.created_at.isoformat() if getattr(n, "created_at", None) else None),
+            })
+
+    return jsonify({"items": items})
+
+
+@app.post("/admin/api/content/<int:note_id>/delete")
+@login_required
+@admin_required
+def admin_api_content_delete(note_id: int):
+    """Borra (soft) el apunte y hace best-effort de borrar el archivo asociado."""
+    with Session() as s:
+        n = s.get(Note, note_id)
+        if not n:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+
+        n.is_active = False
+        if hasattr(n, "deleted_at"):
+            n.deleted_at = datetime.utcnow()
+
+        # borrar archivo (best-effort)
+        try:
+            fp = getattr(n, "file_path", None)
+            if fp:
+                if gcs_bucket:
+                    gcs_delete_blob(fp)
+                else:
+                    local = os.path.join(app.config["UPLOAD_FOLDER"], fp)
+                    if os.path.exists(local):
+                        os.remove(local)
+        except Exception:
+            pass
+
+        s.commit()
+
+    return jsonify({"ok": True})
+
+
 @app.get("/admin/download/<int:note_id>")
 @login_required
 @admin_required
@@ -3028,6 +3244,106 @@ def combo_create():
             return redirect(url_for("profile_combos"))
 
         return render_template("combo_create.html", notes=notes)
+
+
+@app.route("/combos/<int:combo_id>/edit", methods=["GET", "POST"])
+@login_required
+def combo_edit(combo_id: int):
+    with Session() as s:
+        combo = s.get(Combo, combo_id)
+        if not combo or combo.seller_id != current_user.id:
+            abort(404)
+
+        # Apuntes elegibles (mismos criterios que create)
+        notes = s.execute(
+            select(Note)
+            .where(
+                Note.seller_id == current_user.id,
+                Note.deleted_at.is_(None),
+                Note.is_active == True,
+                Note.moderation_status == "approved",
+            )
+            .order_by(Note.created_at.desc())
+        ).scalars().all()
+
+        selected_ids = {cn.note_id for cn in getattr(combo, "combo_notes", [])}
+
+        if request.method == "POST":
+            title = (request.form.get("title") or "").strip()
+            description = (request.form.get("description") or "").strip()
+            raw_price = (request.form.get("price_net") or "0").strip().replace(",", ".")
+            try:
+                price_net_cents = int(round(float(raw_price) * 100))
+            except Exception:
+                price_net_cents = 0
+
+            note_ids = request.form.getlist("note_ids") or []
+            note_ids = [int(x) for x in note_ids if str(x).isdigit()]
+
+            if not title or not description or len(note_ids) < 2:
+                flash("El combo debe tener título, descripción y al menos 2 apuntes.", "danger")
+                return render_template("combo_edit.html", combo=combo, notes=notes, selected_ids=selected_ids)
+
+            chosen = s.execute(
+                select(Note).where(
+                    Note.id.in_(note_ids),
+                    Note.seller_id == current_user.id,
+                    Note.deleted_at.is_(None),
+                    Note.is_active == True,
+                    Note.moderation_status == "approved",
+                )
+            ).scalars().all()
+            if len(chosen) < 2:
+                flash("Seleccioná al menos 2 apuntes aprobados.", "danger")
+                return render_template("combo_edit.html", combo=combo, notes=notes, selected_ids=selected_ids)
+
+            # Precio final comprador
+            if price_net_cents <= 0:
+                buyer_price_cents = 0
+            else:
+                buyer_price_cents = int(math.ceil(price_net_cents * (1.0 + float(TOTAL_FEE_RATE))))
+
+            combo.title = title
+            combo.description = description
+            combo.seller_net_cents = max(price_net_cents, 0)
+            combo.price_cents = buyer_price_cents
+
+            # Reemplazar relaciones combo_notes
+            try:
+                combo.combo_notes.clear()
+            except Exception:
+                # fallback: delete explícito
+                s.execute(text("DELETE FROM combo_notes WHERE combo_id = :cid"), {"cid": combo.id})
+
+            for n in chosen:
+                s.add(ComboNote(combo_id=combo.id, note_id=n.id))
+
+            # Conservador: si se edita, vuelve a revisión manual
+            try:
+                combo.moderation_status = "pending_manual"
+                combo.moderation_reason = "Combo actualizado por el vendedor (requiere revisión)."
+                combo.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
+            except Exception:
+                pass
+
+            s.commit()
+            flash("Combo actualizado.", "success")
+            return redirect(url_for("profile_combos"))
+
+        return render_template("combo_edit.html", combo=combo, notes=notes, selected_ids=selected_ids)
+
+
+@app.post("/combos/<int:combo_id>/delete")
+@login_required
+def combo_delete(combo_id: int):
+    with Session() as s:
+        combo = s.get(Combo, combo_id)
+        if not combo or combo.seller_id != current_user.id:
+            abort(404)
+        combo.is_active = False
+        s.commit()
+    flash("Combo eliminado.", "success")
+    return redirect(url_for("profile_combos"))
 
 
 from flask import render_template, abort
