@@ -162,7 +162,7 @@ UPLOAD_DIR = os.getenv("UPLOAD_DIR", os.path.join(BASE_DATA, "uploads"))
 os.makedirs(BASE_DATA, exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_DIR
-app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # 25MB
+app.config["MAX_CONTENT_LENGTH"] = 150 * 1024 * 1024  # 25MB
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
