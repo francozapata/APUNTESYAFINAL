@@ -1284,35 +1284,6 @@ def complete_profile_post():
 @login_required
 def profile():
     with Session() as s:
-        # Notas del usuario + cantidad de descargas (compras aprobadas)
-        # IMPORTANTE: el vendedor debe ver SUS apuntes aunque estén inactivos o en moderación.
-        # Solo ocultamos los borrados (soft delete).
-        rows = s.execute(
-            select(
-                Note,
-                func.count(Purchase.id).label("download_count"),
-            )
-            .outerjoin(
-                Purchase,
-                and_(
-                    Purchase.note_id == Note.id,
-                    Purchase.status == "approved",
-                ),
-            )
-            .where(
-                Note.seller_id == current_user.id,
-                Note.deleted_at.is_(None),
-            )
-            .group_by(Note.id)
-            .order_by(Note.created_at.desc())
-        ).all()
-
-
-        my_notes = []
-        for note, download_count in rows:
-            note.download_count = int(download_count or 0)  # atributo "virtual" solo para la vista
-            my_notes.append(note)
-
         me = s.get(User, current_user.id)
         seller_contact = getattr(me, "seller_contact", "") or ""
         contact_url, contact_label = _build_contact_link(seller_contact)
@@ -1328,21 +1299,8 @@ def profile():
 
         mp_connected = bool(getattr(me, "mp_access_token", None))
 
-        # Notifications (latest)
-        try:
-            notifications = s.execute(
-                select(Notification)
-                .where(Notification.user_id == current_user.id)
-                .order_by(Notification.created_at.desc())
-                .limit(10)
-            ).scalars().all()
-        except Exception:
-            notifications = []
-
     return render_template(
         "profile.html",
-        my_notes=my_notes,
-        notifications=notifications,
         seller_contact=seller_contact,
         seller_contact_url=contact_url,
         seller_contact_label=contact_label,
@@ -1404,6 +1362,59 @@ def profile_update_contact():
         s.commit()
     flash("Datos de contacto actualizados.")
     return redirect(url_for("profile"))
+
+
+# -----------------------------------------------------------------------------
+# Mis apuntes (hub) + edición unificada de apuntes/combos
+# -----------------------------------------------------------------------------
+@app.get("/my-notes")
+@login_required
+def my_notes_hub():
+    """Hub para creadores: nuevo apunte / nuevo combo / editar publicaciones."""
+    return render_template("my_notes_hub.html")
+
+
+@app.get("/my-content/edit")
+@login_required
+def my_content_edit():
+    """Página unificada para ver/editar/borrar apuntes y combos del usuario."""
+    with Session() as s:
+        # Apuntes del usuario + cantidad de descargas (compras aprobadas)
+        rows = s.execute(
+            select(
+                Note,
+                func.count(Purchase.id).label("download_count"),
+            )
+            .outerjoin(
+                Purchase,
+                and_(
+                    Purchase.note_id == Note.id,
+                    Purchase.status == "approved",
+                ),
+            )
+            .where(
+                Note.seller_id == current_user.id,
+                Note.deleted_at.is_(None),
+            )
+            .group_by(Note.id)
+            .order_by(Note.created_at.desc())
+        ).all()
+
+        my_notes = []
+        for note, download_count in rows:
+            note.download_count = int(download_count or 0)
+            my_notes.append(note)
+
+        combos = s.execute(
+            select(Combo)
+            .where(
+                Combo.seller_id == current_user.id,
+                Combo.is_active == True,
+            )
+            .order_by(Combo.created_at.desc())
+        ).scalars().all()
+
+    return render_template("my_content_edit.html", my_notes=my_notes, combos=combos)
 
 
 # -----------------------------------------------------------------------------

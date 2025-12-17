@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .hub-shell{max-width:980px;margin:28px auto;}
+  .hub-card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:18px 16px;box-shadow:0 10px 30px rgba(15,23,42,.05)}
+  .hub-title{margin:0 0 6px;font-size:22px}
+  .hub-sub{margin:0 0 14px;color:#6b7280}
+  .hub-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+  .btn-big{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:12px 14px;border-radius:14px;background:#4478ff;color:#fff;text-decoration:none;font-weight:800;border:1px solid #4478ff;box-shadow:0 10px 22px rgba(68,120,255,.22)}
+  .btn-big.ghost{background:#f7f9ff;color:#334;border-color:#e5e7f5;box-shadow:none}
+
+  /* Reutilizamos el look del “Resumen de publicación” de /upload */
+  .upload-side-box{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:14px;margin-top:16px}
+  .upload-side-box h3{margin:0 0 8px;font-size:16px}
+  .text-sm{font-size:13px;color:#6b7280;line-height:1.35}
+  .upload-resumen-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
+  .upload-resumen-grid div{border:1px solid #eef2ff;border-radius:12px;padding:10px;background:#f8fafc}
+  .upload-resumen-grid div strong{display:block;font-size:12px;color:#334;margin-bottom:2px}
+
+  @media (min-width:820px){
+    .upload-resumen-grid{grid-template-columns:1fr 1fr}
+  }
+</style>
+
+<div class="hub-shell">
+  <div class="hub-card">
+    <h1 class="hub-title">Mis apuntes</h1>
+    <p class="hub-sub">Desde acá podés crear apuntes, crear combos y administrar todo lo que ya publicaste.</p>
+
+    <div class="hub-actions">
+      <a class="btn-big" href="{{ url_for('upload_note') }}">➕ Nuevo apunte</a>
+      <a class="btn-big" href="{{ url_for('create_combo') }}">🧺 Nuevo combo</a>
+      <a class="btn-big ghost" href="{{ url_for('my_content_edit') }}">✏️ Editar mis apuntes/combos</a>
+    </div>
+
+    <!-- Bloque informativo (misma estética que hoy) -->
+    <div class="upload-side-box" id="resumen-publicacion">
+      <h3>Resumen de publicación</h3>
+      <p class="text-sm">
+        Este cálculo es estimativo: si publicás un apunte pago, tomamos como base el precio que cargues
+        (lo que vos querés recibir) y calculamos cuánto se suma en comisiones
+        (<strong>8% Mercado Pago</strong> + <strong>7% plataforma ApuntesYa</strong>) y cuál sería el total aproximado
+        que paga la persona que compra.
+      </p>
+
+      <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <label class="text-sm" style="font-weight:800;color:#334;">Lo que querés recibir (X):</label>
+        <input id="price" type="number" step="0.01" min="0" placeholder="Ej: 1200" style="width:160px;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+      </div>
+
+      <div class="upload-resumen-grid">
+        <div><strong>Lo que querés recibir (X):</strong> $<span id="rp-precio">0.00</span></div>
+        <div><strong>Comisión Mercado Pago (8%):</strong> $<span id="rp-mp">0.00</span></div>
+        <div><strong>Comisión ApuntesYa (7%):</strong> $<span id="rp-ay">0.00</span></div>
+        <div><strong>Neto estimado para vos:</strong> $<span id="rp-neto">0.00</span></div>
+        <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.00</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var box = document.getElementById('resumen-publicacion');
+    if (!box) return;
+
+    var precioInput = document.getElementById('price');
+    function toNum(v) {
+      var x = parseFloat((v || '').replace(',', '.'));
+      return isNaN(x) ? 0 : x;
+    }
+
+    var ayPct = 7.0;
+    var mpPct = 8.0;
+    var totalPct = ayPct + mpPct;
+    function fmt(n) { return (n || 0).toFixed(2); }
+
+    function recalc() {
+      var x = toNum(precioInput.value);
+      var totalBuyer = (x <= 0) ? 0 : (x / (1 - totalPct / 100));
+      var feeMP = totalBuyer * (mpPct / 100);
+      var feeAY = totalBuyer * (ayPct / 100);
+      var netoVendedor = x;
+
+      var $ = function (id) { return document.getElementById(id); };
+      if ($('rp-precio')) $('rp-precio').textContent = fmt(x);
+      if ($('rp-mp')) $('rp-mp').textContent = fmt(feeMP);
+      if ($('rp-ay')) $('rp-ay').textContent = fmt(feeAY);
+      if ($('rp-neto')) $('rp-neto').textContent = fmt(netoVendedor);
+      if ($('rp-buyer')) $('rp-buyer').textContent = fmt(totalBuyer);
+    }
+
+    if (precioInput) {
+      precioInput.addEventListener('input', recalc);
+      recalc();
+    }
+  })();
+</script>
+
+{% endblock %}

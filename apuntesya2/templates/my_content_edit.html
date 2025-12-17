@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .shell{max-width:1100px;margin:28px auto;}
+  .card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:18px 16px;box-shadow:0 10px 30px rgba(15,23,42,.05)}
+  .head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  h1{margin:0;font-size:22px}
+  .muted{color:#6b7280}
+
+  .grid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:14px}
+  @media(min-width:980px){.grid{grid-template-columns:1fr 1fr}}
+
+  .section{border:1px solid #eef2ff;border-radius:16px;padding:14px;background:#f8fafc}
+  .section h2{margin:0 0 8px;font-size:16px}
+
+  .row{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;border:1px solid #e5e7f5;border-radius:14px;padding:12px;background:#fff;margin-top:10px}
+  .meta{color:#6b7280;font-size:13px;margin-top:2px}
+
+  .note-actions,.combo-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+  .btn-pill{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:999px;background:#4478ff;color:#fff;text-decoration:none;font-weight:800;font-size:13px;border:1px solid #4478ff}
+  .btn-pill.ghost{background:#f7f9ff;color:#334;border-color:#e5e7f5}
+  .btn-pill.danger{background:#ef4444;border-color:#ef4444}
+
+  .badge{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid #e5e7f5;background:#f8fafc;color:#334;font-weight:800}
+  .badge-free{background:#ecfeff;border-color:#67e8f9}
+  .badge-paid{background:#ecfccb;border-color:#bef264}
+
+  .status-approved{background:#dcfce7;border-color:#86efac}
+  .status-pending_ai,.status-pending_manual{background:#fffbeb;border-color:#fbbf24}
+  .status-rejected{background:#fee2e2;border-color:#fca5a5}
+
+  .top-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+</style>
+
+<div class="shell">
+  <div class="card">
+    <div class="head">
+      <div>
+        <h1>Editar mis apuntes y combos</h1>
+        <div class="muted">Ver, editar o borrar tus publicaciones.</div>
+      </div>
+      <a class="btn-pill ghost" href="{{ url_for('my_notes_hub') }}">← Volver</a>
+    </div>
+
+    <div class="top-actions">
+      <a class="btn-pill" href="{{ url_for('upload_note') }}">➕ Nuevo apunte</a>
+      <a class="btn-pill" href="{{ url_for('create_combo') }}">🧺 Nuevo combo</a>
+    </div>
+
+    <div class="grid">
+
+      <!-- Apuntes -->
+      <div class="section">
+        <h2>Mis apuntes</h2>
+        <div class="muted" style="font-size:13px;">Tus apuntes (aunque estén en revisión). Los borrados no se muestran.</div>
+
+        {% if not my_notes %}
+          <p class="muted" style="margin-top:10px;">Todavía no subiste ningún apunte.</p>
+        {% else %}
+          {% for n in my_notes %}
+            <div class="row">
+              <div>
+                <div style="font-weight:900">{{ n.title }}</div>
+                <div class="meta">{{ n.university }} • {{ n.faculty }} • {{ n.career }}</div>
+                <div class="meta">{{ n.download_count or 0 }} descarga{{ '' if (n.download_count or 0) == 1 else 's' }}</div>
+              </div>
+
+              <div class="note-actions">
+                {% set st = (n.moderation_status or 'approved') %}
+                <span class="badge status-{{ st }}">
+                  {% if st == 'approved' %}Aprobado
+                  {% elif st == 'pending_ai' %}Pendiente IA
+                  {% elif st == 'pending_manual' %}Revisión
+                  {% elif st == 'rejected' %}Denegado
+                  {% else %}{{ st }}{% endif %}
+                </span>
+
+                {% if n.price_cents == 0 %}
+                  <span class="badge badge-free">Gratis</span>
+                {% else %}
+                  <span class="badge badge-paid">${{ '%.2f' % (n.price_cents / 100) }}</span>
+                {% endif %}
+
+                <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill">Ver</a>
+                <a href="{{ url_for('seller_edit_note_get', note_id=n.id) }}" class="btn-pill ghost">Editar</a>
+                <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline"
+                      onsubmit="return confirm('¿Eliminar este apunte? Se despublicará y se borrará el archivo asociado.');">
+                  <button type="submit" class="btn-pill danger" style="border:0;">Borrar</button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+
+      <!-- Combos -->
+      <div class="section">
+        <h2>Mis combos</h2>
+        <div class="muted" style="font-size:13px;">Tus combos activos.</div>
+
+        {% if not combos %}
+          <p class="muted" style="margin-top:10px;">Todavía no creaste combos.</p>
+        {% else %}
+          {% for c in combos %}
+            <div class="row">
+              <div>
+                <div style="font-weight:900">{{ c.title }}</div>
+                <div class="meta">{{ c.description[:90] }}{% if c.description|length>90 %}…{% endif %}</div>
+                <div class="meta">Estado: <span class="badge">{{ c.moderation_status }}</span></div>
+              </div>
+
+              <div class="combo-actions">
+                {% if c.seller_net_cents == 0 %}
+                  <span class="badge badge-free">Gratis</span>
+                {% else %}
+                  <span class="badge badge-paid">${{ "%.2f"|format(c.price_cents / 100.0) }}</span>
+                {% endif %}
+
+                <a class="btn-pill" href="{{ url_for('combo_detail', combo_id=c.id) }}">Ver</a>
+                <a class="btn-pill ghost" href="{{ url_for('combo_edit', combo_id=c.id) }}">Editar</a>
+                <form method="post" action="{{ url_for('combo_delete', combo_id=c.id) }}" style="display:inline"
+                      onsubmit="return confirm('¿Eliminar este combo? Se despublicará.');">
+                  <button type="submit" class="btn-pill danger" style="border:0;">Borrar</button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}

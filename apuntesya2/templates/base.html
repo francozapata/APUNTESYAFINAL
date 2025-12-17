@@ -354,7 +354,7 @@
         <a href="{{ url_for('index') }}" class="btn">Inicio</a>
 
         {% if current_user.is_authenticated %}
-        <a href="{{ url_for('upload_note') }}" class="btn">Subir apunte</a>
+        <a href="{{ url_for('my_notes_hub') }}" class="btn">Mis apuntes</a>
         <a href="{{ url_for('profile') }}" class="btn">Perfil</a>
 
         {% if current_user.is_admin %}

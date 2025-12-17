@@ -82,14 +82,6 @@
       </div>
     </div>
 
-    <!-- TABS -->
-    <div class="profile-tabs">
-      <a href="{{ url_for('profile_purchases') }}" class="profile-tab">📥 <span>Mis compras / descargas</span></a>
-      <a href="{{ url_for('profile_combos') }}" class="profile-tab">🧺 <span>Mis combos</span></a>
-      <a href="{{ url_for('profile') }}" class="profile-tab active">📚 <span>Mis apuntes subidos</span></a>
-      <a href="{{ url_for('profile_balance') }}" class="profile-tab">💰 <span>Mis ventas y balance</span></a>
-    </div>
-
     <!-- CONTENIDO -->
     <div class="profile-wrapper">
 
@@ -149,50 +141,6 @@
             <input type="hidden" name="seller_contact" value="{{ seller_contact }}" />
           </form>
         </div>
-
-        <!-- Lista de apuntes -->
-        <h3 class="profile-section-title">Mis apuntes subidos</h3>
-
-        {% if not my_notes %}
-          <p class="muted">Todavía no subiste ningún apunte. Probá con el botón “Subir apunte” del menú 😊</p>
-        {% else %}
-          {% for n in my_notes %}
-            <div class="note-row">
-              <div>
-                <div><strong>{{ n.title }}</strong></div>
-                <div class="note-meta">{{ n.university }} • {{ n.faculty }} • {{ n.career }}</div>
-                <div class="note-meta">
-                  {{ n.download_count or 0 }} descarga{{ '' if (n.download_count or 0) == 1 else 's' }}
-                </div>
-              </div>
-
-              <div class="note-actions">
-                {% set st = (n.moderation_status or 'approved') %}
-                <span class="badge-status status-{{ st }}">
-                  {% if st == 'approved' %}Aprobado
-                  {% elif st == 'pending_ai' %}Pendiente IA
-                  {% elif st == 'pending_manual' %}Revisión
-                  {% elif st == 'rejected' %}Denegado
-                  {% else %}{{ st }}{% endif %}
-                </span>
-
-                {% if n.price_cents == 0 %}
-                  <span class="badge-free">Gratis</span>
-                {% else %}
-                  <span class="badge-paid">${{ '%.2f' % (n.price_cents / 100) }}</span>
-                {% endif %}
-
-                <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill">Ver</a>
-                <a href="{{ url_for('seller_edit_note_get', note_id=n.id) }}" class="btn-pill ghost">Editar</a>
-
-                <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline"
-                      onsubmit="return confirm('¿Eliminar este apunte? Se despublicará y se borrará el archivo asociado.');">
-                  <button type="submit" class="btn-pill" style="background:#ef4444;border:0;">Borrar</button>
-                </form>
-              </div>
-            </div>
-          {% endfor %}
-        {% endif %}
 
       </div>
 
