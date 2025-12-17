@@ -1254,26 +1254,27 @@ def complete_profile_post():
 def profile():
     with Session() as s:
         # Notas del usuario + cantidad de descargas (compras aprobadas)
+        # IMPORTANTE: el vendedor debe ver SUS apuntes aunque estén inactivos o en moderación.
+        # Solo ocultamos los borrados (soft delete).
         rows = s.execute(
-    select(
-        Note,
-        func.count(Purchase.id).label("download_count"),
-    )
-    .outerjoin(
-        Purchase,
-        and_(
-            Purchase.note_id == Note.id,
-            Purchase.status == "approved",
-        ),
-    )
-    .where(
-        Note.seller_id == current_user.id,
-        Note.is_active == True,
-        Note.deleted_at.is_(None),
-    )
-    .group_by(Note.id)
-    .order_by(Note.created_at.desc())
-).all()
+            select(
+                Note,
+                func.count(Purchase.id).label("download_count"),
+            )
+            .outerjoin(
+                Purchase,
+                and_(
+                    Purchase.note_id == Note.id,
+                    Purchase.status == "approved",
+                ),
+            )
+            .where(
+                Note.seller_id == current_user.id,
+                Note.deleted_at.is_(None),
+            )
+            .group_by(Note.id)
+            .order_by(Note.created_at.desc())
+        ).all()
 
 
         my_notes = []
@@ -2074,56 +2075,72 @@ def submit_review(note_id):
 @app.route("/download/<int:note_id>")
 @login_required
 def download_note(note_id):
-    note = Note.query.get_or_404(note_id)
+    # NOTA: este proyecto usa SQLAlchemy "core" con Session(), no Flask-SQLAlchemy.
+    # Por eso NO usamos Note.query ni db.session.
+    with Session() as s:
+        note = s.get(Note, note_id)
+        if not note:
+            abort(404)
 
-    # Access control
-    allowed = False
-    is_free = False
+        # Access control
+        is_admin = bool(getattr(current_user, "is_admin", False))
+        is_owner = bool(getattr(note, "seller_id", None) == getattr(current_user, "id", None))
 
-    # Premium users can download everything
-    if current_user.is_premium:
-        allowed = True
-    else:
-        # Notes marked free can be downloaded by anyone logged-in
-        if getattr(note, "is_free", False):
+        # Gratis si el precio (neto del vendedor) es 0
+        is_free = int(getattr(note, "price_cents", 0) or 0) <= 0
+
+        allowed = False
+
+        # Admin / dueño siempre
+        if is_admin or is_owner:
             allowed = True
-            is_free = True
+        # Premium puede descargar
+        elif bool(getattr(current_user, "is_premium", False)):
+            allowed = True
+        # Apunte gratuito
+        elif is_free:
+            allowed = True
         else:
-            # Otherwise, only the buyer can download
-            purchase = Purchase.query.filter_by(note_id=note.id, buyer_id=current_user.id).first()
-            if purchase and purchase.status == "approved":
-                allowed = True
+            # Apunte pago: requiere compra aprobada
+            has_purchase = s.execute(
+                select(Purchase.id).where(
+                    Purchase.buyer_id == current_user.id,
+                    Purchase.note_id == note.id,
+                    Purchase.status == "approved",
+                )
+            ).scalar_one_or_none() is not None
+            allowed = bool(has_purchase)
 
-    if not allowed:
-        flash("No tenés acceso a este archivo.", "danger")
-        return redirect(url_for("note_detail", note_id=note.id))
+        if not allowed:
+            flash("No tenés acceso a este archivo.", "danger")
+            return redirect(url_for("note_detail", note_id=note.id))
 
-    # Snapshot file_path early (avoid lazy-load issues if session errors)
-    note_file_path = getattr(note, "file_path", None)
+        note_file_path = getattr(note, "file_path", None)
 
-    # Log download (non-blocking: if logging fails, still allow download)
-    try:
-        dl = DownloadLog(
-            user_id=current_user.id,
-            note_id=note.id,
-            combo_id=None,
-            is_free=is_free,
-        )
-        db.session.add(dl)
-        db.session.commit()
-    except Exception as e:
+        # Log download (best effort)
         try:
-            db.session.rollback()
-        except Exception:
-            pass
-        app.logger.warning("DownloadLog insert failed: %s", e)
+            s.add(
+                DownloadLog(
+                    user_id=current_user.id,
+                    note_id=note.id,
+                    combo_id=None,
+                    is_free=is_free,
+                )
+            )
+            s.commit()
+        except Exception as e:
+            try:
+                s.rollback()
+            except Exception:
+                pass
+            app.logger.warning("DownloadLog insert failed: %s", e)
 
     # Deliver file without exposing storage links
     from io import BytesIO
 
     if gcs_bucket and note_file_path and "/" in note_file_path:
         data = gcs_download_bytes(note_file_path)
-        fname = os.path.basename(note_file_path) or f"apunte_{note.id}.pdf"
+        fname = os.path.basename(note_file_path) or f"apunte_{note_id}.pdf"
         return send_file(
             BytesIO(data),
             mimetype="application/pdf",
@@ -2133,7 +2150,7 @@ def download_note(note_id):
 
     if not note_file_path:
         flash("No se encontró el archivo asociado a este apunte.", "danger")
-        return redirect(url_for("note_detail", note_id=note.id))
+        return redirect(url_for("note_detail", note_id=note_id))
 
     return send_from_directory(app.config["UPLOAD_FOLDER"], note_file_path, as_attachment=True)
 
