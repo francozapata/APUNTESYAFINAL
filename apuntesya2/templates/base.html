@@ -44,9 +44,26 @@
 
     /* logo apenas más grande */
     .brand-logo-img {
-      height: 40px;
+      height: 34px;
       width: auto;
       display: block;
+    }
+
+    /* Logo AY: sombra + glow (opción 3) */
+    .logo-ay {
+      filter:
+        drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35))
+        drop-shadow(0 0 6px rgba(120, 200, 255, 0.4));
+    }
+
+    .brand-name{
+      margin-left: 12px;
+      color: #F6F8FF;
+      font-weight: 800;
+      font-size: 22px;
+      letter-spacing: 0.2px;
+      line-height: 1;
+      white-space: nowrap;
     }
 
     .brand-logo1-img {
@@ -257,10 +274,8 @@
     <div class="nav-inner">
       <div class="brand">
         <a href="{{ url_for('index') }}" class="brand-logo-link">
-          <img src="{{ url_for('static', filename='img/logo.png') }}" alt="ApuntesYa" class="brand-logo-img">
-        </a>
-        <a href="{{ url_for('index') }}" class="brand-logo-link">
-          <img src="{{ url_for('static', filename='img/logo1.png') }}" alt="ApuntesYa" class="brand-logo1-img">
+          <img src="{{ url_for('static', filename='img/ay_icon.png') }}" alt="ApuntesYa" class="brand-logo-img logo-ay">
+          <span class="brand-name">ApuntesYa</span>
         </a>
       </div>
 
