@@ -412,13 +412,9 @@
         <span>Descuento {{ (c.discount_pct or 0) }}%</span>
       </div>
       <footer class="note-card__footer">
-        <span class="price-tag {% if (c.price_cents or 0) == 0 %}free{% endif %}">
-          {% if (c.price_cents or 0) > 0 %}
-          {% if buyer_price is defined %}
-          ${{ '%.2f' % (buyer_price(c) / 100.0) }}
-          {% else %}
-          ${{ '%.2f' % gross_price(c.price_cents) }}
-          {% endif %}
+        <span class="price-tag {% if (c.seller_net_cents or 0) == 0 %}free{% endif %}">
+          {% if (c.seller_net_cents or 0) > 0 %}
+          ${{ '%.1f' % published_price(c.seller_net_cents) }}
           {% else %}
           Gratis
           {% endif %}
@@ -455,9 +451,9 @@
       </div>
 
       <footer class="note-card__footer">
-        <span class="price-tag {% if (n.price_cents or 0) == 0 %}free{% endif %}">
-          {% if (n.price_cents or 0) > 0 %}
-          ${{ '%.2f' % gross_price(n.price_cents) }}
+        <span class="price-tag {% if (n.seller_net_cents or n.price_cents or 0) == 0 %}free{% endif %}">
+          {% if (n.seller_net_cents or n.price_cents or 0) > 0 %}
+          ${{ '%.1f' % published_price(n.seller_net_cents or n.price_cents) }}
           {% else %}
           Gratis
           {% endif %}

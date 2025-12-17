@@ -45,7 +45,7 @@
       <p class="text-sm">
         Este cálculo es estimativo: si publicás un apunte pago, tomamos como base el precio que cargues
         (lo que vos querés recibir) y calculamos cuánto se suma en comisiones
-        (<strong>8% Mercado Pago</strong> + <strong>7% plataforma ApuntesYa</strong>) y cuál sería el total aproximado
+        (<strong>8% Mercado Pago</strong> + <strong>10% plataforma ApuntesYa</strong>) y cuál sería el total aproximado
         que paga la persona que compra.
       </p>
 
@@ -57,7 +57,7 @@
       <div class="upload-resumen-grid">
         <div><strong>Lo que querés recibir (X):</strong> $<span id="rp-precio">0.00</span></div>
         <div><strong>Comisión Mercado Pago (8%):</strong> $<span id="rp-mp">0.00</span></div>
-        <div><strong>Comisión ApuntesYa (7%):</strong> $<span id="rp-ay">0.00</span></div>
+        <div><strong>Comisión ApuntesYa (10%):</strong> $<span id="rp-ay">0.0</span></div>
         <div><strong>Neto estimado para vos:</strong> $<span id="rp-neto">0.00</span></div>
         <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.00</span></div>
       </div>
@@ -76,14 +76,15 @@
       return isNaN(x) ? 0 : x;
     }
 
-    var ayPct = 7.0;
+    var ayPct = 10.0;
     var mpPct = 8.0;
-    var totalPct = ayPct + mpPct;
-    function fmt(n) { return (n || 0).toFixed(2); }
+    var totalPct = ayPct + mpPct; // 18%
+    function ceil1dec(n) { return Math.ceil(n * 10) / 10; }
+    function fmt(n) { return (n || 0).toFixed(1); }
 
     function recalc() {
       var x = toNum(precioInput.value);
-      var totalBuyer = (x <= 0) ? 0 : (x / (1 - totalPct / 100));
+      var totalBuyer = (x <= 0) ? 0 : ceil1dec(x / 0.82);
       var feeMP = totalBuyer * (mpPct / 100);
       var feeAY = totalBuyer * (ayPct / 100);
       var netoVendedor = x;

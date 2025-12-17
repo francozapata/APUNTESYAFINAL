@@ -238,9 +238,12 @@
             <label for="price">
               Precio (ARS)
             </label>
-            <input class="input" name="price" id="price" type="number" min="0" step="0.01">
+            <input class="input" name="price" id="price" type="number" min="0" step="0.1">
             <p class="upload-hint">
-              Este es el monto que querés recibir por cada venta. Si lo dejás en blanco o 0, el apunte será gratis.
+              Este es el monto <b>neto</b> que querés recibir por cada venta.
+              Publicamos el apunte sumando un <b>18%</b> (10% plataforma + 8% Mercado Pago), con redondeo <b>siempre para arriba</b> y <b>1 decimal</b>.
+              Ejemplo: si querés recibir $10, se publica a $12.2.
+              Si lo dejás en blanco o 0, el apunte será gratis.
             </p>
           </div>
 
@@ -296,11 +299,11 @@
                 ingresás el monto que querés recibir por la venta de tu apunte.
               </li>
               <li class="paso-item">
-                <strong>Sumamos la comisión total (15%):</strong>
-                agregamos una Comisión Total del 15% al precio de venta que verá el comprador:
+                <strong>Sumamos la comisión total (18%):</strong>
+                agregamos una Comisión Total del 18% al precio de venta que verá el comprador (redondeo siempre para arriba y 1 decimal):
                 <ul class="desglose-comision">
                   <li><strong>8%</strong> (aprox.) para <strong>Mercado Pago</strong> (procesamiento de pago).</li>
-                  <li><strong>7%</strong> para <strong>ApuntesYa</strong> (mantenimiento y mejora de la plataforma).
+                  <li><strong>10%</strong> para <strong>ApuntesYa</strong> (mantenimiento y mejora de la plataforma).
                   </li>
                 </ul>
               </li>
@@ -332,16 +335,16 @@
             <p class="text-sm">
               Este cálculo es estimativo. Tomamos como base el precio que cargues arriba
               (lo que vos querés recibir) y calculamos cuánto se suma en comisiones
-              (<strong>8% Mercado Pago</strong> + <strong>7% plataforma ApuntesYa</strong>) y
+              (<strong>8% Mercado Pago</strong> + <strong>10% plataforma ApuntesYa</strong>) y
               cuál sería el total aproximado que paga la persona que compra.
             </p>
 
             <div class="upload-resumen-grid">
-              <div><strong>Lo que querés recibir (X):</strong> $<span id="rp-precio">0.00</span></div>
-              <div><strong>Comisión Mercado Pago (8%):</strong> $<span id="rp-mp">0.00</span></div>
-              <div><strong>Comisión ApuntesYa (7%):</strong> $<span id="rp-ay">0.00</span></div>
-              <div><strong>Neto estimado para vos:</strong> $<span id="rp-neto">0.00</span></div>
-              <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.00</span></div>
+              <div><strong>Lo que querés recibir (X):</strong> $<span id="rp-precio">0.0</span></div>
+              <div><strong>Comisión Mercado Pago (8%):</strong> $<span id="rp-mp">0.0</span></div>
+              <div><strong>Comisión ApuntesYa (10%):</strong> $<span id="rp-ay">0.0</span></div>
+              <div><strong>Neto estimado para vos:</strong> $<span id="rp-neto">0.0</span></div>
+              <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.0</span></div>
             </div>
           </div>
         </div>
@@ -382,18 +385,19 @@
       return isNaN(x) ? 0 : x;
     }
 
-    var ayPct = 7.0; // plataforma
+    var ayPct = 10.0; // plataforma
     var mpPct = 8.0;  // MP
-    var totalPct = ayPct + mpPct; // 15%
+    var totalPct = ayPct + mpPct; // 18%
 
-    function fmt(n) { return n.toFixed(2); }
+    function ceil1dec(n) { return Math.ceil(n * 10) / 10; }
+    function fmt(n) { return (n || 0).toFixed(1); }
 
     function recalc() {
       if (!precioInput) return;
       var x = toNum(precioInput.value);  // X = lo que vos querés recibir
 
-      // Buyer pays gross price that includes fees inside the final amount
-      var totalBuyer = (x <= 0) ? 0 : (x / (1 - totalPct / 100));
+      // Precio publicado al comprador: P = ceil_up_1_decimal(X / 0.82)
+      var totalBuyer = (x <= 0) ? 0 : ceil1dec(x / 0.82);
       var feeMP = totalBuyer * (mpPct / 100);
       var feeAY = totalBuyer * (ayPct / 100);
       var netoVendedor = x;  // X es lo que recibís

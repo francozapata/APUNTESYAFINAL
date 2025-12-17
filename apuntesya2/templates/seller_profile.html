@@ -38,10 +38,11 @@
               <span class="pill">{{ n.career }}</span>
             </div>
             <div style="margin-top:10px;">
-              {% if n.price_cents == 0 %}
+              {% set net_cents = (n.seller_net_cents or n.price_cents or 0) %}
+              {% if net_cents == 0 %}
                 <span class="pill" style="background:#ecfdf5;border-color:#d1fae5;color:#065f46;">Gratis</span>
               {% else %}
-                <span class="pill">Pago</span>
+                <span class="pill">${{ '%.1f' % published_price(net_cents) }}</span>
               {% endif %}
             </div>
           </div>

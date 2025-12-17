@@ -34,7 +34,8 @@
               </td>
               <td style="padding:10px;border-bottom:1px solid #f1f1f1;">{{ n.seller.name if n.seller else '-' }}</td>
               <td style="padding:10px;border-bottom:1px solid #f1f1f1;">
-                {% if n.price_cents == 0 %}Gratis{% else %}${{ '%.2f' % (n.price_cents/100) }} (neto){% endif %}
+                {% set net_cents = (n.seller_net_cents or n.price_cents or 0) %}
+                {% if net_cents == 0 %}Gratis{% else %}${{ '%.1f' % (net_cents/100) }} (neto){% endif %}
               </td>
               <td style="padding:10px;border-bottom:1px solid #f1f1f1;">
                 {% if n.ai_decision %}

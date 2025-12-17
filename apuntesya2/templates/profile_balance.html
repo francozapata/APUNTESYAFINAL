@@ -198,22 +198,22 @@
 
       <div class="summary-card">
         <div class="summary-label">Monto bruto</div>
-        <div class="summary-value">${{ '%.2f' % (total_cents / 100) }}</div>
+        <div class="summary-value">${{ '%.1f' % (total_cents / 100) }}</div>
       </div>
 
       <div class="summary-card">
         <div class="summary-label">Comisión Mercado Pago</div>
-        <div class="summary-value">${{ '%.2f' % (mp_commission_cents / 100) }}</div>
+        <div class="summary-value">${{ '%.1f' % (mp_commission_cents / 100) }}</div>
       </div>
 
       <div class="summary-card">
         <div class="summary-label">Comisión plataforma</div>
-        <div class="summary-value">${{ '%.2f' % (apy_commission_cents / 100) }}</div>
+        <div class="summary-value">${{ '%.1f' % (apy_commission_cents / 100) }}</div>
       </div>
 
       <div class="summary-card">
         <div class="summary-label">Ingreso neto estimado</div>
-        <div class="summary-value">${{ '%.2f' % (net_cents / 100) }}</div>
+        <div class="summary-value">${{ '%.1f' % (net_cents / 100) }}</div>
       </div>
     </div>
 
@@ -229,8 +229,8 @@
         <div class="note-title">{{ row.title }}</div>
         <div class="note-meta">
           Ventas: {{ row.sold_count }}
-          • Bruto: ${{ '%.2f' % (row.gross_cents / 100) }}
-          • Neto: ${{ '%.2f' % (row.net_cents / 100) }}
+          • Bruto: ${{ '%.1f' % (row.gross_cents / 100) }}
+          • Neto: ${{ '%.1f' % (row.net_cents / 100) }}
           {% if row.views is not none %}
           • Vistas: {{ row.views }}
           {% if row.conversion %}

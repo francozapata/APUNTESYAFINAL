@@ -40,6 +40,16 @@ from apuntesya2.models import (
 # helpers MP
 from apuntesya2 import mp
 
+# Pricing (single source of truth)
+from apuntesya2.pricing import (
+    published_from_net_cents,
+    cents_to_amount,
+    amount_to_cents,
+    breakdown_from_net,
+    breakdown_from_published,
+    money_1_decimal,
+)
+
 load_dotenv()
 
 # -----------------------------------------------------------------------------
@@ -320,25 +330,27 @@ app.config["MP_ACCESS_TOKEN"] = os.getenv("MP_ACCESS_TOKEN", "")
 app.config["MP_WEBHOOK_SECRET"] = os.getenv("MP_WEBHOOK_SECRET", "")
 app.config["BASE_URL"] = os.getenv("BASE_URL", "")
 
-# Porcentaje que mostramos en el footer y usamos como base de la comisión de plataforma
-app.config["PLATFORM_FEE_PERCENT"] = float(os.getenv("MP_PLATFORM_FEE_PERCENT", "12.8"))
+"""Pricing rules (uniform)
 
-"""Pricing rules (V1)
+- Seller inputs NET (what they want to receive).
+- Published buyer price: P = ceil_up_1_decimal(N / 0.82)
 
-- Seller inputs NET (what they want to receive) => stored in Note.price_cents
-- Buyer sees gross price with commission included.
-
-Total fee included in the buyer-facing price: 15%
+Fee split inside P:
+  - 10% ApuntesYa
   - 8% Mercado Pago
-  - 7% ApuntesYa
+  - Total: 18%
 
-Buyer price: P = N / 0.85
+Rounding:
+  - Published prices are always rounded UP to 1 decimal.
 """
 
-# Fee rates used for accounting/labels (buyer does not see a breakdown)
+# Fee rates used for accounting/labels
 app.config["MP_COMMISSION_RATE"] = float(os.getenv("MP_COMMISSION_RATE", "0.08"))
-app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.07"))
-app.config["TOTAL_FEE_RATE"] = float(os.getenv("TOTAL_FEE_RATE", "0.15"))
+app.config["APY_COMMISSION_RATE"] = float(os.getenv("APY_COMMISSION_RATE", "0.10"))
+app.config["TOTAL_FEE_RATE"] = float(os.getenv("TOTAL_FEE_RATE", "0.18"))
+
+# Porcentaje que mostramos en el footer (total de comisiones)
+app.config["PLATFORM_FEE_PERCENT"] = 18.0
 
 app.config["IIBB_ENABLED"] = os.getenv("IIBB_ENABLED", "false").lower() in ("1", "true", "yes")
 app.config["IIBB_RATE"] = float(os.getenv("IIBB_RATE", "0.0"))
@@ -348,7 +360,7 @@ APY_COMMISSION_RATE = app.config["APY_COMMISSION_RATE"]
 TOTAL_FEE_RATE = app.config["TOTAL_FEE_RATE"]
 IIBB_ENABLED = app.config["IIBB_ENABLED"]
 IIBB_RATE = app.config["IIBB_RATE"]
-# Buyer price includes TOTAL_FEE_RATE inside the final price
+# Legacy multiplier kept only for backwards compatibility in old code paths.
 GROSS_MULTIPLIER = 1.0 / (1.0 - float(TOTAL_FEE_RATE))
 
 app.config["MP_ACCESS_TOKEN_PLATFORM"] = os.getenv("MP_ACCESS_TOKEN", "")
@@ -373,29 +385,35 @@ def inject_contacts():
 
 @app.context_processor
 def pricing_ctx():
-    """
-    Helpers para mostrar siempre el precio final al comprador
-    (monto base que quiere recibir el vendedor * GROSS_MULTIPLIER).
-    """
-    def gross_price(price_cents: int | float | None) -> float:
-        """
-        Recibe price_cents (lo que quiere recibir el vendedor) y
-        devuelve el precio final al comprador en ARS (float).
-        """
-        if not price_cents or price_cents <= 0:
-            return 0.0
-        base_price = float(price_cents) / 100.0
-        return round(base_price * GROSS_MULTIPLIER, 2)
+    """Template helpers for uniform pricing.
 
-    def gross_price_cents(price_cents: int | float | None) -> int:
-        """
-        Igual que gross_price, pero devuelve centavos.
-        """
-        return int(round(gross_price(price_cents) * 100))
+    Seller provides NET in cents (what they want to receive).
+    Buyer published price is computed with pricing.published_from_net_cents()
+    and is always rounded UP to 1 decimal.
+    """
+
+    def published_price(net_cents: int | float | None) -> float:
+        # returns ARS with 1 decimal
+        pub_cents = published_from_net_cents(int(net_cents or 0))
+        return float(money_1_decimal(cents_to_amount(pub_cents)))
+
+    def published_price_cents(net_cents: int | float | None) -> int:
+        return int(published_from_net_cents(int(net_cents or 0)))
+
+    def fee_breakdown_from_net(net_cents: int | float | None):
+        # returns FeeBreakdown with 1-decimal values for UI
+        net = cents_to_amount(int(net_cents or 0))
+        return breakdown_from_net(net)
+
+    def fee_breakdown_from_published(published_cents: int | float | None):
+        pub = cents_to_amount(int(published_cents or 0))
+        return breakdown_from_published(pub)
 
     return dict(
-        gross_price=gross_price,
-        gross_price_cents=gross_price_cents,
+        published_price=published_price,
+        published_price_cents=published_price_cents,
+        fee_breakdown_from_net=fee_breakdown_from_net,
+        fee_breakdown_from_published=fee_breakdown_from_published,
     )
 
 
@@ -1099,9 +1117,9 @@ def search_advanced():
             combos_stmt = combos_stmt.where(Note.career.ilike(f"%{career}%"))
 
         if note_type == "free":
-            combos_stmt = combos_stmt.where(Combo.price_cents == 0)
+            combos_stmt = combos_stmt.where(Combo.seller_net_cents == 0)
         elif note_type == "paid":
-            combos_stmt = combos_stmt.where(Combo.price_cents > 0)
+            combos_stmt = combos_stmt.where(Combo.seller_net_cents > 0)
 
         combos = s.execute(combos_stmt.order_by(desc(Combo.created_at)).limit(100)).scalars().all()
 
@@ -1466,7 +1484,9 @@ def seller_edit_note_post(note_id: int):
         note.university = university
         note.faculty = faculty
         note.career = career
-        note.price_cents = max(price_cents, 0)
+        # Uniform: seller enters NET (what they want to receive)
+        note.price_cents = max(price_cents, 0)        # legacy field (kept)
+        note.seller_net_cents = max(price_cents, 0)   # canonical
 
         # Reemplazar archivo (best-effort)
         if replace_file:
@@ -1670,17 +1690,9 @@ def profile_purchases():
 
     items = []
     for p, n in purchases:
-        base_cents = int(p.amount_cents or 0)
-        is_free = base_cents == 0
-
-        # lo que quería recibir el vendedor (base X)
-        base_price = base_cents / 100.0
-
-        # lo que realmente pagó el comprador (con comisión)
-        if is_free:
-            buyer_price_cents = 0
-        else:
-            buyer_price_cents = int(round(base_price * GROSS_MULTIPLIER * 100))
+        # amount_cents stores what the buyer paid (published price)
+        buyer_price_cents = int(p.amount_cents or 0)
+        is_free = buyer_price_cents == 0
 
         items.append(dict(
             id=p.id,
@@ -1750,7 +1762,8 @@ def upload_note():
                 university=university,
                 faculty=faculty,
                 career=career,
-                price_cents=price_cents,
+                price_cents=price_cents,       # legacy field (kept)
+                seller_net_cents=price_cents,  # canonical
                 file_path=stored_path,
                 seller_id=current_user.id
             )
@@ -2315,18 +2328,23 @@ def buy_note(note_id):
         if note.seller_id == current_user.id:
             flash("No podés comprar tu propio apunte.")
             return redirect(url_for("note_detail", note_id=note.id))
-        if note.price_cents == 0:
+        net_cents = int(getattr(note, "seller_net_cents", 0) or getattr(note, "price_cents", 0) or 0)
+        if net_cents == 0:
             flash("Este apunte es gratuito.")
             return redirect(url_for("download_note", note_id=note.id))
 
         seller = s.get(User, note.seller_id)
-        p = Purchase(buyer_id=current_user.id, note_id=note.id, status="pending", amount_cents=note.price_cents)
+
+        # Buyer published price (rounded up to 1 decimal)
+        buyer_price_cents = published_from_net_cents(net_cents)
+
+        # Store the buyer-paid amount in the purchase
+        p = Purchase(buyer_id=current_user.id, note_id=note.id, status="pending", amount_cents=buyer_price_cents)
         s.add(p)
         s.commit()
 
-        price_base = note.price_cents / 100  # neto vendedor (N)
-        price_ars = round(price_base * GROSS_MULTIPLIER, 2)  # final comprador (P)
-        platform_fee_percent = float(APY_COMMISSION_RATE)  # 7% de P (comisión ApuntesYa)
+        price_ars = float(money_1_decimal(cents_to_amount(buyer_price_cents)))  # final comprador (P), 1 decimal
+        platform_fee_percent = 0.10  # 10% de P (comisión ApuntesYa)
         back_urls = {
             "success": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
             "failure": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
@@ -2340,7 +2358,8 @@ def buy_note(note_id):
                 return redirect(url_for("note_detail", note_id=note.id))
 
             use_token = seller_token
-            marketplace_fee = round(price_ars * platform_fee_percent, 2)
+            # Mercado Pago marketplace_fee = comisión de plataforma (MP cobra su fee aparte)
+            marketplace_fee = float(money_1_decimal(price_ars * platform_fee_percent))
 
             pref = mp.create_preference_for_seller_token(
                 seller_access_token=use_token,
@@ -3378,7 +3397,7 @@ def _combo_buyer_price_cents(combo: Combo) -> int:
     net = int(getattr(combo, "seller_net_cents", 0) or 0)
     if net <= 0:
         return 0
-    return int(math.ceil(net * (1.0 + float(TOTAL_FEE_RATE))))
+    return int(published_from_net_cents(net))
 
 
 @app.route("/profile/combos")
@@ -3456,10 +3475,7 @@ def combo_create():
                 return render_template("combo_create.html", notes=notes)
 
             # 3) Calcular precio final comprador (si neto = 0, es gratis)
-            if price_net_cents <= 0:
-                buyer_price_cents = 0
-            else:
-                buyer_price_cents = int(math.ceil(price_net_cents * (1.0 + float(TOTAL_FEE_RATE))))
+            buyer_price_cents = published_from_net_cents(price_net_cents) if price_net_cents > 0 else 0
 
             # 4) Crear combo (IMPORTANTÍSIMO: setear seller_net_cents)
             combo = Combo(
@@ -3551,10 +3567,7 @@ def combo_edit(combo_id: int):
                 return render_template("combo_edit.html", combo=combo, notes=notes, selected_ids=selected_ids)
 
             # Precio final comprador
-            if price_net_cents <= 0:
-                buyer_price_cents = 0
-            else:
-                buyer_price_cents = int(math.ceil(price_net_cents * (1.0 + float(TOTAL_FEE_RATE))))
+            buyer_price_cents = published_from_net_cents(price_net_cents) if price_net_cents > 0 else 0
 
             combo.title = title
             combo.description = description
@@ -3643,9 +3656,9 @@ def buy_combo(combo_id):
         s.add(cp)
         s.commit()
 
-        price_ars = round(price_cents / 100.0, 2)
-        platform_fee_percent = 0.07
-        marketplace_fee = round(price_ars * platform_fee_percent, 2)
+        price_ars = float(money_1_decimal(cents_to_amount(price_cents)))
+        platform_fee_percent = 0.10
+        marketplace_fee = float(money_1_decimal(price_ars * platform_fee_percent))
 
         back_urls = {
             "success": url_for("mp_return_combo", combo_id=combo.id, _external=True) + f"?external_reference=combo_purchase:{cp.id}",

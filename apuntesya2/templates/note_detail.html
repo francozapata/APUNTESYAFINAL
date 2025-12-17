@@ -430,13 +430,14 @@
       <div class="note-side">
         <div class="note-side-box">
           {# ---------- PRECIO ---------- #}
-          {% if note.price_cents == 0 %}
+          {% set net_cents = (note.seller_net_cents or note.price_cents or 0) %}
+          {% if net_cents == 0 %}
           <p class="note-price-label">Precio</p>
           <p class="note-price-free">Gratis</p>
           {% else %}
           <p class="note-price-label">Precio para comprar este apunte</p>
           <p class="note-price-value">
-            ${{ '%.2f' % buyer_price }}
+            ${{ '%.1f' % published_price(net_cents) }}
           </p>
           {% endif %}
 
@@ -449,7 +450,7 @@
             <p class="note-help-text">
               Ya tenés acceso a este apunte. Si no se abre automáticamente, podés descargarlo desde este botón.
             </p>
-            {% elif note.price_cents > 0 %}
+            {% elif net_cents > 0 %}
             <a href="{{ url_for('buy_note', note_id=note.id) }}" class="btn-primary">
               Comprar apunte
             </a>

@@ -5,100 +5,33 @@
   <h2>Comisiones y acreditaciones</h2>
 
   <p>
-    En cada venta, <strong>vos elegís el monto que querés recibir por tu apunte</strong> (por ejemplo, $1.000).
-    Ese valor es tu <strong>precio base</strong>.
+    En ApuntesYa, <strong>vos cargás el precio neto</strong>: lo que querés recibir por cada venta.
+    Al comprador le mostramos un <strong>precio final</strong> que incluye comisiones.
   </p>
 
-  <p>
-    ApuntesYa <strong>no descuenta comisión de ese monto base</strong>. En lugar de eso, suma un recargo
-    sobre el precio que ve la persona compradora para cubrir:
-  </p>
-
+  <h3>Regla de cálculo (apuntes y combos)</h3>
   <ul>
-    <li>La comisión de ApuntesYa por gestión y mantenimiento de la plataforma (hoy, aprox. <strong>12,8%</strong> del
-      valor base).</li>
-    <li>Las comisiones de Mercado Pago, que pueden variar según el medio de pago y el plazo de acreditación.</li>
+    <li><strong>Comisión total:</strong> 18% incluida en el precio publicado.</li>
+    <li><strong>Desglose:</strong> 10% ApuntesYa + 8% Mercado Pago.</li>
+    <li><strong>Precio publicado:</strong> P = X / 0.82 (redondeo <strong>siempre para arriba</strong> y con <strong>1 decimal</strong>).</li>
   </ul>
 
-  <p>
-    Por eso, el precio final que ve quien compra es un poco más alto que el valor que vos definís, pero
-    <strong>tu monto base se mantiene</strong> (antes de impuestos como IIBB/IVA/Ganancias que pueda aplicar AFIP
-    según tu situación fiscal).
+  <div style="margin-top:14px;padding:12px;border:1px solid #e5e7f5;border-radius:12px;background:#fafbff;">
+    <div style="font-weight:800;margin-bottom:6px;">Ejemplo</div>
+    <div class="muted" style="font-size:14px;">
+      Si querés recibir <strong>$10.0</strong>, se publica a <strong>$12.2</strong>.
+      Dentro de esos $12.2, ApuntesYa es <strong>$1.2</strong> (10%) y Mercado Pago <strong>$1.0</strong> (8%).
+      Vos recibís <strong>$10.0</strong> (antes de retenciones/impuestos que aplique el procesador de pago o AFIP según tu situación).
+    </div>
+  </div>
+
+  <p style="margin-top:14px;" class="muted">
+    Nota: Mercado Pago puede aplicar retenciones/impuestos (por ejemplo IIBB) según tu situación fiscal.
   </p>
 
-  <hr>
-
-  <h3>Ejemplo: querés recibir $1.000 por un apunte</h3>
-
-  <p style="margin-bottom:8px;">
-    Supongamos que configurás tu apunte para recibir <strong>$1.000 netos</strong>.
-    La comisión de ApuntesYa (12,8%) se calcula sobre ese monto:
-  </p>
-
-  <p>
-    <strong>Comisión ApuntesYa:</strong> 12,8% de $1.000 = <strong>$128,00</strong>
-    Monto sobre el que se calcula Mercado Pago: <strong>$1.000 + $128 = $1.128</strong>
-  </p>
-
-  <p style="margin-bottom:8px;">
-    A continuación se muestran distintos escenarios según la comisión de Mercado Pago.
-  </p>
-
-  <table class="table" style="width:100%;border-collapse:collapse;font-size:14px;">
-    <thead>
-      <tr>
-        <th style="text-align:left;border-bottom:1px solid #eee;padding:6px 4px;">Escenario</th>
-        <th style="text-align:right;border-bottom:1px solid #eee;padding:6px 4px;">Precio al comprador</th>
-        <th style="text-align:right;border-bottom:1px solid #eee;padding:6px 4px;">Comisión ApuntesYa<br><span
-            style="font-weight:normal;">(12,8% sobre $1.000)</span></th>
-        <th style="text-align:right;border-bottom:1px solid #eee;padding:6px 4px;">Comisión Mercado Pago<br><span
-            style="font-weight:normal;">(aprox.)</span></th>
-        <th style="text-align:right;border-bottom:1px solid #eee;padding:6px 4px;">Vos recibís</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td style="padding:6px 4px;">
-          Acreditación inmediata<br>
-          <span style="color:#666;font-size:12px;">MP ~7,6% aprox.</span>
-        </td>
-        <td style="padding:6px 4px;text-align:right;">$1.213,73</td>
-        <td style="padding:6px 4px;text-align:right;">$128,00</td>
-        <td style="padding:6px 4px;text-align:right;">$85,73</td>
-        <td style="padding:6px 4px;text-align:right;"><strong>$1.000,00</strong></td>
-      </tr>
-      <tr>
-        <td style="padding:6px 4px;">
-          Acreditación en 10 días<br>
-          <span style="color:#666;font-size:12px;">MP ~5,3% aprox.</span>
-        </td>
-        <td style="padding:6px 4px;text-align:right;">$1.187,78</td>
-        <td style="padding:6px 4px;text-align:right;">$128,00</td>
-        <td style="padding:6px 4px;text-align:right;">$59,78</td>
-        <td style="padding:6px 4px;text-align:right;"><strong>$1.000,00</strong></td>
-      </tr>
-      <tr>
-        <td style="padding:6px 4px;">
-          Pago con QR / Dinero en MP<br>
-          <span style="color:#666;font-size:12px;">MP ~1,0% aprox.</span>
-        </td>
-        <td style="padding:6px 4px;text-align:right;">$1.139,28</td>
-        <td style="padding:6px 4px;text-align:right;">$128,00</td>
-        <td style="padding:6px 4px;text-align:right;">$11,28</td>
-        <td style="padding:6px 4px;text-align:right;"><strong>$1.000,00</strong></td>
-      </tr>
-    </tbody>
-  </table>
-
-  <p style="margin-top:10px;font-size:13px;color:#666;">
-    🔎 <strong>Importante:</strong> los porcentajes de Mercado Pago son orientativos y pueden variar según el medio
-    de pago, la configuración de acreditación, tu categoría fiscal y la provincia. Si tenés IIBB/IVA/Ganancias,
-    el neto final que recibís en tu cuenta de MP puede ser menor.
-  </p>
-
-  <p style="margin-top:8px;">
-    ¿Tenés dudas? Revisá también
-    <a href="{{ url_for('help_mp') }}">cómo vincular tu cuenta de Mercado Pago</a>.
+  <p class="mt-2 text-sm">
+    ¿Dudas con Mercado Pago?
+    <a href="{{ url_for('help_mp') }}" class="text-blue-600">Ver instructivo</a>.
   </p>
 </div>
 

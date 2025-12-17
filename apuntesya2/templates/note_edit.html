@@ -28,7 +28,7 @@
         </div>
         <div>
           <label>Precio neto (ARS)</label>
-          <input name="price" value="{{ '%.2f' % ((note.price_cents or 0) / 100) }}" placeholder="0 para gratis" />
+          <input name="price" value="{{ '%.1f' % (((note.seller_net_cents or note.price_cents or 0) ) / 100) }}" placeholder="0 para gratis" />
           <div class="meta" style="margin-top:6px">Este es el monto que querés recibir.</div>
         </div>
       </div>

@@ -164,7 +164,7 @@
           Descargado el {{ it.created_at }} • Gratis
           {% else %}
           Comprado el {{ it.created_at }} •
-          ${{ '%.2f' % (it.price_cents / 100) }}
+          ${{ '%.1f' % (it.price_cents / 100) }}
           {% endif %}
         </div>
       </div>

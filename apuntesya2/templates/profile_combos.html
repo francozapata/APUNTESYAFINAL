@@ -113,13 +113,12 @@
         <div class="meta">Estado: <span class="badge">{{ c.moderation_status }}</span></div>
       </div>
       <div style="text-align:right">
-        {% if c.seller_net_cents == 0 %}
+        {% set net_cents = (c.seller_net_cents or 0) %}
+        {% if net_cents == 0 %}
         <div style="font-weight:800">Gratis</div>
         {% else %}
-        <div style="font-weight:800">
-          ${{ "%.2f"|format(c.price_cents / 100.0) }}
-        </div>
-        <div class="meta">precio final</div>
+        <div style="font-weight:800">Recibís ${{ '%.1f' % (net_cents/100) }}</div>
+        <div class="meta">Publicado ${{ '%.1f' % published_price(net_cents) }}</div>
         {% endif %}
         <a class="btn" style="margin-top:8px" href="{{ url_for('combo_detail', combo_id=c.id) }}">Ver</a>
         <a class="btn" style="margin-top:8px;background:#111827" href="{{ url_for('combo_edit', combo_id=c.id) }}">Editar</a>
