@@ -861,13 +861,24 @@ def index():
         ).scalars().all()
 
         # Rankings (si tenés estos modelos)
+                # Rankings (filtrados para no mostrar borrados/inactivos/no aprobados)
         most_downloaded = []
         best_rated = []
         try:
-            most_downloaded = s.execute(
+            q_most = (
                 select(Note, func.count(DownloadLog.id).label("dl"))
                 .join(DownloadLog, DownloadLog.note_id == Note.id)
-                .group_by(Note.id)
+            )
+
+            if hasattr(Note, "is_active"):
+                q_most = q_most.where(Note.is_active == True)
+            if hasattr(Note, "moderation_status"):
+                q_most = q_most.where(Note.moderation_status == "approved")
+            if hasattr(Note, "deleted_at"):
+                q_most = q_most.where(Note.deleted_at.is_(None))
+
+            most_downloaded = s.execute(
+                q_most.group_by(Note.id)
                 .order_by(desc(func.count(DownloadLog.id)))
                 .limit(10)
             ).all()
@@ -875,15 +886,26 @@ def index():
             pass
 
         try:
-            best_rated = s.execute(
+            q_best = (
                 select(Note, func.avg(Review.rating).label("avg"))
                 .join(Review, Review.note_id == Note.id)
-                .group_by(Note.id)
+            )
+
+            if hasattr(Note, "is_active"):
+                q_best = q_best.where(Note.is_active == True)
+            if hasattr(Note, "moderation_status"):
+                q_best = q_best.where(Note.moderation_status == "approved")
+            if hasattr(Note, "deleted_at"):
+                q_best = q_best.where(Note.deleted_at.is_(None))
+
+            best_rated = s.execute(
+                q_best.group_by(Note.id)
                 .order_by(desc(func.avg(Review.rating)))
                 .limit(10)
             ).all()
         except Exception:
             pass
+
 
     return render_template(
         "index.html",
