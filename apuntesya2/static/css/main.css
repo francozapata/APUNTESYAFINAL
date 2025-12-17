@@ -81,9 +81,8 @@ a:hover {
 .brand-logo-img {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: 8px;
   box-shadow: none;
-  /* la sombra la controla .logo-ay cuando corresponde */
 }
 
 .brand-logo1-img {
@@ -318,17 +317,10 @@ input[type="button"].btn {
 /* ===========================
    AY logo (navbar) - FIX PNG edges + Option 3 look (shadow + glow)
 =========================== */
+/* Logo AY en navbar */
 .nav .brand-logo-img.logo-ay {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
-
-  /* evita el borde raro del PNG y mejora contraste */
-  background: rgba(255, 255, 255, 0.06);
-  padding: 4px;
-
-  /* opcion 3: sombra + glow (SIN filter para evitar granulado) */
-  box-shadow:
-    0 2px 6px rgba(0, 0, 0, 0.30),
-    0 0 8px rgba(120, 200, 255, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
 }
