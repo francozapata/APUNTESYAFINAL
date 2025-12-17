@@ -61,7 +61,7 @@ def ensure_dirs():
 # --- Contact widget config (emails & WhatsApp) ---
 app.config.from_mapping(
     CONTACT_EMAILS=os.getenv("CONTACT_EMAILS", "soporte.apuntesya@gmail.com"),
-    CONTACT_WHATSAPP=os.getenv("CONTACT_WHATSAPP", "+543510000000"),
+    CONTACT_WHATSAPP=os.getenv("CONTACT_WHATSAPP", "+543516788775"),
     SUGGESTIONS_URL=os.getenv("SUGGESTIONS_URL", "https://docs.google.com/forms/d/e/1FAIpQLScDEukn0sLtjOoWgmvTNaF_qG0iDHue9EOqCYxz_z6bGxzErg/viewform?usp=header"),
 )
 
