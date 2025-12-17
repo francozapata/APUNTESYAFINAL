@@ -314,7 +314,10 @@
     <div class="profile-tabs">
       <a href="{{ url_for('profile_purchases') }}" class="profile-tab">
         📥 <span>Mis compras / descargas</span>
-      </a> <a class="tab" href="/profile/combos">Mis combos</a> 
+      </a>
+      <a href="{{ url_for('profile_combos') }}" class="profile-tab">
+        🧺 <span>Mis combos</span>
+      </a>
       <a href="{{ url_for('profile') }}" class="profile-tab active">
         📚 <span>Mis apuntes subidos</span>
       </a>

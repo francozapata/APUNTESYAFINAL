@@ -2999,6 +2999,109 @@ def admin_api_content():
     return jsonify({"items": items})
 
 
+# Admin HUB - moderación (apuntes + combos)
+@app.get("/admin/api/moderation")
+@login_required
+@admin_required
+def admin_api_moderation():
+    """Devuelve apuntes y combos por estado para mostrar en el Hub (sin salir de la pantalla)."""
+    status = (request.args.get("status") or "pending_manual").strip()
+    q = (request.args.get("q") or "").strip()
+    limit = request.args.get("limit", type=int) or 200
+
+    with Session() as s:
+        # ------- Notes -------
+        # Solo mostramos no borrados si existe deleted_at
+        notes_stmt = select(Note)
+        if hasattr(Note, "deleted_at"):
+            notes_stmt = notes_stmt.where(Note.deleted_at.is_(None))
+        if hasattr(Note, "moderation_status"):
+            notes_stmt = notes_stmt.where(Note.moderation_status == status)
+        else:
+            notes_stmt = notes_stmt.where(False)
+
+        if q:
+            like = f"%{q}%"
+            notes_stmt = notes_stmt.where(or_(
+                Note.title.ilike(like),
+                Note.description.ilike(like),
+                Note.university.ilike(like),
+                Note.faculty.ilike(like),
+                Note.career.ilike(like),
+            ))
+
+        if hasattr(Note, "created_at"):
+            notes_stmt = notes_stmt.order_by(desc(Note.created_at))
+        else:
+            notes_stmt = notes_stmt.order_by(desc(Note.id))
+        notes_stmt = notes_stmt.limit(limit)
+
+        notes = s.execute(notes_stmt).scalars().all()
+
+        seller_ids = list({n.seller_id for n in notes if getattr(n, "seller_id", None)})
+        sellers = {}
+        if seller_ids:
+            sellers_rows = s.execute(select(User.id, User.name).where(User.id.in_(seller_ids))).all()
+            sellers = {i: n for i, n in sellers_rows}
+
+        notes_out = []
+        for n in notes:
+            notes_out.append({
+                "id": n.id,
+                "title": getattr(n, "title", "") or "",
+                "price_cents": int(getattr(n, "price_cents", 0) or 0),
+                "seller_name": sellers.get(getattr(n, "seller_id", None), ""),
+                "university": getattr(n, "university", "") or "",
+                "faculty": getattr(n, "faculty", "") or "",
+                "career": getattr(n, "career", "") or "",
+                "moderation_status": getattr(n, "moderation_status", "") or "",
+                "moderation_reason": getattr(n, "moderation_reason", None),
+                "ai_decision": getattr(n, "ai_decision", None),
+                "ai_confidence": getattr(n, "ai_confidence", None),
+            })
+
+        # ------- Combos -------
+        combos_stmt = select(Combo)
+        if hasattr(Combo, "moderation_status"):
+            combos_stmt = combos_stmt.where(Combo.moderation_status == status)
+        else:
+            combos_stmt = combos_stmt.where(False)
+
+        if q:
+            like = f"%{q}%"
+            if hasattr(Combo, "title"):
+                combos_stmt = combos_stmt.where(Combo.title.ilike(like))
+
+        if hasattr(Combo, "created_at"):
+            combos_stmt = combos_stmt.order_by(desc(Combo.created_at))
+        else:
+            combos_stmt = combos_stmt.order_by(desc(Combo.id))
+        combos_stmt = combos_stmt.limit(limit)
+
+        combos = s.execute(combos_stmt).scalars().all()
+
+        combo_seller_ids = list({c.seller_id for c in combos if getattr(c, "seller_id", None)})
+        combo_sellers = {}
+        if combo_seller_ids:
+            rows = s.execute(select(User.id, User.name).where(User.id.in_(combo_seller_ids))).all()
+            combo_sellers = {i: n for i, n in rows}
+
+        combos_out = []
+        for c in combos:
+            combos_out.append({
+                "id": c.id,
+                "title": getattr(c, "title", "") or "",
+                "price_cents": int(getattr(c, "price_cents", 0) or 0),
+                "seller_name": combo_sellers.get(getattr(c, "seller_id", None), ""),
+                "moderation_status": getattr(c, "moderation_status", "") or "",
+                "moderation_reason": getattr(c, "moderation_reason", None),
+                "ai_decision": getattr(c, "ai_decision", None),
+                "ai_confidence": getattr(c, "ai_confidence", None),
+            })
+
+    return jsonify({"ok": True, "status": status, "notes": notes_out, "combos": combos_out})
+
+
 @app.post("/admin/api/content/<int:note_id>/delete")
 @login_required
 @admin_required

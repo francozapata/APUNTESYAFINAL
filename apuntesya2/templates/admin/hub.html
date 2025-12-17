@@ -178,7 +178,7 @@
         <div class="tabs">
             <button id="tabUsers" class="tab active">👥 <span>Usuarios</span></button>
             <button id="tabContent" class="tab">📚 <span>Apuntes y archivos</span></button>
-            <a id="tabModeration" class="tab" href="/admin/moderation" style="text-decoration:none;">🛡️ <span>Moderador</span></a>
+            <button id="tabModeration" class="tab">🛡️ <span>Moderador</span></button>
         </div>
 
         <!-- BUSCADOR -->
@@ -187,6 +187,15 @@
         <!-- CONTENEDORES -->
         <div id="usersPane" style="margin-top:14px;"></div>
         <div id="contentPane" style="display:none;margin-top:14px;"></div>
+        <div id="moderationPane" style="display:none;margin-top:14px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                <button class="btn ghost" id="modStatusPendingAi">Pendientes IA</button>
+                <button class="btn ghost" id="modStatusPendingManual">Revisión manual</button>
+                <button class="btn ghost" id="modStatusApproved">Aprobados</button>
+                <button class="btn ghost" id="modStatusRejected">Rechazados</button>
+            </div>
+            <div id="moderationList"></div>
+        </div>
     </div>
 </div>
 
@@ -194,31 +203,75 @@
     (function () {
         const tabUsers = document.getElementById('tabUsers');
         const tabContent = document.getElementById('tabContent');
+        const tabModeration = document.getElementById('tabModeration');
         const searchBox = document.getElementById('searchBox');
         const usersPane = document.getElementById('usersPane');
         const contentPane = document.getElementById('contentPane');
+        const moderationPane = document.getElementById('moderationPane');
+        const moderationList = document.getElementById('moderationList');
 
-        let activeTab = 'users'; // 'users' | 'content'
+        const modStatusPendingAi = document.getElementById('modStatusPendingAi');
+        const modStatusPendingManual = document.getElementById('modStatusPendingManual');
+        const modStatusApproved = document.getElementById('modStatusApproved');
+        const modStatusRejected = document.getElementById('modStatusRejected');
+
+        let activeTab = 'users'; // 'users' | 'content' | 'moderation'
+        let moderationStatus = 'pending_manual';
         let timer = null;
 
         function sw(tab) {
             activeTab = tab;
             tabUsers.classList.toggle('active', tab === 'users');
             tabContent.classList.toggle('active', tab === 'content');
+            tabModeration.classList.toggle('active', tab === 'moderation');
 
             usersPane.style.display = tab === 'users' ? '' : 'none';
             contentPane.style.display = tab === 'content' ? '' : 'none';
+            moderationPane.style.display = tab === 'moderation' ? '' : 'none';
 
             searchBox.placeholder =
                 tab === 'users'
                     ? 'Buscar usuario (nombre/email)'
-                    : 'Buscar por título, descripción, universidad, facultad o carrera';
+                    : (tab === 'content'
+                        ? 'Buscar por título, descripción, universidad, facultad o carrera'
+                        : 'Buscar por título o vendedor');
 
             load();
         }
 
         tabUsers.addEventListener('click', () => sw('users'));
         tabContent.addEventListener('click', () => sw('content'));
+        tabModeration.addEventListener('click', () => sw('moderation'));
+
+        function setModStatus(st) {
+            moderationStatus = st;
+            // visual: marcar el botón activo usando el mismo look de .btn.ghost
+            const map = {
+                pending_ai: modStatusPendingAi,
+                pending_manual: modStatusPendingManual,
+                approved: modStatusApproved,
+                rejected: modStatusRejected,
+            };
+            Object.values(map).forEach(b => {
+                b.style.background = '#f3f6ff';
+                b.style.borderColor = '#dfe4ff';
+                b.style.color = '#334';
+                b.style.boxShadow = 'none';
+            });
+            const btn = map[st];
+            if (btn) {
+                btn.style.background = '#4478ff';
+                btn.style.borderColor = '#4478ff';
+                btn.style.color = '#fff';
+                btn.style.boxShadow = '0 8px 18px rgba(68, 120, 255, 0.35)';
+            }
+            load();
+        }
+
+        modStatusPendingAi.addEventListener('click', () => setModStatus('pending_ai'));
+        modStatusPendingManual.addEventListener('click', () => setModStatus('pending_manual'));
+        modStatusApproved.addEventListener('click', () => setModStatus('approved'));
+        modStatusRejected.addEventListener('click', () => setModStatus('rejected'));
 
         searchBox.addEventListener('input', () => {
             clearTimeout(timer);
@@ -232,12 +285,127 @@
                 const r = await fetch(`/admin/api/users?q=${q}`);
                 const js = await r.json();
                 renderUsers(js.items || []);
-            } else {
+            } else if (activeTab === 'content') {
                 contentPane.innerHTML = '<div class="muted">Cargando…</div>';
                 const r = await fetch(`/admin/api/content?q=${q}`);
                 const js = await r.json();
                 renderContent(js.items || []);
+            } else {
+                moderationList.innerHTML = '<div class="muted">Cargando…</div>';
+                const r = await fetch(`/admin/api/moderation?status=${encodeURIComponent(moderationStatus)}&q=${q}`);
+                const js = await r.json();
+                renderModeration(js.notes || [], js.combos || []);
             }
+        }
+
+        function renderModeration(notes, combos) {
+            const blocks = [];
+
+            // Notes
+            if (notes.length) {
+                blocks.push(`<div class="muted" style="margin:6px 0 4px;font-weight:700;">Apuntes</div>`);
+                blocks.push(notes.map(n => {
+                    const price = (n.price_cents || 0) === 0 ? 'Gratis' : `$${((n.price_cents || 0) / 100).toFixed(2)}`;
+                    const ai = n.ai_decision ? `${escapeHtml(n.ai_decision)}${(n.ai_confidence !== null && n.ai_confidence !== undefined) ? ` <span class="muted">(${Math.round((n.ai_confidence || 0) / 10)}%)</span>` : ''}` : '<span class="muted">-</span>';
+                    const reason = n.moderation_reason ? `<div class="muted" style="margin-top:6px;">Motivo: ${escapeHtml(n.moderation_reason)}</div>` : '';
+                    const seller = n.seller_name ? `<span class="muted">${escapeHtml(n.seller_name)}</span>` : '';
+                    const actions = `
+                        ${n.moderation_status !== 'approved' ? `<button class="btn" onclick="approveNote(${n.id})">Aprobar</button>` : ''}
+                        ${n.moderation_status !== 'rejected' ? `<button class="btn ghost" onclick="rejectNote(${n.id})">Rechazar</button>` : ''}
+                        <a class="btn ghost" href="/note/${n.id}" target="_blank" rel="noopener noreferrer">Ver</a>
+                    `;
+                    return `
+                        <div class="row-card">
+                            <div class="row-main">
+                                <div>
+                                    <strong>${escapeHtml(n.title || '(sin título)')}</strong>
+                                    ${seller}
+                                </div>
+                                <span class="muted">${escapeHtml(n.university || '')} • ${escapeHtml(n.faculty || '')} • ${escapeHtml(n.career || '')}</span>
+                                <div class="muted" style="margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;">
+                                    <span><b>Precio:</b> ${price}</span>
+                                    <span><b>IA:</b> ${ai}</span>
+                                    <span><b>Estado:</b> ${escapeHtml(n.moderation_status || '')}</span>
+                                </div>
+                                ${reason}
+                            </div>
+                            <div class="right">${actions}</div>
+                        </div>
+                    `;
+                }).join(''));
+            } else {
+                blocks.push('<div class="muted">No hay apuntes en este estado.</div>');
+            }
+
+            // Combos
+            blocks.push('<hr style="margin:18px 0;border:none;border-top:1px solid #e5e7f5;">');
+            if (combos.length) {
+                blocks.push(`<div class="muted" style="margin:6px 0 4px;font-weight:700;">Combos</div>`);
+                blocks.push(combos.map(c => {
+                    const price = (c.price_cents || 0) === 0 ? 'Gratis' : `$${((c.price_cents || 0) / 100).toFixed(2)}`;
+                    const ai = c.ai_decision ? `${escapeHtml(c.ai_decision)}${(c.ai_confidence !== null && c.ai_confidence !== undefined) ? ` <span class="muted">(${Math.round((c.ai_confidence || 0) / 10)}%)</span>` : ''}` : '<span class="muted">-</span>';
+                    const reason = c.moderation_reason ? `<div class="muted" style="margin-top:6px;">Motivo: ${escapeHtml(c.moderation_reason)}</div>` : '';
+                    const seller = c.seller_name ? `<span class="muted">${escapeHtml(c.seller_name)}</span>` : '';
+                    const actions = `
+                        ${c.moderation_status !== 'approved' ? `<button class="btn" onclick="approveCombo(${c.id})">Aprobar</button>` : ''}
+                        ${c.moderation_status !== 'rejected' ? `<button class="btn ghost" onclick="rejectCombo(${c.id})">Rechazar</button>` : ''}
+                        <a class="btn ghost" href="/combo/${c.id}" target="_blank" rel="noopener noreferrer">Ver</a>
+                    `;
+                    return `
+                        <div class="row-card">
+                            <div class="row-main">
+                                <div>
+                                    <strong>${escapeHtml(c.title || '(sin título)')}</strong>
+                                    ${seller}
+                                </div>
+                                <div class="muted" style="margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;">
+                                    <span><b>Precio:</b> ${price}</span>
+                                    <span><b>IA:</b> ${ai}</span>
+                                    <span><b>Estado:</b> ${escapeHtml(c.moderation_status || '')}</span>
+                                </div>
+                                ${reason}
+                            </div>
+                            <div class="right">${actions}</div>
+                        </div>
+                    `;
+                }).join(''));
+            } else {
+                blocks.push('<div class="muted">No hay combos en este estado.</div>');
+            }
+
+            moderationList.innerHTML = blocks.join('');
+        }
+
+        window.approveNote = async function (id) {
+            const r = await fetch(`/admin/moderation/${id}/approve`, { method: 'POST' });
+            const js = await r.json().catch(() => ({ ok: false }));
+            if (js.ok) load(); else alert('No se pudo aprobar.');
+        }
+
+        window.rejectNote = async function (id) {
+            const reason = prompt('Motivo de rechazo (opcional):') || '';
+            const r = await fetch(`/admin/moderation/${id}/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason })
+            });
+            const js = await r.json().catch(() => ({ ok: false }));
+            if (js.ok) load(); else alert('No se pudo rechazar.');
+        }
+
+        window.approveCombo = async function (id) {
+            const r = await fetch(`/admin/moderation/combo/${id}/approve`, { method: 'POST' });
+            const js = await r.json().catch(() => ({ ok: false }));
+            if (js.ok) load(); else alert('No se pudo aprobar el combo.');
+        }
+
+        window.rejectCombo = async function (id) {
+            const reason = prompt('Motivo de rechazo (opcional):') || '';
+            const fd = new FormData();
+            fd.append('reason', reason);
+            const r = await fetch(`/admin/moderation/combo/${id}/reject`, { method: 'POST', body: fd });
+            const js = await r.json().catch(() => ({ ok: false }));
+            if (js.ok) load(); else alert('No se pudo rechazar el combo.');
         }
 
         function renderUsers(items) {
@@ -379,6 +547,7 @@
         }
 
         // primera carga
+        setModStatus('pending_manual');
         load();
     })();
 </script>

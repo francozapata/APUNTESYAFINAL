@@ -14,6 +14,34 @@
     flex-wrap: wrap
   }
 
+  .profile-tabs {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 12px 0 10px;
+  }
+
+  .profile-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 999px;
+    border: 1px solid #e5e7f5;
+    background: #f7f9ff;
+    text-decoration: none;
+    color: #334;
+    font-weight: 700;
+    font-size: 13px;
+  }
+
+  .profile-tab.active {
+    background: #4478ff;
+    border-color: #4478ff;
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(68, 120, 255, 0.35);
+  }
+
   h1 {
     font-size: 22px;
     margin: 0
@@ -66,6 +94,13 @@
   <div class="head">
     <h1>Mis combos</h1>
     <a class="btn" href="{{ url_for('create_combo') }}">➕ Crear combo</a>
+  </div>
+
+  <div class="profile-tabs">
+    <a href="{{ url_for('profile_purchases') }}" class="profile-tab">📥 Mis compras / descargas</a>
+    <a href="{{ url_for('profile_combos') }}" class="profile-tab active">🧺 Mis combos</a>
+    <a href="{{ url_for('profile') }}" class="profile-tab">📚 Mis apuntes subidos</a>
+    <a href="{{ url_for('profile_balance') }}" class="profile-tab">💰 Mis ventas y balance</a>
   </div>
 
   <div class="card">
