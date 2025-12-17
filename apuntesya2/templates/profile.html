@@ -457,87 +457,87 @@
 
       <!-- Columna derecha: datos de cuenta -->
       <div class="profile-col">
-<div class="muted" style="margin-top:2px;font-size:12px;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if
-              n.created_at else '' }}</div>
-          </div>
-          {% endfor %}
-        </div>
-        {% endif %}
-        <div class="profile-right-box">
-          <h4>Datos de mi cuenta</h4>
+        <div class="muted" style="margin-top:2px;font-size:12px;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if
+          n.created_at else '' }}</div>
+      </div>
 
-          <p class="profile-contact-label">Nombre completo</p>
-          <p>{{ current_user.name or 'Sin nombre cargado' }}</p>
+    </div>
+    {% endif %}
+    <div class="profile-right-box">
+      <h4>Datos de mi cuenta</h4>
 
-          <p class="profile-contact-label">Correo electrónico</p>
-          <p>{{ current_user.email }}</p>
+      <p class="profile-contact-label">Nombre completo</p>
+      <p>{{ current_user.name or 'Sin nombre cargado' }}</p>
 
-          <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
-          <p style="margin:0;font-weight:700;font-size:16px;">
-            {{ current_user.university or 'Universidad no indicada' }}<br>
-            <span class="muted" style="font-size:14px;">
-              {{ current_user.faculty or 'Facultad no indicada' }} •
-              {{ current_user.career or 'Carrera no indicada' }}
-            </span>
-          </p>
+      <p class="profile-contact-label">Correo electrónico</p>
+      <p>{{ current_user.email }}</p>
 
-          <div class="academic-update">
-            <p class="muted" style="margin:0;">
-              ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo
-              necesites.
-            </p>
-            <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
-              Actualizar datos académicos
-            </a>
-          </div>
-        </div>
+      <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
+      <p style="margin:0;font-weight:700;font-size:16px;">
+        {{ current_user.university or 'Universidad no indicada' }}<br>
+        <span class="muted" style="font-size:14px;">
+          {{ current_user.faculty or 'Facultad no indicada' }} •
+          {{ current_user.career or 'Carrera no indicada' }}
+        </span>
+      </p>
 
-        <div class="profile-right-box">
-          <h4>Cuenta de Mercado Pago</h4>
-          {% if current_user.mp_user_id %}
-          <p class="mp-status">
-            <span class="mp-status-dot"></span>
-            <span>Cuenta de Mercado Pago conectada</span>
-          </p>
-          <p class="muted" style="margin-top:6px;">
-            Los pagos de tus ventas se acreditan en esta cuenta.
-          </p>
-          {% else %}
-          <p class="mp-status mp-status-text-off">
-            <span class="mp-status-dot off"></span>
-            <span>Sin cuenta de Mercado Pago vinculada</span>
-          </p>
-          <p class="muted" style="margin:6px 0 8px;">
-            Para recibir pagos por tus ventas, vas a necesitar vincular una cuenta de Mercado Pago.
-          </p>
-          <a href="{{ url_for('connect_mp') }}" class="btn-pill">
-            Vincular Mercado Pago
-          </a>
-          {% endif %}
-        </div>
-
-        <div class="profile-right-box">
-          <h4>Estado como vendedor</h4>
-          {% if current_user.mp_user_id %}
-          <p class="muted" style="margin-bottom:4px;">
-            Tenés el modo vendedor activo ✅
-          </p>
-          <p class="muted">
-            Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago conectada.
-          </p>
-          {% else %}
-          <p class="muted" style="margin-bottom:4px;">
-            Todavía no tenés activo el modo vendedor.
-          </p>
-          <p class="muted">
-            Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil. Después vas a poder subir
-            apuntes y recibir pagos.
-          </p>
-          {% endif %}
-        </div>
+      <div class="academic-update">
+        <p class="muted" style="margin:0;">
+          ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo
+          necesites.
+        </p>
+        <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
+          Actualizar datos académicos
+        </a>
       </div>
     </div>
+
+    <div class="profile-right-box">
+      <h4>Cuenta de Mercado Pago</h4>
+      {% if current_user.mp_user_id %}
+      <p class="mp-status">
+        <span class="mp-status-dot"></span>
+        <span>Cuenta de Mercado Pago conectada</span>
+      </p>
+      <p class="muted" style="margin-top:6px;">
+        Los pagos de tus ventas se acreditan en esta cuenta.
+      </p>
+      {% else %}
+      <p class="mp-status mp-status-text-off">
+        <span class="mp-status-dot off"></span>
+        <span>Sin cuenta de Mercado Pago vinculada</span>
+      </p>
+      <p class="muted" style="margin:6px 0 8px;">
+        Para recibir pagos por tus ventas, vas a necesitar vincular una cuenta de Mercado Pago.
+      </p>
+      <a href="{{ url_for('connect_mp') }}" class="btn-pill">
+        Vincular Mercado Pago
+      </a>
+      {% endif %}
+    </div>
+
+    <div class="profile-right-box">
+      <h4>Estado como vendedor</h4>
+      {% if current_user.mp_user_id %}
+      <p class="muted" style="margin-bottom:4px;">
+        Tenés el modo vendedor activo ✅
+      </p>
+      <p class="muted">
+        Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago conectada.
+      </p>
+      {% else %}
+      <p class="muted" style="margin-bottom:4px;">
+        Todavía no tenés activo el modo vendedor.
+      </p>
+      <p class="muted">
+        Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil. Después vas a poder subir
+        apuntes y recibir pagos.
+      </p>
+      {% endif %}
+    </div>
   </div>
+</div>
+</div>
 </div>
 
 {% endblock %}
