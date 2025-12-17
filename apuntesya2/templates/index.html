@@ -395,15 +395,6 @@
   {% set combos_count = (combos|length) if combos is defined and combos else 0 %}
   {% set notes_count = (notes|length) if notes is defined and notes else 0 %}
 
-  {% if combos_count > 0 or notes_count > 0 %}
-  <div class="results-header">
-    <p class="muted">DEBUG: combos={{ combos|length if combos else 0 }} · notes={{ notes|length if notes else 0 }}</p>
-
-    <h3>Resultados</h3>
-    <span>{{ combos_count }} combo(s) · {{ notes_count }} apunte(s)</span>
-  </div>
-  {% endif %}
-
   <!-- ---- COMBOS ---- -->
   {% if combos_count > 0 %}
   <h4 style="margin:0 0 8px;">Combos</h4>
