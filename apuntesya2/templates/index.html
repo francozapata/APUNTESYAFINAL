@@ -383,14 +383,6 @@
      Resultados
      =========================== -->
 <div class="results-shell card mt-3">
-  {% if combos and combos|length > 0 %}
-  <div class="results-header">
-    <h3>Combos</h3>
-    <span>{{ combos|length }} combo(s)</span>
-  </div>
-
-  <div style="height:12px"></div>
-  {% endif %}
 
   {% set combos_count = (combos|length) if combos is defined and combos else 0 %}
   {% set notes_count = (notes|length) if notes is defined and notes else 0 %}

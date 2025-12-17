@@ -163,10 +163,30 @@
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
-  .status-approved { background: #e8fff0; color: #166534; border-color: #bbf7d0; }
-  .status-pending_ai { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
-  .status-pending_manual { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
-  .status-rejected { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+  .status-approved {
+    background: #e8fff0;
+    color: #166534;
+    border-color: #bbf7d0;
+  }
+
+  .status-pending_ai {
+    background: #eef2ff;
+    color: #3730a3;
+    border-color: #c7d2fe;
+  }
+
+  .status-pending_manual {
+    background: #fff7ed;
+    color: #9a3412;
+    border-color: #fed7aa;
+  }
+
+  .status-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fecaca;
+  }
 
   .badge-free {
     background: #e8fff0;
@@ -336,53 +356,40 @@
           (por ejemplo, para clases particulares o más materiales), podés dejar un link de contacto.
         </p>
 
-        {% if seller_contact_url %}
-        <div class="profile-right-box" style="margin-top:6px;">
-          <h4>Mi contacto público como vendedor</h4>
-          <p class="profile-contact-label">Enlace visible en tus apuntes:</p>
-          <p style="margin:0;">
-            <a href="{{ seller_contact_url }}" target="_blank">{{ seller_contact_label }}</a>
-          </p>
-          <p class="muted" style="margin-top:6px;">
-            Este enlace se muestra en la ficha de tus apuntes, para usuarios registrados.
-          </p>
-        </div>
-        {% endif %}
-
-
-
         <div class="profile-right-box" style="margin-top:10px;">
           <h4>Mis datos de contacto (visible en mi perfil de vendedor)</h4>
           <form method="post" action="{{ url_for('profile_update_contact') }}">
             <div style="display:grid;grid-template-columns:1fr;gap:10px;">
               <div>
                 <div class="profile-contact-label">Teléfono / WhatsApp</div>
-                <input name="contact_whatsapp" value="{{ contact_whatsapp }}" placeholder="Ej: +54 9 351 123 4567" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
-              </div>
-              <div>
-                <div class="profile-contact-label">Teléfono (opcional, sin WhatsApp)</div>
-                <input name="contact_phone" value="{{ contact_phone }}" placeholder="Ej: 351 123 4567" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+                <input name="contact_whatsapp" value="{{ contact_whatsapp }}" placeholder="Ej: +54 9 351 123 4567"
+                  style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
               </div>
               <div>
                 <div class="profile-contact-label">Email de contacto</div>
-                <input name="contact_email" type="email" value="{{ contact_email }}" placeholder="Ej: tuemail@gmail.com" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+                <input name="contact_email" type="email" value="{{ contact_email }}" placeholder="Ej: tuemail@gmail.com"
+                  style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
               </div>
               <div>
                 <div class="profile-contact-label">Instagram</div>
-                <input name="contact_instagram" value="{{ contact_instagram }}" placeholder="Ej: @tuusuario" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+                <input name="contact_instagram" value="{{ contact_instagram }}" placeholder="Ej: @tuusuario"
+                  style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
               </div>
               <div>
                 <div class="profile-contact-label">Web / Portfolio</div>
-                <input name="contact_website" value="{{ contact_website }}" placeholder="Ej: https://tusitio.com" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+                <input name="contact_website" value="{{ contact_website }}" placeholder="Ej: https://tusitio.com"
+                  style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
               </div>
 
               <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
                 <label class="muted" style="display:flex;gap:8px;align-items:center;">
-                  <input type="checkbox" name="contact_visible_public" value="1" {% if contact_visible_public %}checked{% endif %}>
+                  <input type="checkbox" name="contact_visible_public" value="1" {% if contact_visible_public
+                    %}checked{% endif %}>
                   Mostrar públicamente (en mi perfil de vendedor)
                 </label>
                 <label class="muted" style="display:flex;gap:8px;align-items:center;">
-                  <input type="checkbox" name="contact_visible_buyers" value="1" {% if contact_visible_buyers %}checked{% endif %}>
+                  <input type="checkbox" name="contact_visible_buyers" value="1" {% if contact_visible_buyers
+                    %}checked{% endif %}>
                   Mostrar a compradores (luego de compra aprobada)
                 </label>
               </div>
@@ -422,7 +429,8 @@
           <div class="note-actions">
             {% set st = (n.moderation_status or 'approved') %}
             <span class="badge-status status-{{ st }}">
-              {% if st == 'approved' %}Aprobado{% elif st == 'pending_ai' %}Pendiente IA{% elif st == 'pending_manual' %}Revisión{% elif st == 'rejected' %}Denegado{% else %}{{ st }}{% endif %}
+              {% if st == 'approved' %}Aprobado{% elif st == 'pending_ai' %}Pendiente IA{% elif st == 'pending_manual'
+              %}Revisión{% elif st == 'rejected' %}Denegado{% else %}{{ st }}{% endif %}
             </span>
             {% if n.price_cents == 0 %}
             <span class="badge-free">Gratis</span>
@@ -437,7 +445,8 @@
             <a href="{{ url_for('seller_edit_note_get', note_id=n.id) }}" class="btn-pill ghost">
               Editar
             </a>
-            <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline" onsubmit="return confirm('¿Eliminar este apunte? Se despublicará y se borrará el archivo asociado.');">
+            <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline"
+              onsubmit="return confirm('¿Eliminar este apunte? Se despublicará y se borrará el archivo asociado.');">
               <button type="submit" class="btn-pill" style="background:#ef4444;border:0;">Borrar</button>
             </form>
           </div>
@@ -452,11 +461,12 @@
         <div class="profile-right-box">
           <h4>Notificaciones</h4>
           {% for n in notifications %}
-            <div style="padding:8px 0;border-bottom:1px solid #eef2ff;">
-              <div style="font-weight:700;font-size:13px;color:#111827;">{{ n.title }}</div>
-              {% if n.body %}<div class="muted" style="margin-top:2px;">{{ n.body }}</div>{% endif %}
-              <div class="muted" style="margin-top:2px;font-size:12px;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '' }}</div>
-            </div>
+          <div style="padding:8px 0;border-bottom:1px solid #eef2ff;">
+            <div style="font-weight:700;font-size:13px;color:#111827;">{{ n.title }}</div>
+            {% if n.body %}<div class="muted" style="margin-top:2px;">{{ n.body }}</div>{% endif %}
+            <div class="muted" style="margin-top:2px;font-size:12px;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if
+              n.created_at else '' }}</div>
+          </div>
           {% endfor %}
         </div>
         {% endif %}
