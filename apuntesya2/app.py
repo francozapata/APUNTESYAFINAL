@@ -849,7 +849,15 @@ def index():
 
         # Combos (SIN filtros para que aparezcan sí o sí)
         combos = s.execute(
-            select(Combo).order_by(desc(Combo.created_at)).limit(30)
+            select(Combo)
+            .where(
+                Combo.is_active == True,
+                # si tenés moderación en combos:
+                Combo.moderation_status == "approved",
+                # si existiera deleted_at en Combo:
+                # Combo.deleted_at.is_(None),
+            )
+            .order_by(Combo.created_at.desc())
         ).scalars().all()
 
         # Rankings (si tenés estos modelos)

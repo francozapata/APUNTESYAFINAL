@@ -399,7 +399,7 @@
   {% if combos_count > 0 %}
   <h4 style="margin:0 0 8px;">Combos</h4>
   <div class="notes-grid" style="margin-bottom:18px;">
-    {% for c in combos %}
+    {% for c in combos if c.is_active %}
     <article class="note-card card">
       <header class="note-card__header"
         style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
