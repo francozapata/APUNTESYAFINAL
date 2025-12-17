@@ -319,8 +319,11 @@ input[type="button"].btn {
 =========================== */
 /* Logo AY en navbar */
 .nav .brand-logo-img.logo-ay {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+  height: 48px;
+  width: auto;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  /* sombra sin "recuadro" */
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.35));
 }
