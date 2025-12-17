@@ -2,355 +2,100 @@
 {% block content %}
 
 <style>
-  .profile-shell {
-    max-width: 980px;
-    margin: 32px auto;
-  }
+  .profile-shell { max-width: 980px; margin: 32px auto; }
+  .profile-card { background:#fff; border-radius:16px; border:1px solid #e5e7f5; padding:22px 20px; box-shadow:0 10px 30px rgba(15,23,42,.05); }
+  .profile-header { display:flex; gap:20px; align-items:center; margin-bottom:16px; }
+  .profile-avatar { width:88px; height:88px; border-radius:50%; object-fit:cover; border:3px solid #eef; box-shadow:0 0 0 4px rgba(68,120,255,.12); background:#f4f4ff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:28px; color:#4b5563; }
+  .profile-name { font-size:22px; font-weight:700; margin:0 0 4px; color:#111827; }
+  .profile-email { font-size:14px; color:#6b7280; margin:0; }
+  .profile-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; background:#f3f4ff; border:1px solid #e0e4ff; font-size:12px; color:#4b5563; margin-top:6px; }
+  .muted { color:#6b7280; font-size:13px; }
 
-  .profile-card {
-    background: #ffffff;
-    border-radius: 16px;
-    border: 1px solid #e5e7f5;
-    padding: 22px 20px;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
-  }
+  .profile-tabs { display:inline-flex; gap:8px; margin:8px 0 18px; padding:4px; border-radius:999px; background:#f7f9ff; border:1px solid #e0e4ff; flex-wrap:wrap; }
+  .profile-tab { padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600; text-decoration:none; background:transparent; border:none; color:#4b5563; display:inline-flex; align-items:center; gap:4px; }
+  .profile-tab.active { background:#4478ff; color:#fff; box-shadow:0 8px 20px rgba(68,120,255,.35); }
 
-  .profile-header {
-    display: flex;
-    gap: 20px;
-    align-items: center;
-    margin-bottom: 16px;
-  }
+  .profile-wrapper { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1.4fr); gap:24px; }
+  .profile-col { min-width:0; }
+  .profile-section-title { font-size:16px; font-weight:600; margin:8px 0 4px; color:#111827; }
 
-  .profile-avatar {
-    width: 88px;
-    height: 88px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid #eef;
-    box-shadow: 0 0 0 4px rgba(68, 120, 255, 0.12);
-    background: #f4f4ff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 28px;
-    color: #4b5563;
-  }
+  .note-row { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 12px; border-radius:14px; border:1px solid #e5e7f5; background:#fafbff; margin-top:10px; }
+  .note-meta { font-size:12px; color:#6b7280; margin-top:3px; }
+  .note-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 
-  .profile-name {
-    font-size: 22px;
-    font-weight: 700;
-    margin: 0 0 4px;
-    color: #111827;
-  }
+  .badge-free, .badge-paid { padding:3px 9px; font-size:11px; border-radius:999px; border:1px solid transparent; font-weight:600; }
+  .badge-status { padding:3px 9px; font-size:11px; border-radius:999px; border:1px solid transparent; font-weight:700; text-transform:uppercase; letter-spacing:.02em; }
 
-  .profile-email {
-    font-size: 14px;
-    color: #6b7280;
-    margin: 0;
-  }
+  .status-approved { background:#e8fff0; color:#166534; border-color:#bbf7d0; }
+  .status-pending_ai { background:#eef2ff; color:#3730a3; border-color:#c7d2fe; }
+  .status-pending_manual { background:#fff7ed; color:#9a3412; border-color:#fed7aa; }
+  .status-rejected { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
 
-  .profile-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: #f3f4ff;
-    border: 1px solid #e0e4ff;
-    font-size: 12px;
-    color: #4b5563;
-    margin-top: 6px;
-  }
+  .badge-free { background:#e8fff0; color:#166534; border-color:#bbf7d0; }
+  .badge-paid { background:#fff4e5; color:#92400e; border-color:#fed7aa; }
 
-  .muted {
-    color: #6b7280;
-    font-size: 13px;
-  }
+  .btn-pill { padding:7px 13px; border-radius:999px; border:none; background:#f3f6ff; color:#334155; font-size:13px; font-weight:600; cursor:pointer; text-decoration:none; border:1px solid #dfe4ff; }
+  .btn-pill.ghost { background:#fff; color:#111827; border:1px solid #dfe4ff; }
 
-  /* TABS IGUALES A MI ACTIVIDAD */
-  .profile-tabs {
-    display: inline-flex;
-    gap: 8px;
-    margin: 8px 0 18px;
-    padding: 4px;
-    border-radius: 999px;
-    background: #f7f9ff;
-    border: 1px solid #e0e4ff;
-    flex-wrap: wrap;
-  }
+  .profile-right-box { border-radius:14px; border:1px solid #e5e7f5; padding:12px 14px; background:#fafbff; margin-top:10px; }
+  .profile-right-box h4 { font-size:14px; margin:0 0 6px; color:#111827; }
 
-  .profile-tab {
-    padding: 6px 14px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 600;
-    text-decoration: none;
-    background: transparent;
-    border: none;
-    color: #4b5563;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
+  .profile-contact-label { font-size:13px; color:#4b5563; margin-bottom:2px; }
 
-  .profile-tab.active {
-    background: #4478ff;
-    color: #ffffff;
-    box-shadow: 0 8px 20px rgba(68, 120, 255, 0.35);
-  }
+  .academic-update { margin-top:10px; padding:10px 12px; border-radius:12px; background:#f8fafc; border:1px dashed #cbd2ff; display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; }
 
-  /* Layout columnas */
-  .profile-wrapper {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr);
-    gap: 24px;
-  }
-
-  .profile-col {
-    min-width: 0;
-  }
-
-  .profile-section-title {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 8px 0 4px;
-    color: #111827;
-  }
-
-  /* Lista de apuntes */
-  .note-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: center;
-    padding: 10px 12px;
-    border-radius: 14px;
-    border: 1px solid #e5e7f5;
-    background: #fafbff;
-    margin-top: 10px;
-  }
-
-  .note-meta {
-    font-size: 12px;
-    color: #6b7280;
-    margin-top: 3px;
-  }
-
-  .note-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  .badge-free,
-  .badge-paid {
-    padding: 3px 9px;
-    font-size: 11px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    font-weight: 600;
-  }
-
-  .badge-status {
-    padding: 3px 9px;
-    font-size: 11px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-
-  .status-approved {
-    background: #e8fff0;
-    color: #166534;
-    border-color: #bbf7d0;
-  }
-
-  .status-pending_ai {
-    background: #eef2ff;
-    color: #3730a3;
-    border-color: #c7d2fe;
-  }
-
-  .status-pending_manual {
-    background: #fff7ed;
-    color: #9a3412;
-    border-color: #fed7aa;
-  }
-
-  .status-rejected {
-    background: #fee2e2;
-    color: #991b1b;
-    border-color: #fecaca;
-  }
-
-  .badge-free {
-    background: #e8fff0;
-    color: #166534;
-    border-color: #bbf7d0;
-  }
-
-  .badge-paid {
-    background: #fff4e5;
-    color: #92400e;
-    border-color: #fed7aa;
-  }
-
-  .btn-pill {
-    padding: 7px 13px;
-    border-radius: 999px;
-    border: none;
-    background: #f3f6ff;
-    color: #334155;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    border: 1px solid #dfe4ff;
-  }
-
-  .profile-right-box {
-    border-radius: 14px;
-    border: 1px solid #e5e7f5;
-    padding: 12px 14px;
-    background: #fafbff;
-    margin-top: 10px;
-  }
-
-  .profile-right-box h4 {
-    font-size: 14px;
-    margin: 0 0 6px;
-    color: #111827;
-  }
-
-  .profile-contact-label {
-    font-size: 13px;
-    color: #4b5563;
-    margin-bottom: 2px;
-  }
-
-  .academic-update {
-    margin-top: 10px;
-    padding: 10px 12px;
-    border-radius: 12px;
-    background: #f8fafc;
-    border: 1px dashed #cbd2ff;
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .btn-pill.ghost {
-    background: #ffffff;
-    color: #111827;
-    border: 1px solid #dfe4ff;
-  }
-
-  .mp-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-  }
-
-  .mp-status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    background: #22c55e;
-  }
-
-  .mp-status-dot.off {
-    background: #d4d4d8;
-  }
-
-  .mp-status-text-off {
-    color: #6b7280;
-  }
+  .mp-status { display:inline-flex; align-items:center; gap:6px; font-size:13px; }
+  .mp-status-dot { width:8px; height:8px; border-radius:999px; background:#22c55e; }
+  .mp-status-dot.off { background:#d4d4d8; }
+  .mp-status-text-off { color:#6b7280; }
 
   @media (max-width: 880px) {
-    .profile-card {
-      padding: 20px 16px;
-    }
-
-    .profile-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .profile-wrapper {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .note-row {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .note-actions {
-      align-self: flex-end;
-    }
+    .profile-card { padding:20px 16px; }
+    .profile-header { flex-direction:column; align-items:flex-start; }
+    .profile-wrapper { grid-template-columns:minmax(0,1fr); }
+    .note-row { flex-direction:column; align-items:flex-start; }
+    .note-actions { align-self:flex-end; }
   }
 </style>
 
 <div class="profile-shell">
   <div class="profile-card">
+
     <!-- HEADER -->
     <div class="profile-header">
       <div>
         {% if current_user.avatar_filename %}
-        <img src="{{ url_for('user_avatar', user_id=current_user.id) }}" alt="Foto de perfil" class="profile-avatar">
+          <img src="{{ url_for('user_avatar', user_id=current_user.id) }}" alt="Foto de perfil" class="profile-avatar">
         {% else %}
-        <div class="profile-avatar">
-          {{ (current_user.name or current_user.email)[0:1].upper() }}
-        </div>
+          <div class="profile-avatar">
+            {{ (current_user.name or current_user.email)[0:1].upper() }}
+          </div>
         {% endif %}
       </div>
       <div>
-        <h1 class="profile-name">
-          {{ current_user.name or "Usuario sin nombre" }}
-        </h1>
-        <p class="profile-email">
-          {{ current_user.email }}
-        </p>
+        <h1 class="profile-name">{{ current_user.name or "Usuario sin nombre" }}</h1>
+        <p class="profile-email">{{ current_user.email }}</p>
         <div class="profile-chip">
           Mi perfil en ApuntesYa
-          {% if current_user.mp_user_id %}
-          · Modo vendedor activo
-          {% else %}
-          · Modo vendedor pendiente
-          {% endif %}
+          {% if current_user.mp_user_id %} · Modo vendedor activo {% else %} · Modo vendedor pendiente {% endif %}
         </div>
       </div>
     </div>
 
-    <!-- TABS IGUALES QUE EN "MI ACTIVIDAD" -->
+    <!-- TABS -->
     <div class="profile-tabs">
-      <a href="{{ url_for('profile_purchases') }}" class="profile-tab">
-        📥 <span>Mis compras / descargas</span>
-      </a>
-      <a href="{{ url_for('profile_combos') }}" class="profile-tab">
-        🧺 <span>Mis combos</span>
-      </a>
-      <a href="{{ url_for('profile') }}" class="profile-tab active">
-        📚 <span>Mis apuntes subidos</span>
-      </a>
-      <a href="{{ url_for('profile_balance') }}" class="profile-tab">
-        💰 <span>Mis ventas y balance</span>
-      </a>
+      <a href="{{ url_for('profile_purchases') }}" class="profile-tab">📥 <span>Mis compras / descargas</span></a>
+      <a href="{{ url_for('profile_combos') }}" class="profile-tab">🧺 <span>Mis combos</span></a>
+      <a href="{{ url_for('profile') }}" class="profile-tab active">📚 <span>Mis apuntes subidos</span></a>
+      <a href="{{ url_for('profile_balance') }}" class="profile-tab">💰 <span>Mis ventas y balance</span></a>
     </div>
 
     <!-- CONTENIDO -->
     <div class="profile-wrapper">
-      <!-- Columna izquierda: apuntes -->
+
+      <!-- Columna izquierda -->
       <div class="profile-col">
-        <!-- Bloque contacto vendedor -->
+
         <p class="muted" style="margin-bottom:6px;">
           Si querés que los compradores puedan contactarte por fuera de ApuntesYa
           (por ejemplo, para clases particulares o más materiales), podés dejar un link de contacto.
@@ -383,13 +128,11 @@
 
               <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
                 <label class="muted" style="display:flex;gap:8px;align-items:center;">
-                  <input type="checkbox" name="contact_visible_public" value="1" {% if contact_visible_public
-                    %}checked{% endif %}>
+                  <input type="checkbox" name="contact_visible_public" value="1" {% if contact_visible_public %}checked{% endif %}>
                   Mostrar públicamente (en mi perfil de vendedor)
                 </label>
                 <label class="muted" style="display:flex;gap:8px;align-items:center;">
-                  <input type="checkbox" name="contact_visible_buyers" value="1" {% if contact_visible_buyers
-                    %}checked{% endif %}>
+                  <input type="checkbox" name="contact_visible_buyers" value="1" {% if contact_visible_buyers %}checked{% endif %}>
                   Mostrar a compradores (luego de compra aprobada)
                 </label>
               </div>
@@ -403,141 +146,111 @@
               </div>
             </div>
 
-            <!-- Legacy: still supported, optional -->
             <input type="hidden" name="seller_contact" value="{{ seller_contact }}" />
           </form>
         </div>
 
         <!-- Lista de apuntes -->
         <h3 class="profile-section-title">Mis apuntes subidos</h3>
+
         {% if not my_notes %}
-        <p class="muted">
-          Todavía no subiste ningún apunte. Probá con el botón “Subir apunte” del menú 😊
-        </p>
+          <p class="muted">Todavía no subiste ningún apunte. Probá con el botón “Subir apunte” del menú 😊</p>
         {% else %}
-        {% for n in my_notes %}
-        <div class="note-row">
-          <div>
-            <div><strong>{{ n.title }}</strong></div>
-            <div class="note-meta">
-              {{ n.university }} • {{ n.faculty }} • {{ n.career }}
+          {% for n in my_notes %}
+            <div class="note-row">
+              <div>
+                <div><strong>{{ n.title }}</strong></div>
+                <div class="note-meta">{{ n.university }} • {{ n.faculty }} • {{ n.career }}</div>
+                <div class="note-meta">
+                  {{ n.download_count or 0 }} descarga{{ '' if (n.download_count or 0) == 1 else 's' }}
+                </div>
+              </div>
+
+              <div class="note-actions">
+                {% set st = (n.moderation_status or 'approved') %}
+                <span class="badge-status status-{{ st }}">
+                  {% if st == 'approved' %}Aprobado
+                  {% elif st == 'pending_ai' %}Pendiente IA
+                  {% elif st == 'pending_manual' %}Revisión
+                  {% elif st == 'rejected' %}Denegado
+                  {% else %}{{ st }}{% endif %}
+                </span>
+
+                {% if n.price_cents == 0 %}
+                  <span class="badge-free">Gratis</span>
+                {% else %}
+                  <span class="badge-paid">${{ '%.2f' % (n.price_cents / 100) }}</span>
+                {% endif %}
+
+                <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill">Ver</a>
+                <a href="{{ url_for('seller_edit_note_get', note_id=n.id) }}" class="btn-pill ghost">Editar</a>
+
+                <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline"
+                      onsubmit="return confirm('¿Eliminar este apunte? Se despublicará y se borrará el archivo asociado.');">
+                  <button type="submit" class="btn-pill" style="background:#ef4444;border:0;">Borrar</button>
+                </form>
+              </div>
             </div>
-            <div class="note-meta">
-              {{ n.download_count or 0 }} descarga{{ '' if (n.download_count or 0) == 1 else 's' }}
-            </div>
-          </div>
-          <div class="note-actions">
-            {% set st = (n.moderation_status or 'approved') %}
-            <span class="badge-status status-{{ st }}">
-              {% if st == 'approved' %}Aprobado{% elif st == 'pending_ai' %}Pendiente IA{% elif st == 'pending_manual'
-              %}Revisión{% elif st == 'rejected' %}Denegado{% else %}{{ st }}{% endif %}
+          {% endfor %}
+        {% endif %}
+
+      </div>
+
+      <!-- Columna derecha -->
+      <div class="profile-col">
+
+        <div class="profile-right-box">
+          <h4>Datos de mi cuenta</h4>
+
+          <p class="profile-contact-label">Nombre completo</p>
+          <p>{{ current_user.name or 'Sin nombre cargado' }}</p>
+
+          <p class="profile-contact-label">Correo electrónico</p>
+          <p>{{ current_user.email }}</p>
+
+          <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
+          <p style="margin:0;font-weight:700;font-size:16px;">
+            {{ current_user.university or 'Universidad no indicada' }}<br>
+            <span class="muted" style="font-size:14px;">
+              {{ current_user.faculty or 'Facultad no indicada' }} • {{ current_user.career or 'Carrera no indicada' }}
             </span>
-            {% if n.price_cents == 0 %}
-            <span class="badge-free">Gratis</span>
-            {% else %}
-            <span class="badge-paid">
-              ${{ '%.2f' % (n.price_cents / 100) }}
-            </span>
-            {% endif %}
-            <a href="{{ url_for('note_detail', note_id=n.id) }}" class="btn-pill">
-              Ver
-            </a>
-            <a href="{{ url_for('seller_edit_note_get', note_id=n.id) }}" class="btn-pill ghost">
-              Editar
-            </a>
-            <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline"
-              onsubmit="return confirm('¿Eliminar este apunte? Se despublicará y se borrará el archivo asociado.');">
-              <button type="submit" class="btn-pill" style="background:#ef4444;border:0;">Borrar</button>
-            </form>
+          </p>
+
+          <div class="academic-update">
+            <p class="muted" style="margin:0;">
+              ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo necesites.
+            </p>
+            <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">Actualizar datos académicos</a>
           </div>
         </div>
-        {% endfor %}
-        {% endif %}
-      </div>
 
-      <!-- Columna derecha: datos de cuenta -->
-      <div class="profile-col">
-        <div class="muted" style="margin-top:2px;font-size:12px;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if
-          n.created_at else '' }}</div>
-      </div>
+        <div class="profile-right-box">
+          <h4>Cuenta de Mercado Pago</h4>
+          {% if current_user.mp_user_id %}
+            <p class="mp-status"><span class="mp-status-dot"></span><span>Cuenta de Mercado Pago conectada</span></p>
+            <p class="muted" style="margin-top:6px;">Los pagos de tus ventas se acreditan en esta cuenta.</p>
+          {% else %}
+            <p class="mp-status mp-status-text-off"><span class="mp-status-dot off"></span><span>Sin cuenta de Mercado Pago vinculada</span></p>
+            <p class="muted" style="margin:6px 0 8px;">Para recibir pagos por tus ventas, vas a necesitar vincular una cuenta de Mercado Pago.</p>
+            <a href="{{ url_for('connect_mp') }}" class="btn-pill">Vincular Mercado Pago</a>
+          {% endif %}
+        </div>
 
-    </div>
-    {% endif %}
-    <div class="profile-right-box">
-      <h4>Datos de mi cuenta</h4>
+        <div class="profile-right-box">
+          <h4>Estado como vendedor</h4>
+          {% if current_user.mp_user_id %}
+            <p class="muted" style="margin-bottom:4px;">Tenés el modo vendedor activo ✅</p>
+            <p class="muted">Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago conectada.</p>
+          {% else %}
+            <p class="muted" style="margin-bottom:4px;">Todavía no tenés activo el modo vendedor.</p>
+            <p class="muted">Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil. Después vas a poder subir apuntes y recibir pagos.</p>
+          {% endif %}
+        </div>
 
-      <p class="profile-contact-label">Nombre completo</p>
-      <p>{{ current_user.name or 'Sin nombre cargado' }}</p>
-
-      <p class="profile-contact-label">Correo electrónico</p>
-      <p>{{ current_user.email }}</p>
-
-      <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
-      <p style="margin:0;font-weight:700;font-size:16px;">
-        {{ current_user.university or 'Universidad no indicada' }}<br>
-        <span class="muted" style="font-size:14px;">
-          {{ current_user.faculty or 'Facultad no indicada' }} •
-          {{ current_user.career or 'Carrera no indicada' }}
-        </span>
-      </p>
-
-      <div class="academic-update">
-        <p class="muted" style="margin:0;">
-          ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo
-          necesites.
-        </p>
-        <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">
-          Actualizar datos académicos
-        </a>
       </div>
     </div>
 
-    <div class="profile-right-box">
-      <h4>Cuenta de Mercado Pago</h4>
-      {% if current_user.mp_user_id %}
-      <p class="mp-status">
-        <span class="mp-status-dot"></span>
-        <span>Cuenta de Mercado Pago conectada</span>
-      </p>
-      <p class="muted" style="margin-top:6px;">
-        Los pagos de tus ventas se acreditan en esta cuenta.
-      </p>
-      {% else %}
-      <p class="mp-status mp-status-text-off">
-        <span class="mp-status-dot off"></span>
-        <span>Sin cuenta de Mercado Pago vinculada</span>
-      </p>
-      <p class="muted" style="margin:6px 0 8px;">
-        Para recibir pagos por tus ventas, vas a necesitar vincular una cuenta de Mercado Pago.
-      </p>
-      <a href="{{ url_for('connect_mp') }}" class="btn-pill">
-        Vincular Mercado Pago
-      </a>
-      {% endif %}
-    </div>
-
-    <div class="profile-right-box">
-      <h4>Estado como vendedor</h4>
-      {% if current_user.mp_user_id %}
-      <p class="muted" style="margin-bottom:4px;">
-        Tenés el modo vendedor activo ✅
-      </p>
-      <p class="muted">
-        Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago conectada.
-      </p>
-      {% else %}
-      <p class="muted" style="margin-bottom:4px;">
-        Todavía no tenés activo el modo vendedor.
-      </p>
-      <p class="muted">
-        Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil. Después vas a poder subir
-        apuntes y recibir pagos.
-      </p>
-      {% endif %}
-    </div>
   </div>
-</div>
-</div>
 </div>
 
 {% endblock %}
