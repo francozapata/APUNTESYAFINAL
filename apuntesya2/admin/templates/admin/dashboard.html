@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 <h1 class="mb-4">Panel de Administración</h1>
-<a class="btn" href="{{ url_for('admin.admin_summary') }}">📊 Ver sumario</a>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+  <a class="btn" href="{{ url_for('admin.admin_summary') }}">📊 Ver sumario</a>
+  <a class="btn ghost" href="{{ url_for('admin.moderation_queue') }}">🛡️ Moderación{% if pending_manual_notes or pending_manual_combos %} ({{ (pending_manual_notes or 0) + (pending_manual_combos or 0) }}){% endif %}</a>
+</div>
 
 <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;">
   <div class="card" style="padding:1rem;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.06)">
@@ -12,5 +15,31 @@
     <h3>Apuntes</h3>
     <p style="font-size:2rem;margin:0;">{{ notes_count }}</p>
   </div>
+  <div class="card" style="padding:1rem;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.06)">
+    <h3>Pendientes de revisión</h3>
+    <p style="margin:0;">Apuntes: <strong>{{ pending_manual_notes or 0 }}</strong></p>
+    <p style="margin:0;">Combos: <strong>{{ pending_manual_combos or 0 }}</strong></p>
+    <div style="margin-top:10px;">
+      <a class="btn" href="{{ url_for('admin.moderation_queue', status='pending_manual') }}">Ir a revisión</a>
+    </div>
+  </div>
+  <div class="card" style="padding:1rem;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.06)">
+    <h3>Notificaciones</h3>
+    <p style="margin:0;">Sin leer: <strong>{{ unread_notifications or 0 }}</strong></p>
+    <p class="muted" style="margin:6px 0 0;">Las notificaciones se generan automáticamente (por ejemplo, cuando un apunte entra en revisión manual).</p>
+  </div>
 </div>
+
+{% if notifications and notifications|length > 0 %}
+<div class="card" style="padding:1rem;border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.06);margin-top:14px;">
+  <h3 style="margin:0 0 10px;">Últimas notificaciones</h3>
+  {% for n in notifications %}
+    <div style="padding:10px 0;border-bottom:1px solid #eef2ff;">
+      <div style="font-weight:800;">{{ n.title }}</div>
+      {% if n.body %}<div class="muted" style="margin-top:2px;">{{ n.body }}</div>{% endif %}
+      <div class="muted" style="margin-top:2px;font-size:12px;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '' }}</div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
 {% endblock %}

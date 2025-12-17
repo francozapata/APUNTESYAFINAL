@@ -25,7 +25,37 @@ def dashboard():
     with Session() as s:
         users_count = s.query(User).count()
         notes_count = s.query(Note).count()
-        return render_template("admin/dashboard.html", users_count=users_count, notes_count=notes_count)
+
+        # Pending manual moderation
+        pending_manual_notes = 0
+        pending_manual_combos = 0
+        try:
+            pending_manual_notes = s.query(Note).filter(getattr(Note, 'moderation_status') == 'pending_manual', Note.deleted_at.is_(None)).count()
+        except Exception:
+            pass
+        try:
+            pending_manual_combos = s.query(Combo).filter(getattr(Combo, 'moderation_status') == 'pending_manual').count()
+        except Exception:
+            pass
+
+        # Admin notifications (in-app)
+        unread_notifications = 0
+        notifications = []
+        try:
+            unread_notifications = s.query(Notification).filter(Notification.user_id == current_user.id, Notification.is_read == False).count()
+            notifications = s.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).limit(10).all()
+        except Exception:
+            pass
+
+        return render_template(
+            "admin/dashboard.html",
+            users_count=users_count,
+            notes_count=notes_count,
+            pending_manual_notes=pending_manual_notes,
+            pending_manual_combos=pending_manual_combos,
+            unread_notifications=unread_notifications,
+            notifications=notifications,
+        )
 
 
 @admin_bp.route("/moderation")

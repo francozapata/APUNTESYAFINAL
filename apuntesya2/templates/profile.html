@@ -349,6 +349,58 @@
         </div>
         {% endif %}
 
+
+
+        <div class="profile-right-box" style="margin-top:10px;">
+          <h4>Mis datos de contacto (visible en mi perfil de vendedor)</h4>
+          <form method="post" action="{{ url_for('profile_update_contact') }}">
+            <div style="display:grid;grid-template-columns:1fr;gap:10px;">
+              <div>
+                <div class="profile-contact-label">Teléfono / WhatsApp</div>
+                <input name="contact_whatsapp" value="{{ contact_whatsapp }}" placeholder="Ej: +54 9 351 123 4567" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+              </div>
+              <div>
+                <div class="profile-contact-label">Teléfono (opcional, sin WhatsApp)</div>
+                <input name="contact_phone" value="{{ contact_phone }}" placeholder="Ej: 351 123 4567" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+              </div>
+              <div>
+                <div class="profile-contact-label">Email de contacto</div>
+                <input name="contact_email" type="email" value="{{ contact_email }}" placeholder="Ej: tuemail@gmail.com" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+              </div>
+              <div>
+                <div class="profile-contact-label">Instagram</div>
+                <input name="contact_instagram" value="{{ contact_instagram }}" placeholder="Ej: @tuusuario" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+              </div>
+              <div>
+                <div class="profile-contact-label">Web / Portfolio</div>
+                <input name="contact_website" value="{{ contact_website }}" placeholder="Ej: https://tusitio.com" style="width:100%;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+              </div>
+
+              <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+                <label class="muted" style="display:flex;gap:8px;align-items:center;">
+                  <input type="checkbox" name="contact_visible_public" value="1" {% if contact_visible_public %}checked{% endif %}>
+                  Mostrar públicamente (en mi perfil de vendedor)
+                </label>
+                <label class="muted" style="display:flex;gap:8px;align-items:center;">
+                  <input type="checkbox" name="contact_visible_buyers" value="1" {% if contact_visible_buyers %}checked{% endif %}>
+                  Mostrar a compradores (luego de compra aprobada)
+                </label>
+              </div>
+
+              <div>
+                <button class="btn-pill" type="submit">Guardar contactos</button>
+              </div>
+
+              <div class="muted" style="font-size:12px;">
+                Tip: si cargás WhatsApp, se mostrará como botón directo. Si no, podés usar el teléfono simple.
+              </div>
+            </div>
+
+            <!-- Legacy: still supported, optional -->
+            <input type="hidden" name="seller_contact" value="{{ seller_contact }}" />
+          </form>
+        </div>
+
         <!-- Lista de apuntes -->
         <h3 class="profile-section-title">Mis apuntes subidos</h3>
         {% if not my_notes %}

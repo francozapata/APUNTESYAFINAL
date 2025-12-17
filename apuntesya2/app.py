@@ -225,6 +225,10 @@ def _ensure_schema(engine):
                 add_cols.append("ALTER TABLE users ADD COLUMN contact_email VARCHAR(255)")
             if 'contact_whatsapp' not in cols:
                 add_cols.append("ALTER TABLE users ADD COLUMN contact_whatsapp VARCHAR(64)")
+            if 'contact_phone' not in cols:
+                add_cols.append("ALTER TABLE users ADD COLUMN contact_phone VARCHAR(64)")
+            if 'contact_website' not in cols:
+                add_cols.append("ALTER TABLE users ADD COLUMN contact_website VARCHAR(255)")
             if 'contact_instagram' not in cols:
                 add_cols.append("ALTER TABLE users ADD COLUMN contact_instagram VARCHAR(80)")
             if 'contact_visible_public' not in cols:
@@ -1289,6 +1293,8 @@ def profile():
         # Structured contacts
         contact_email = getattr(me, "contact_email", "") or ""
         contact_whatsapp = getattr(me, "contact_whatsapp", "") or ""
+        contact_phone = getattr(me, "contact_phone", "") or ""
+        contact_website = getattr(me, "contact_website", "") or ""
         contact_instagram = getattr(me, "contact_instagram", "") or ""
         contact_visible_public = bool(getattr(me, "contact_visible_public", True))
         contact_visible_buyers = bool(getattr(me, "contact_visible_buyers", True))
@@ -1315,6 +1321,8 @@ def profile():
         seller_contact_label=contact_label,
         contact_email=contact_email,
         contact_whatsapp=contact_whatsapp,
+        contact_phone=contact_phone,
+        contact_website=contact_website,
         contact_instagram=contact_instagram,
         contact_visible_public=contact_visible_public,
         contact_visible_buyers=contact_visible_buyers,
@@ -1327,6 +1335,8 @@ def profile_update_contact():
     contact = (request.form.get("seller_contact") or "").strip()
     contact_email = (request.form.get("contact_email") or "").strip()
     contact_whatsapp = (request.form.get("contact_whatsapp") or "").strip()
+    contact_phone = (request.form.get("contact_phone") or "").strip()
+    contact_website = (request.form.get("contact_website") or "").strip()
     contact_instagram = (request.form.get("contact_instagram") or "").strip()
     visible_public = (request.form.get("contact_visible_public") == "1")
     visible_buyers = (request.form.get("contact_visible_buyers") == "1")
@@ -1336,6 +1346,10 @@ def profile_update_contact():
         if hasattr(u, "contact_email"):
             u.contact_email = contact_email or None
             u.contact_whatsapp = contact_whatsapp or None
+            if hasattr(u, 'contact_phone'):
+                u.contact_phone = contact_phone or None
+            if hasattr(u, 'contact_website'):
+                u.contact_website = contact_website or None
             u.contact_instagram = contact_instagram or None
             u.contact_visible_public = bool(visible_public)
             u.contact_visible_buyers = bool(visible_buyers)
@@ -1866,6 +1880,16 @@ def note_detail(note_id):
                     url, _ = _build_contact_link(seller.contact_whatsapp)
                     if url:
                         seller_contacts.append((url, "WhatsApp"))
+                if getattr(seller, "contact_phone", None):
+                    url, _ = _build_contact_link(seller.contact_phone)
+                    if url:
+                        seller_contacts.append((url, "Teléfono"))
+                if getattr(seller, "contact_website", None):
+                    w = (seller.contact_website or '').strip()
+                    if w:
+                        if not (w.startswith('http://') or w.startswith('https://')):
+                            w = 'https://' + w
+                        seller_contacts.append((w, "Web"))
                 if getattr(seller, "contact_instagram", None):
                     ig = seller.contact_instagram.strip().lstrip("@").strip()
                     if ig:
@@ -1958,6 +1982,16 @@ def seller_profile(seller_id: int):
                 url, _ = _build_contact_link(seller.contact_whatsapp)
                 if url:
                     contacts.append((url, "WhatsApp"))
+            if getattr(seller, "contact_phone", None):
+                url, _ = _build_contact_link(seller.contact_phone)
+                if url:
+                    contacts.append((url, "Teléfono"))
+            if getattr(seller, "contact_website", None):
+                w = (seller.contact_website or '').strip()
+                if w:
+                    if not (w.startswith('http://') or w.startswith('https://')):
+                        w = 'https://' + w
+                    contacts.append((w, "Web"))
             if getattr(seller, "contact_instagram", None):
                 ig = seller.contact_instagram.strip().lstrip("@").strip()
                 if ig:

@@ -58,6 +58,12 @@ class User(Base, UserMixin):
     # Structured contact fields
     contact_email: Mapped[str] = mapped_column(String(255), nullable=True)
     contact_whatsapp: Mapped[str] = mapped_column(String(64), nullable=True)
+
+    # Optional plain phone (if you don't want WhatsApp link)
+    contact_phone: Mapped[str] = mapped_column(String(64), nullable=True)
+
+    # Public website / portfolio
+    contact_website: Mapped[str] = mapped_column(String(255), nullable=True)
     contact_instagram: Mapped[str] = mapped_column(String(80), nullable=True)
 
     # Visibility controls
