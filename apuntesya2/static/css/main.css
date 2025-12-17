@@ -15,7 +15,9 @@
   --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
@@ -30,7 +32,10 @@ a {
   text-decoration: none;
   font-weight: 600;
 }
-a:hover { text-decoration: underline; }
+
+a:hover {
+  text-decoration: underline;
+}
 
 .container {
   max-width: 1000px;
@@ -61,15 +66,24 @@ a:hover { text-decoration: underline; }
   align-items: center;
 }
 
-.brand-title { font-size: 18px; color: #fff; }
+.brand-title {
+  font-size: 18px;
+  color: #fff;
+}
 
-.brand-logo { width: 28px; height: 28px; border-radius: 8px; background: rgba(255,255,255,.25); }
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .25);
+}
 
 .brand-logo-img {
-  width: 50px;
-  height: 50px;
-  border-radius: 5px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, .08);
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  box-shadow: none;
+  /* la sombra la controla .logo-ay cuando corresponde */
 }
 
 .brand-logo1-img {
@@ -79,7 +93,9 @@ a:hover { text-decoration: underline; }
   box-shadow: 0 6px 16px rgba(0, 0, 0, .08);
 }
 
-.nav a { color: #fff; }
+.nav a {
+  color: #fff;
+}
 
 /* Cards */
 .card {
@@ -158,7 +174,7 @@ input[type="button"].btn {
   gap: 6px;
   padding: 8px 14px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.0);
+  border: 1px solid rgba(255, 255, 255, .0);
   cursor: pointer;
   font-weight: 700;
   font-size: 13px;
@@ -173,8 +189,14 @@ input[type="button"].btn {
   box-shadow: 0 8px 20px rgba(68, 120, 255, 0.30);
 }
 
-.btn:hover { transform: translateY(-1px); }
-.btn:active { transform: translateY(0px); box-shadow: 0 6px 14px rgba(68, 120, 255, 0.22); }
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0px);
+  box-shadow: 0 6px 14px rgba(68, 120, 255, 0.22);
+}
 
 .btn:disabled,
 .btn.disabled {
@@ -220,8 +242,14 @@ input[type="button"].btn {
   transition: transform .08s ease, background .16s ease, border-color .16s ease;
 }
 
-.btn-pill:hover { background: #eaf0ff; transform: translateY(-1px); }
-.btn-pill:active { transform: translateY(0px); }
+.btn-pill:hover {
+  background: #eaf0ff;
+  transform: translateY(-1px);
+}
+
+.btn-pill:active {
+  transform: translateY(0px);
+}
 
 .btn-pill.ghost {
   background: var(--surface);
@@ -229,15 +257,22 @@ input[type="button"].btn {
 }
 
 /* Primary variants used in some admin templates */
-.btn-primary { background: var(--brand); color: #fff; border: 1px solid rgba(255,255,255,0); }
-.btn-primary:hover { background: #3b6dff; }
+.btn-primary {
+  background: var(--brand);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0);
+}
+
+.btn-primary:hover {
+  background: #3b6dff;
+}
 
 /* Danger */
 .btn-danger,
 .btn-outline-danger {
   background: var(--danger);
   color: #fff;
-  border: 1px solid rgba(255,255,255,0);
+  border: 1px solid rgba(255, 255, 255, 0);
   box-shadow: 0 8px 20px rgba(239, 68, 68, 0.20);
 }
 
@@ -249,7 +284,10 @@ input[type="button"].btn {
 }
 
 /* Small */
-.btn-sm { padding: 6px 10px; font-size: 12px; }
+.btn-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+}
 
 /* Nav buttons: keep them consistent but readable on gradient */
 .nav .btn,
@@ -260,11 +298,37 @@ input[type="button"].btn {
   box-shadow: none;
 }
 
-.nav .btn:hover { background: rgba(255, 255, 255, .28); transform: translateY(-1px); }
+.nav .btn:hover {
+  background: rgba(255, 255, 255, .28);
+  transform: translateY(-1px);
+}
 
 /* Utility */
-.muted { color: var(--muted); }
+.muted {
+  color: var(--muted);
+}
 
 @media (max-width: 900px) {
-  .grid { grid-template-columns: repeat(1, 1fr); }
+  .grid {
+    grid-template-columns: repeat(1, 1fr);
+  }
+}
+
+
+/* ===========================
+   AY logo (navbar) - FIX PNG edges + Option 3 look (shadow + glow)
+=========================== */
+.nav .brand-logo-img.logo-ay {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+
+  /* evita el borde raro del PNG y mejora contraste */
+  background: rgba(255, 255, 255, 0.06);
+  padding: 4px;
+
+  /* opcion 3: sombra + glow (SIN filter para evitar granulado) */
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.30),
+    0 0 8px rgba(120, 200, 255, 0.35);
 }
