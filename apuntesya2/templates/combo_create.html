@@ -30,7 +30,9 @@
     font-size: 13px;
   }
 
-  input,
+  /* No usar width:100% para TODOS los inputs porque rompe los checkbox */
+  input[type="text"],
+  input[type="number"],
   textarea {
     width: 100%;
     padding: 10px 12px;
@@ -60,18 +62,58 @@
   }
 
   .note {
-    display: flex;
+    display: grid;
+    grid-template-columns: 22px 1fr;
     gap: 10px;
     align-items: flex-start;
     border: 1px solid #eef2ff;
     border-radius: 12px;
     padding: 10px;
     margin-top: 10px;
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+
+  .note:hover {
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+    transform: translateY(-1px);
+  }
+
+  .note.checked {
+    border-color: #bcd0ff;
+    background: #f6f8ff;
+  }
+
+  .note input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin-top: 3px;
   }
 
   .meta {
     color: #6b7280;
     font-size: 13px;
+  }
+
+  .helper {
+    margin-top: 8px;
+    color: #6b7280;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid #e5e7f5;
+    background: #fff;
+    font-size: 12px;
   }
 </style>
 
@@ -104,10 +146,14 @@
 
       <div style="margin-top:14px">
         <label>Seleccioná al menos 2 apuntes</label>
+        <div class="helper">
+          <span class="pill" id="selectedPill">✅ Seleccionados: <b id="selectedCount">0</b></span>
+          <span class="pill">💡 Tip: armá un pack por materia / parcial / final</span>
+        </div>
 
         {% if notes and notes|length > 0 %}
         {% for n in notes %}
-        <label class="note">
+        <label class="note" data-note>
           <input type="checkbox" name="note_ids" value="{{ n.id }}" />
           <div>
             <div style="font-weight:800">
@@ -131,7 +177,7 @@
       </div>
 
       <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
-        <a class="btn cancel" href="{{ url_for('profile_combos') }}">
+        <a class="btn cancel" href="{{ url_for('my_notes_hub') }}">
           Cancelar
         </a>
         <button class="btn" type="submit">
@@ -141,4 +187,29 @@
     </form>
   </div>
 </div>
+
+<script>
+  (function () {
+    const notes = Array.from(document.querySelectorAll('[data-note]'));
+    const countEl = document.getElementById('selectedCount');
+
+    function refresh() {
+      let c = 0;
+      for (const row of notes) {
+        const cb = row.querySelector('input[type="checkbox"]');
+        const checked = !!(cb && cb.checked);
+        row.classList.toggle('checked', checked);
+        if (checked) c += 1;
+      }
+      if (countEl) countEl.textContent = String(c);
+    }
+
+    for (const row of notes) {
+      const cb = row.querySelector('input[type="checkbox"]');
+      if (!cb) continue;
+      cb.addEventListener('change', refresh);
+    }
+    refresh();
+  })();
+</script>
 {% endblock %}

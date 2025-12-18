@@ -3922,7 +3922,8 @@ def combo_create():
 
             s.commit()
             flash("Combo creado correctamente.", "success")
-            return redirect(url_for("profile_combos"))
+            # Volver al hub de "Mis apuntes" luego de crear el combo
+            return redirect(url_for("my_notes_hub"))
 
         return render_template("combo_create.html", notes=notes)
 
