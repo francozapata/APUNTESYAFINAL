@@ -6,11 +6,26 @@ import math
 import json
 import base64
 import re
+import warnings
+import smtplib
+import ssl
+from email.message import EmailMessage
 from datetime import datetime, timedelta, timedelta
 from urllib.parse import urlencode
 from functools import wraps
 from google.cloud import storage
 from google.oauth2 import service_account
+
+# --- Log hygiene -------------------------------------------------------------
+# Pydantic may emit a noisy warning in some environments when 3rd-party
+# libraries pass builtins like `any` where a type is expected. This warning is
+# harmless for our app (it only affects schema generation/validation in those
+# libraries) but it clutters Render logs.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*<built-in function any> is not a Python type.*",
+    category=UserWarning,
+)
 
 from dotenv import load_dotenv
 from flask import (
@@ -494,6 +509,17 @@ def gcs_upload_file(file_storage, blob_name: str) -> str:
     return blob_name
 
 
+def gcs_upload_path(local_path: str, blob_name: str, content_type: str = "application/pdf") -> str:
+    """Sube un archivo desde disco a GCS (por path)."""
+    if not gcs_bucket:
+        raise RuntimeError("GCS no está configurado")
+    blob = gcs_bucket.blob(blob_name)
+    # upload_from_filename usa el stack nativo y evita problemas de streams ya consumidos
+    blob.upload_from_filename(local_path, content_type=content_type)
+    return blob_name
+    return blob_name
+
+
 def gcs_generate_signed_url(blob_name: str, seconds: int = 600) -> str:
     """
     Genera un link firmado para descargar el archivo desde GCS.
@@ -585,7 +611,7 @@ def _watermark_image(img, text: str = "APUNTESYA"):
     return out.convert("RGB")
 
 
-def generate_note_preview(note: Note, max_pages: int = 4) -> tuple[list[int], list[str]]:
+def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: str | None = None) -> tuple[list[int], list[str]]:
     """Generate preview images for a note PDF (with watermark) and store paths.
 
     Returns (pages, image_paths).
@@ -599,7 +625,9 @@ def generate_note_preview(note: Note, max_pages: int = 4) -> tuple[list[int], li
     tmp_pdf = None
     local_pdf = None
     try:
-        if gcs_bucket and note_file_path and "/" in note_file_path:
+        if local_pdf_override:
+            local_pdf = local_pdf_override
+        elif gcs_bucket and note.file_path and "/" in note.file_path:
             tmp_pdf = gcs_download_to_temp(note.file_path)
             local_pdf = tmp_pdf
         else:
@@ -670,7 +698,7 @@ def _extract_text_for_moderation(note: Note, max_pages: int = 2, max_chars: int 
     tmp_pdf = None
     local_pdf = None
     try:
-        if gcs_bucket and note_file_path and "/" in note_file_path:
+        if gcs_bucket and note.file_path and "/" in note.file_path:
             tmp_pdf = gcs_download_to_temp(note.file_path)
             local_pdf = tmp_pdf
         else:
@@ -806,6 +834,244 @@ def _notify_users(session_db, user_ids: list[int], title: str, body: str, kind: 
             pass
 
 
+
+
+
+# ------------------------------ Email (SMTP) ------------------------------
+def _smtp_config():
+    """Read SMTP config from environment variables (zero-cost friendly).
+    Set at least SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and MAIL_FROM.
+    """
+    return {
+        "host": (os.getenv("SMTP_HOST") or "").strip(),
+        "port": int(os.getenv("SMTP_PORT") or "587"),
+        "user": (os.getenv("SMTP_USER") or "").strip(),
+        "pass": (os.getenv("SMTP_PASS") or "").strip(),
+        "tls": (os.getenv("SMTP_TLS", "1").strip() != "0"),
+        # Some hosting providers have no IPv6 egress; forcing IPv4 avoids
+        # "[Errno 101] Network is unreachable" when DNS resolves to AAAA first.
+        "force_ipv4": (os.getenv("SMTP_FORCE_IPV4", "1").strip() != "0"),
+        "from": (os.getenv("MAIL_FROM") or os.getenv("SMTP_FROM") or "no-reply@apuntesya.local").strip(),
+        "enabled": (os.getenv("SMTP_ENABLED", "1").strip() != "0"),
+    }
+
+def _smtp_connect(host: str, port: int, timeout: int = 15, force_ipv4: bool = True) -> smtplib.SMTP:
+    """Create an SMTP connection.
+
+    If force_ipv4 is True, resolves host to IPv4 and connects to the IP, while
+    keeping the original host for TLS SNI/certificate validation.
+    """
+    if not force_ipv4:
+        return smtplib.SMTP(host, port, timeout=timeout)
+
+    import socket
+    infos = socket.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_STREAM)
+    if not infos:
+        # fallback to default behavior
+        return smtplib.SMTP(host, port, timeout=timeout)
+
+    ip = infos[0][4][0]
+    smtp = smtplib.SMTP(timeout=timeout)
+    smtp.connect(ip, port)
+    return smtp
+
+def _brevo_config() -> dict:
+    return {
+        "api_key": (os.getenv("BREVO_API_KEY") or os.getenv("SENDINBLUE_API_KEY") or "").strip(),
+        "sender_email": (os.getenv("BREVO_SENDER_EMAIL") or os.getenv("MAIL_FROM_EMAIL") or "").strip(),
+        "sender_name": (os.getenv("BREVO_SENDER_NAME") or "ApuntesYa").strip(),
+        "enabled": (os.getenv("BREVO_ENABLED", "1").strip() != "0"),
+    }
+
+def _send_email_brevo(to_email: str, subject: str, text_body: str, html_body: str | None = None) -> bool:
+    """Send email via Brevo Transactional Email API (HTTPS/443)."""
+    cfg = _brevo_config()
+    if not cfg["enabled"] or not cfg["api_key"] or not to_email:
+        return False
+
+    # Use sender_email if provided; otherwise fall back to SMTP_FROM / MAIL_FROM parsing is messy.
+    sender_email = cfg["sender_email"] or (os.getenv("SMTP_USER") or "").strip() or "no-reply@apuntesya.local"
+    payload = {
+        "sender": {"email": sender_email, "name": cfg["sender_name"]},
+        "to": [{"email": to_email}],
+        "subject": subject or "",
+        "textContent": text_body or "",
+    }
+    if html_body:
+        payload["htmlContent"] = html_body
+
+    try:
+        import requests
+        r = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={
+                "api-key": cfg["api_key"],
+                "accept": "application/json",
+                "content-type": "application/json",
+            },
+            json=payload,
+            timeout=20,
+        )
+        if 200 <= r.status_code < 300:
+            return True
+        try:
+            app.logger.warning(f"brevo email send failed to {to_email}: {r.status_code} {r.text[:500]}")
+        except Exception:
+            pass
+        return False
+    except Exception as e:
+        try:
+            app.logger.warning(f"brevo email send exception to {to_email}: {e}")
+        except Exception:
+            pass
+        return False
+
+def send_email(to_email: str, subject: str, text_body: str, html_body: str | None = None) -> bool:
+    """Send an email.
+
+    NOTE: Render free web services block outbound SMTP ports (25/465/587). If you
+    are on Render Free, configure BREVO_API_KEY to send via HTTPS instead.
+    """
+    # Prefer Brevo API when configured (works over HTTPS/443)
+    if (os.getenv("BREVO_API_KEY") or os.getenv("SENDINBLUE_API_KEY")):
+        if _send_email_brevo(to_email, subject, text_body, html_body=html_body):
+            return True
+
+    # Fall back to SMTP if available (paid Render or non-Render hosting)
+    cfg = _smtp_config()
+    if not cfg["enabled"] or not cfg["host"] or not to_email:
+        return False
+
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = cfg["from"]
+        msg["To"] = to_email
+        msg.set_content(text_body or "")
+
+        if html_body:
+            msg.add_alternative(html_body, subtype="html")
+
+        context = ssl.create_default_context()
+        if cfg["tls"]:
+            with _smtp_connect(cfg["host"], cfg["port"], timeout=15, force_ipv4=cfg.get("force_ipv4", True)) as s:
+                s.ehlo()
+                # Ensure the certificate matches the original hostname (SNI)
+                try:
+                    s.starttls(context=context, server_hostname=cfg["host"])
+                except TypeError:
+                    s.starttls(context=context)
+                s.ehlo()
+                if cfg["user"] and cfg["pass"]:
+                    s.login(cfg["user"], cfg["pass"])
+                s.send_message(msg)
+        else:
+            with _smtp_connect(cfg["host"], cfg["port"], timeout=15, force_ipv4=cfg.get("force_ipv4", True)) as s:
+                if cfg["user"] and cfg["pass"]:
+                    s.login(cfg["user"], cfg["pass"])
+                s.send_message(msg)
+        return True
+    except Exception as e:
+        try:
+            app.logger.warning(f"email send failed to {to_email}: {e}")
+        except Exception:
+            pass
+        return False
+
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = cfg["from"]
+        msg["To"] = to_email
+        msg.set_content(text_body or "")
+
+        if html_body:
+            msg.add_alternative(html_body, subtype="html")
+
+        context = ssl.create_default_context()
+        if cfg["tls"]:
+            with _smtp_connect(cfg["host"], cfg["port"], timeout=15, force_ipv4=cfg.get("force_ipv4", True)) as s:
+                s.ehlo()
+                # Ensure the certificate matches the original hostname (SNI)
+                try:
+                    s.starttls(context=context, server_hostname=cfg["host"])
+                except TypeError:
+                    # Older Python/smtplib signature fallback
+                    s.starttls(context=context)
+                s.ehlo()
+                if cfg["user"] and cfg["pass"]:
+                    s.login(cfg["user"], cfg["pass"])
+                s.send_message(msg)
+        else:
+            with _smtp_connect(cfg["host"], cfg["port"], timeout=15, force_ipv4=cfg.get("force_ipv4", True)) as s:
+                if cfg["user"] and cfg["pass"]:
+                    s.login(cfg["user"], cfg["pass"])
+                s.send_message(msg)
+        return True
+    except Exception as e:
+        try:
+            app.logger.warning(f"email send failed to {to_email}: {e}")
+        except Exception:
+            pass
+        return False
+
+def _create_notification_once(session_db, user_id: int, kind: str, title: str, body: str) -> bool:
+    """Create a notification once (best-effort dedupe) without schema changes.
+
+    We dedupe by (user_id, kind, title, body) in the last 7 days.
+    """
+    try:
+        cutoff = datetime.utcnow() - timedelta(days=7)
+        exists = session_db.execute(
+            select(Notification.id).where(
+                Notification.user_id == user_id,
+                Notification.kind == kind,
+                Notification.title == title,
+                Notification.body == (body or None),
+                Notification.created_at >= cutoff,
+            ).limit(1)
+        ).first()
+        if exists:
+            return False
+    except Exception:
+        pass
+
+    try:
+        session_db.add(Notification(user_id=user_id, kind=kind, title=title, body=(body or None)))
+        return True
+    except Exception:
+        return False
+
+def notify_and_email_users(session_db, user_ids: list[int], kind: str, title: str, body: str, email_subject: str | None = None, email_body: str | None = None, dedupe_key_prefix: str = ""):
+    """Create in-app notifications and (optionally) send email for each user."""
+    if not user_ids:
+        return
+
+    # preload emails in one query
+    try:
+        users = session_db.execute(select(User).where(User.id.in_(user_ids))).scalars().all()
+        id_to_email = {u.id: (u.email or "").strip() for u in users}
+        id_to_name = {u.id: (u.name or "").strip() for u in users}
+    except Exception:
+        id_to_email = {}
+        id_to_name = {}
+
+    for uid in user_ids:
+        created = _create_notification_once(session_db, uid, kind=kind, title=title, body=body)
+
+        # Email: send even if notification existed? we keep it consistent: send only if created
+        if created:
+            to_em = id_to_email.get(uid, "")
+            if to_em:
+                subj = (email_subject or title).strip()
+                txt = (email_body or body or "").strip()
+                # small personalization
+                nm = id_to_name.get(uid) or ""
+                if nm:
+                    txt = f"Hola {nm},\n\n" + txt + "\n\n— ApuntesYa"
+                else:
+                    txt = txt + "\n\n— ApuntesYa"
+                send_email(to_em, subj, txt)
 
 # ------------------------------ util contacto vendedor ------------------------------
 def _build_contact_link(raw: str) -> tuple[str, str]:
@@ -1317,6 +1583,14 @@ def profile():
 
         mp_connected = bool(getattr(me, "mp_access_token", None))
 
+        # Notifications list for profile (latest 50)
+        notifications = s.execute(
+            select(Notification)
+            .where(Notification.user_id == current_user.id)
+            .order_by(Notification.created_at.desc())
+            .limit(50)
+        ).scalars().all()
+
     return render_template(
         "profile.html",
         seller_contact=seller_contact,
@@ -1330,6 +1604,7 @@ def profile():
         contact_visible_public=contact_visible_public,
         contact_visible_buyers=contact_visible_buyers,
         mp_connected=mp_connected,
+        notifications=notifications,
     )
 
 
@@ -1743,16 +2018,19 @@ def upload_note():
         base_name = secure_filename(file.filename)
         unique_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{base_name}"
 
+        # Siempre guardamos una copia local temporal para poder generar previews
+        # (Render + GCS no garantiza que exista un archivo local).
+        ensure_dirs()
+        local_pdf_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
+        file.save(local_pdf_path)
+
         if gcs_bucket:
             # Guardamos en GCS bajo notes/<seller_id>/<archivo>
             blob_name = f"notes/{current_user.id}/{unique_name}"
-            gcs_upload_file(file, blob_name)
+            gcs_upload_path(local_pdf_path, blob_name, content_type="application/pdf")
             stored_path = blob_name
         else:
-            # Fallback local (por ejemplo, entorno de desarrollo sin GCS)
-            ensure_dirs()
-            fpath = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
-            file.save(fpath)
+            # En modo local, el archivo ya quedó guardado en UPLOAD_FOLDER
             stored_path = unique_name
 
         with Session() as s:
@@ -1776,7 +2054,7 @@ def upload_note():
 
             # Generate preview images (best-effort)
             try:
-                pages, imgs = generate_note_preview(note)
+                pages, imgs = generate_note_preview(note, local_pdf_override=local_pdf_path)
                 note.preview_pages = {"pages": pages}
                 note.preview_images = {"images": imgs}
                 s.commit()
@@ -1822,13 +2100,13 @@ def upload_note():
                 # Notifications
                 admin_ids = [u.id for u in s.execute(select(User).where(User.is_admin == True)).scalars().all()]
                 if status == "approved":
-                    _notify_users(s, [current_user.id], "Apunte aprobado", "Tu apunte fue aprobado automáticamente y ya está publicado.", kind="success")
+                    notify_and_email_users(s, [current_user.id], kind="note_approved", title="Apunte aprobado", body="Tu apunte fue aprobado automáticamente y ya está publicado.", email_subject="Tu apunte fue aprobado", email_body="Tu apunte fue aprobado automáticamente y ya está publicado.", dedupe_key_prefix=f"note:{note.id}:approved")
                 elif status == "pending_manual":
-                    _notify_users(s, [current_user.id], "Apunte en revisión manual", "La IA marcó tu apunte para revisión manual. Puede demorar hasta 12hs.", kind="warning")
-                    _notify_users(s, admin_ids, "Revisión manual requerida", f"Hay un apunte pendiente de revisión manual: #{note.id} — {note.title}", kind="warning")
+                    notify_and_email_users(s, [current_user.id], kind="note_manual_review", title="Apunte en revisión manual", body="La IA marcó tu apunte para revisión manual. Puede demorar hasta 12hs.", email_subject="Tu apunte requiere revisión", email_body="La IA marcó tu apunte para revisión manual. Puede demorar hasta 12hs.", dedupe_key_prefix=f"note:{note.id}:manual")
+                    notify_and_email_users(s, admin_ids, kind="manual_review_admin", title="Revisión manual requerida", body=f"Hay un apunte pendiente de revisión manual: #{note.id} — {note.title}", email_subject="Apunte pendiente de revisión manual", email_body=f"Hay un apunte pendiente de revisión manual: #{note.id} — {note.title}", dedupe_key_prefix=f"note:{note.id}:admin_manual")
                 elif status == "rejected":
-                    _notify_users(s, [current_user.id], "Apunte rechazado", f"Tu apunte fue rechazado por la moderación automática. Motivo: {reason or 'sin detalle'}", kind="danger")
-                    _notify_users(s, admin_ids, "Apunte rechazado por IA", f"Rechazo IA: #{note.id} — {note.title}. Motivo: {reason or 'sin detalle'}", kind="danger")
+                    notify_and_email_users(s, [current_user.id], kind="note_rejected", title="Apunte rechazado", body=f"Tu apunte fue rechazado por la moderación automática. Motivo: {reason or 'sin detalle'}", email_subject="Tu apunte fue rechazado", email_body=f"Tu apunte fue rechazado por la moderación automática. Motivo: {reason or 'sin detalle'}", dedupe_key_prefix=f"note:{note.id}:rejected")
+                    notify_and_email_users(s, admin_ids, kind="note_rejected_admin", title="Apunte rechazado por IA", body=f"Rechazo IA: #{note.id} — {note.title}. Motivo: {reason or 'sin detalle'}", email_subject="Apunte rechazado por IA", email_body=f"Rechazo IA: #{note.id} — {note.title}. Motivo: {reason or 'sin detalle'}", dedupe_key_prefix=f"note:{note.id}:admin_rejected")
 
                 s.commit()
             except Exception as e:
@@ -1848,6 +2126,13 @@ def upload_note():
         except Exception:
             msg += ""
         flash(msg)
+
+        # Cleanup: si usamos GCS, no necesitamos conservar el PDF local
+        try:
+            if gcs_bucket and local_pdf_path and os.path.exists(local_pdf_path):
+                os.remove(local_pdf_path)
+        except Exception:
+            pass
         return redirect(url_for("note_detail", note_id=note.id))
     return render_template("upload.html")
 
@@ -2088,13 +2373,29 @@ def seller_profile(seller_id: int):
 
 @app.route("/preview/<int:note_id>/<int:idx>.jpg")
 def note_preview_image(note_id: int, idx: int):
-    """Serve protected preview images (watermarked) without exposing storage URLs."""
+    """Serve protected preview images (watermarked) without exposing storage URLs.
+
+    Public viewers: only for approved notes.
+    Sellers/Admin: can view previews even if the note is pending moderation.
+    """
     with Session() as s:
         note = s.get(Note, note_id)
         if not note or not note.is_active:
             abort(404)
-        if getattr(note, "moderation_status", "approved") != "approved":
-            abort(404)
+
+        status = getattr(note, "moderation_status", "approved")
+        if status != "approved":
+            allowed = False
+            try:
+                if current_user.is_authenticated and (
+                    current_user.id == note.seller_id or getattr(current_user, "is_admin", False)
+                ):
+                    allowed = True
+            except Exception:
+                allowed = False
+            if not allowed:
+                abort(404)
+
         meta = getattr(note, "preview_images", None) or {}
         imgs = (meta or {}).get("images") or []
         if idx < 1 or idx > len(imgs):
@@ -2500,6 +2801,12 @@ def mp_return(note_id):
 
         # Si está aprobado: vamos directo a descargar
         if status == "approved":
+            # Emit notifications/emails (idempotent by dedupe key)
+            try:
+                if p and p.id:
+                    _emit_note_purchase_notifications(p.id)
+            except Exception:
+                pass
             flash("✅ Pago aprobado, ya podés descargar el apunte.")
             # Volvemos al detalle, marcando que viene de un pago
             return redirect(
@@ -2513,6 +2820,99 @@ def mp_return(note_id):
 
 
 # -----------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------
+# Purchase notifications (in-app + email)
+# -----------------------------------------------------------------------------
+def _emit_note_purchase_notifications(purchase_id: int):
+    """Create buyer+seller notifications/emails when a note purchase is approved."""
+    with Session() as s:
+        p = s.get(Purchase, purchase_id)
+        if not p or (p.status or "").lower() != "approved" or not p.note_id:
+            return
+
+        note = s.get(Note, p.note_id)
+        if not note:
+            return
+        buyer = s.get(User, p.buyer_id) if p.buyer_id else None
+        seller = s.get(User, note.seller_id) if note.seller_id else None
+
+        title_buyer = "✅ Compra confirmada"
+        body_buyer = f"Compraste “{note.title}”. Ya podés descargarlo desde tu perfil (Compras)."
+        title_seller = "💰 ¡Vendiste un apunte!"
+        buyer_name = (buyer.name if buyer else "Un comprador")
+        body_seller = f"""{buyer_name} compró tu apunte “{note.title}”."""
+
+        # Dedupe keys include purchase id
+        notify_and_email_users(
+            s,
+            user_ids=[p.buyer_id] if p.buyer_id else [],
+            kind="purchase_buyer",
+            title=title_buyer,
+            body=body_buyer,
+            email_subject="Compra confirmada en ApuntesYa",
+            email_body=body_buyer,
+            dedupe_key_prefix=f"purchase:{p.id}:buyer",
+        )
+
+        notify_and_email_users(
+            s,
+            user_ids=[note.seller_id] if note.seller_id else [],
+            kind="sale_seller",
+            title=title_seller,
+            body=body_seller,
+            email_subject="¡Vendiste un apunte en ApuntesYa!",
+            email_body=body_seller,
+            dedupe_key_prefix=f"purchase:{p.id}:seller",
+        )
+
+        s.commit()
+
+
+def _emit_combo_purchase_notifications(combo_purchase_id: int):
+    """Create buyer+seller notifications/emails when a combo purchase is approved."""
+    with Session() as s:
+        cp = s.get(ComboPurchase, combo_purchase_id)
+        if not cp or (cp.status or "").lower() != "approved" or not cp.combo_id:
+            return
+
+        combo = s.get(Combo, cp.combo_id)
+        if not combo:
+            return
+        buyer = s.get(User, cp.buyer_id) if cp.buyer_id else None
+        seller = s.get(User, combo.seller_id) if combo.seller_id else None
+
+        title_buyer = "✅ Compra confirmada"
+        body_buyer = f"Compraste el combo “{combo.title}”. Ya podés descargarlo desde tu perfil (Compras)."
+        title_seller = "💰 ¡Vendiste un combo!"
+        buyer_name = (buyer.name if buyer else "Un comprador")
+        body_seller = f"""{buyer_name} compró tu combo “{combo.title}”."""
+
+        notify_and_email_users(
+            s,
+            user_ids=[cp.buyer_id] if cp.buyer_id else [],
+            kind="purchase_buyer",
+            title=title_buyer,
+            body=body_buyer,
+            email_subject="Compra confirmada en ApuntesYa",
+            email_body=body_buyer,
+            dedupe_key_prefix=f"combo_purchase:{cp.id}:buyer",
+        )
+
+        notify_and_email_users(
+            s,
+            user_ids=[combo.seller_id] if combo.seller_id else [],
+            kind="sale_seller",
+            title=title_seller,
+            body=body_seller,
+            email_subject="¡Vendiste un combo en ApuntesYa!",
+            email_body=body_seller,
+            dedupe_key_prefix=f"combo_purchase:{cp.id}:seller",
+        )
+
+        s.commit()
+
 # Webhook único
 # -----------------------------------------------------------------------------
 def _upsert_purchase_from_payment(pay: dict):
@@ -2533,6 +2933,12 @@ def _upsert_purchase_from_payment(pay: dict):
                     if status:
                         p.status = status
                     s.commit()
+            # Emit notifications/emails if approved (idempotent)
+            try:
+                if (status or "").lower() == "approved":
+                    _emit_note_purchase_notifications(pid)
+            except Exception:
+                pass
             return
 
         # =========================
@@ -2547,6 +2953,12 @@ def _upsert_purchase_from_payment(pay: dict):
                     if status:
                         cp.status = status
                     s.commit()
+            # Emit notifications/emails if approved (idempotent)
+            try:
+                if (status or "").lower() == "approved":
+                    _emit_combo_purchase_notifications(cp_id)
+            except Exception:
+                pass
             return
 
     except Exception as e:
