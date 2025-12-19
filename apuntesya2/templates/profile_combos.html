@@ -120,10 +120,10 @@
         <div style="font-weight:800">Recibís ${{ '%.1f' % (net_cents/100) }}</div>
         <div class="meta">Publicado ${{ '%.1f' % published_price(net_cents) }}</div>
         {% endif %}
-        <a class="btn" style="margin-top:8px" href="{{ url_for('combo_detail', combo_id=c.id) }}">Ver</a>
-        <a class="btn" style="margin-top:8px;background:#111827" href="{{ url_for('combo_edit', combo_id=c.id) }}">Editar</a>
+        <a class="btn ghost" style="margin-top:8px" href="{{ url_for('combo_detail', combo_id=c.id) }}">Ver</a>
+        <a class="btn btn-secondary" style="margin-top:8px" href="{{ url_for('combo_edit', combo_id=c.id) }}">Editar</a>
         <form method="post" action="{{ url_for('combo_delete', combo_id=c.id) }}" style="margin-top:8px" onsubmit="return confirm('¿Eliminar este combo? Se despublicará.');">
-          <button type="submit" class="btn" style="background:#ef4444;border:0;width:100%">Borrar</button>
+          <button type="submit" class="btn btn-danger" style="width:100%">Borrar</button>
         </form>
       </div>
     </div>

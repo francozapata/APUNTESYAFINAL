@@ -75,7 +75,7 @@
             <div style="font-weight:800">{{ n.title }}</div>
             <div class="meta">{{ n.university }} · {{ n.faculty }} · {{ n.career }}</div>
           </div>
-          <a class="btn" style="background:#111827" href="{{ url_for('note_detail', note_id=n.id) }}">Ver</a>
+          <a class="btn ghost" href="{{ url_for('note_detail', note_id=n.id) }}">Ver</a>
         </div>
         {% endfor %}
       </div>

@@ -12,7 +12,9 @@
   --brand-2: #60a5fa;
   --danger: #ef4444;
 
-  --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  --shadow-hover: 0 14px 42px rgba(15, 23, 42, 0.08);
+  --shadow-sm: 0 6px 18px rgba(15, 23, 42, 0.06);
 }
 
 * {
@@ -101,9 +103,10 @@ a:hover {
   background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: 18px;
+  padding: 18px;
   box-shadow: var(--shadow);
+  transition: transform .15s ease, box-shadow .18s ease, border-color .18s ease;
   margin-bottom: 16px;
 }
 
@@ -326,4 +329,60 @@ input[type="button"].btn {
   box-shadow: none;
   /* sombra sin "recuadro" */
   filter: drop-shadow(0 2px 6px rgba(0,0,0,.35));
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+  border-color: #dbe3ff;
+}
+
+
+/* Typography */
+h1, .page-title {
+  font-size: 28px;
+  line-height: 1.15;
+  margin: 6px 0 12px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+}
+
+h2, .section-title {
+  font-size: 18px;
+  line-height: 1.25;
+  margin: 6px 0 10px;
+  font-weight: 750;
+}
+
+h3 {
+  font-size: 15px;
+  line-height: 1.25;
+  margin: 6px 0 8px;
+  font-weight: 700;
+}
+
+.small, .text-sm {
+  font-size: 13px;
+}
+
+.lead, .subtle {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Consistent vertical rhythm */
+.stack > * + * {
+  margin-top: 10px;
+}
+
+/* Notes/list cards micro-hover */
+.note {
+  transition: transform .15s ease, box-shadow .18s ease, border-color .18s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.note:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+  border-color: #dbe3ff;
 }
