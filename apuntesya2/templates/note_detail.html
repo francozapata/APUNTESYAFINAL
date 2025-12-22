@@ -468,15 +468,21 @@
           {# ---------- VENDEDOR + CONTACTO ---------- #}
           {% if seller %}
           <div class="note-contact">
-            <p class="muted" style="margin:0 0 8px;">
-              Vendedor:
-              <a href="{{ url_for('seller_profile', seller_id=seller.id) }}">
-                {{ seller.name }}
-              </a>
+            <div style="display:flex;align-items:center;gap:10px;margin:0 0 8px;">
+              {% if seller.imagen_de_perfil %}
+                <img src="{{ url_for('user_avatar', user_id=seller.id) }}" alt="Foto de perfil" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #eef;background:#f4f4ff;" />
+              {% else %}
+                <div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#4b5563;background:#f4f4ff;border:2px solid #eef;">{{ (seller.name or seller.email)[0:1].upper() }}</div>
+              {% endif %}
+
+              <p class="muted" style="margin:0;">
+                Vendedor:
+                <a href="{{ url_for('seller_profile', seller_id=seller.id) }}">{{ seller.name }}</a>
               {% if seller_verified %}
                 <span class="rating-pill" title="Vendedor verificado">Verificado</span>
               {% endif %}
-            </p>
+              </p>
+            </div>
             {% if seller_contacts and (can_download or note.price_cents==0) %}
               <p class="muted" style="margin:0 0 4px;">Contacto del vendedor:</p>
               <div style="display:flex; gap:8px; flex-wrap:wrap;">

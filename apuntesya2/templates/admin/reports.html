@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="max-width:980px;margin:32px auto;">
+  <div class="card" style="padding:18px;">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+      <h2 style="margin:0;font-size:20px;">⚠️ Reportes de usuarios</h2>
+      <a class="btn ghost" href="/admin/hub">← Volver al hub</a>
+    </div>
+
+    {% if rows and rows|length > 0 %}
+      <div style="margin-top:14px;display:grid;gap:10px;">
+        {% for report, note_title, reporter_name, reporter_email in rows %}
+          <div class="card" style="padding:14px;background:#fafbff;">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+              <div>
+                <strong>{{ note_title }}</strong>
+                <div class="muted" style="margin-top:4px;">Motivo: <b>{{ report.reason }}</b> · Estado: <b>{{ report.status }}</b></div>
+                {% if report.details %}
+                  <div style="margin-top:6px;">{{ report.details }}</div>
+                {% endif %}
+                <div class="muted" style="margin-top:6px;">Por: {{ reporter_name }} ({{ reporter_email }}) · {{ report.created_at }}</div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <a class="btn ghost" href="{{ url_for('note_detail', note_id=report.note_id) }}" target="_blank" rel="noopener noreferrer">Ver apunte</a>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted" style="margin-top:14px;">No hay reportes todavía.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

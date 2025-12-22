@@ -3130,31 +3130,76 @@ def api_create_career():
 # -----------------------------------------------------------------------------
 # Foto de perfil
 # -----------------------------------------------------------------------------
+@app.get("/user/<int:user_id>/avatar")
+def user_avatar(user_id: int):
+    """Redirect a la foto de perfil del usuario.
+
+    Guardamos la referencia en users.imagen_de_perfil.
+    - Si es un blob de GCS (contiene '/'): generamos signed URL.
+    - Si es un filename local: servimos desde /static/uploads/profile_images/.
+    """
+    with Session() as s:
+        u = s.get(User, user_id)
+        if not u:
+            abort(404)
+        ref = (getattr(u, "imagen_de_perfil", None) or "").strip()
+
+    if not ref:
+        # fallback: avatar default
+        return redirect(url_for("static", filename="img/avatar_default.png"))
+
+    # Si es URL completa, la usamos tal cual
+    if ref.startswith("http://") or ref.startswith("https://"):
+        return redirect(ref)
+
+    # GCS blob
+    if "/" in ref:
+        try:
+            url = gcs_generate_signed_url(ref, seconds=600)
+            return redirect(url)
+        except Exception:
+            # fallback local
+            pass
+
+    return redirect(url_for("static", filename=f"uploads/profile_images/{ref}"))
+
+
 @app.route("/profile/upload_image", methods=["POST"])
 @login_required
 def upload_profile_image():
     file = request.files.get("file")
-    if not file or not file.filename.lower().endswith((".png", ".jpg", ".jpeg")):
-        flash("Formato no permitido. Usá PNG o JPG.")
+    if not file or not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+        flash("Formato no permitido. Usá PNG, JPG o WEBP.")
         return redirect(url_for("profile"))
 
-    dest_dir = os.path.join(app.static_folder, "uploads", "profile_images")
-    os.makedirs(dest_dir, exist_ok=True)
+    # preferimos GCS en producción; fallback a static local si no está configurado
+    ext = os.path.splitext(file.filename)[1].lower() or ".jpg"
+    if ext not in (".png", ".jpg", ".jpeg", ".webp"):
+        ext = ".jpg"
 
-    ext = ".jpg"
-    if file.filename.lower().endswith(".png"):
-        ext = ".png"
+    ref_to_store = None
 
-    filename = f"user_{current_user.id}{ext}"
-    file.save(os.path.join(dest_dir, filename))
+    if gcs_bucket:
+        try:
+            blob_name = f"profile_images/user_{current_user.id}{ext}"
+            # subimos como imagen
+            gcs_upload_file(file, blob_name)
+            ref_to_store = blob_name
+        except Exception:
+            ref_to_store = None
+
+    if not ref_to_store:
+        dest_dir = os.path.join(app.static_folder, "uploads", "profile_images")
+        os.makedirs(dest_dir, exist_ok=True)
+        filename = f"user_{current_user.id}{ext}"
+        file.save(os.path.join(dest_dir, filename))
+        ref_to_store = filename
 
     with Session() as s:
         u = s.get(User, current_user.id)
-        if hasattr(u, "imagen_de_perfil"):
-            u.imagen_de_perfil = filename
-        else:
-            u.profile_image = filename
-        s.commit()
+        if u and hasattr(u, "imagen_de_perfil"):
+            u.imagen_de_perfil = ref_to_store
+            s.commit()
 
     flash("📸 Foto actualizada con éxito")
     return redirect(url_for("profile"))

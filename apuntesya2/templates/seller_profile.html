@@ -3,7 +3,15 @@
 <div style="max-width:980px;margin:28px auto;">
   <div class="card" style="padding:18px;">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-      <div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        {% if seller.imagen_de_perfil %}
+          <img src="{{ url_for('user_avatar', user_id=seller.id) }}" alt="Foto de perfil" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid #eef;box-shadow:0 0 0 3px rgba(68,120,255,.12);background:#f4f4ff;" />
+        {% else %}
+          <div style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;color:#4b5563;background:#f4f4ff;border:2px solid #eef;box-shadow:0 0 0 3px rgba(68,120,255,.12);">
+            {{ (seller.name or seller.email)[0:1].upper() }}
+          </div>
+        {% endif %}
+        <div>
         <h1 style="margin:0;font-size:22px;">{{ seller.name }}</h1>
         <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           {% if seller_verified %}
@@ -14,6 +22,7 @@
           {% if avg_rating %}<span class="pill">⭐ {{ '%.2f' % avg_rating }}</span>{% endif %}
           <span class="pill">Ventas: {{ paid_sales }}</span>
           <span class="pill">Descargas: {{ total_downloads }}</span>
+        </div>
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
