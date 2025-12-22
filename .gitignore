@@ -5,3 +5,12 @@ __pycache__/
 uploads/
 instance/
 .DS_Store
+# Secrets
+.env
+apuntesya2/.env
+
+# Local DB
+apuntesya2/apuntesya.db
+*.db
+*.sqlite
+*.sqlite3
