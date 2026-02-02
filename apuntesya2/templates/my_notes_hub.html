@@ -2,29 +2,113 @@
 {% block content %}
 
 <style>
-  .hub-shell{max-width:980px;margin:28px auto;}
-  .hub-card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:18px 16px;box-shadow:0 10px 30px rgba(15,23,42,.05)}
-  .hub-title{margin:0 0 6px;font-size:22px}
-  .hub-sub{margin:0 0 14px;color:#6b7280}
-  .hub-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+  .hub-shell {
+    max-width: 980px;
+    margin: 28px auto;
+  }
+
+  .hub-card {
+    background: #fff;
+    border: 1px solid #e5e7f5;
+    border-radius: 16px;
+    padding: 18px 16px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .05)
+  }
+
+  .hub-title {
+    margin: 0 0 6px;
+    font-size: 22px
+  }
+
+  .hub-sub {
+    margin: 0 0 14px;
+    color: #6b7280
+  }
+
+  .hub-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 8px
+  }
+
   /* Botones más pequeños/delicados (manteniendo emojis) */
-  .btn-big{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:8px 12px;border-radius:999px;
-    background:linear-gradient(135deg,#4f7cff,#6b8dff);color:#fff;text-decoration:none;font-weight:600;font-size:13px;
-    border:1px solid rgba(68,120,255,.75);box-shadow:0 8px 18px rgba(68,120,255,.18)}
-  .btn-big:hover{opacity:.94}
-  .btn-big.ghost{background:#f7f9ff;color:#334;border-color:#e5e7f5;box-shadow:none}
-  .btn-big.ghost:hover{background:#eef2ff}
+  .btn-big {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #4f7cff, #6b8dff);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 13px;
+    border: 1px solid rgba(68, 120, 255, .75);
+    box-shadow: 0 8px 18px rgba(68, 120, 255, .18)
+  }
+
+  .btn-big:hover {
+    opacity: .94
+  }
+
+  .btn-big.ghost {
+    background: #f7f9ff;
+    color: #334;
+    border-color: #e5e7f5;
+    box-shadow: none
+  }
+
+  .btn-big.ghost:hover {
+    background: #eef2ff
+  }
 
   /* Reutilizamos el look del “Resumen de publicación” de /upload */
-  .upload-side-box{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:14px;margin-top:16px}
-  .upload-side-box h3{margin:0 0 8px;font-size:16px}
-  .text-sm{font-size:13px;color:#6b7280;line-height:1.35}
-  .upload-resumen-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:10px}
-  .upload-resumen-grid div{border:1px solid #eef2ff;border-radius:12px;padding:10px;background:#f8fafc}
-  .upload-resumen-grid div strong{display:block;font-size:12px;color:#334;margin-bottom:2px}
+  .upload-side-box {
+    background: #fff;
+    border: 1px solid #e5e7f5;
+    border-radius: 16px;
+    padding: 14px;
+    margin-top: 16px
+  }
 
-  @media (min-width:820px){
-    .upload-resumen-grid{grid-template-columns:1fr 1fr}
+  .upload-side-box h3 {
+    margin: 0 0 8px;
+    font-size: 16px
+  }
+
+  .text-sm {
+    font-size: 13px;
+    color: #6b7280;
+    line-height: 1.35
+  }
+
+  .upload-resumen-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 10px
+  }
+
+  .upload-resumen-grid div {
+    border: 1px solid #eef2ff;
+    border-radius: 12px;
+    padding: 10px;
+    background: #f8fafc
+  }
+
+  .upload-resumen-grid div strong {
+    display: block;
+    font-size: 12px;
+    color: #334;
+    margin-bottom: 2px
+  }
+
+  @media (min-width:820px) {
+    .upload-resumen-grid {
+      grid-template-columns: 1fr 1fr
+    }
   }
 </style>
 
@@ -45,13 +129,14 @@
       <p class="text-sm">
         Este cálculo es estimativo: si publicás un apunte pago, tomamos como base el precio que cargues
         (lo que vos querés recibir) y calculamos cuánto se suma en comisiones
-        (<strong>8% Mercado Pago</strong> + <strong>10% plataforma ApuntesYa</strong>) y cuál sería el total aproximado
+        ({{ MP_FEE_PERCENT }}% procesamiento + {{ APY_FEE_PERCENT }}% plataforma) y cuál sería el total aproximado
         que paga la persona que compra.
       </p>
 
       <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
         <label class="text-sm" style="font-weight:800;color:#334;">Lo que querés recibir (X):</label>
-        <input id="price" type="number" step="0.01" min="0" placeholder="Ej: 1200" style="width:160px;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+        <input id="price" type="number" step="0.01" min="0" placeholder="Ej: 1200"
+          style="width:160px;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
       </div>
 
       <div class="upload-resumen-grid">

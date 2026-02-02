@@ -241,7 +241,8 @@
             <input class="input" name="price" id="price" type="number" min="0" step="0.1">
             <p class="upload-hint">
               Este es el monto <b>neto</b> que querés recibir por cada venta.
-              Publicamos el apunte sumando un <b>18%</b> (10% plataforma + 8% Mercado Pago), con redondeo <b>siempre para arriba</b> y <b>1 decimal</b>.
+              Publicamos el apunte sumando un <b>18%</b> ({{ MP_FEE_PERCENT }}% procesamiento + {{ APY_FEE_PERCENT }}%
+              plataforma), con redondeo <b>siempre para arriba</b> y <b>1 decimal</b>.
               Ejemplo: si querés recibir $10, se publica a $12.2.
               Si lo dejás en blanco o 0, el apunte será gratis.
             </p>
@@ -300,10 +301,13 @@
               </li>
               <li class="paso-item">
                 <strong>Sumamos la comisión total (18%):</strong>
-                agregamos una Comisión Total del 18% al precio de venta que verá el comprador (redondeo siempre para arriba y 1 decimal):
+                agregamos una Comisión Total del 18% al precio de venta que verá el comprador (redondeo siempre para
+                arriba y 1 decimal):
                 <ul class="desglose-comision">
-                  <li><strong>8%</strong> (aprox.) para <strong>Mercado Pago</strong> (procesamiento de pago).</li>
-                  <li><strong>10%</strong> para <strong>ApuntesYa</strong> (mantenimiento y mejora de la plataforma).
+                  <li><strong>{{ MP_FEE_PERCENT }}%</strong> (aprox.) para <strong>Mercado Pago</strong> (procesamiento
+                    de pago).</li>
+                  <li><strong>{{ APY_FEE_PERCENT }}%</strong> para <strong>ApuntesYa</strong> (mantenimiento y mejora de
+                    la plataforma).
                   </li>
                 </ul>
               </li>
@@ -335,14 +339,14 @@
             <p class="text-sm">
               Este cálculo es estimativo. Tomamos como base el precio que cargues arriba
               (lo que vos querés recibir) y calculamos cuánto se suma en comisiones
-              (<strong>8% Mercado Pago</strong> + <strong>10% plataforma ApuntesYa</strong>) y
+              ({{ MP_FEE_PERCENT }}% procesamiento + {{ APY_FEE_PERCENT }}% plataforma) y
               cuál sería el total aproximado que paga la persona que compra.
             </p>
 
             <div class="upload-resumen-grid">
               <div><strong>Lo que querés recibir (X):</strong> $<span id="rp-precio">0.0</span></div>
-              <div><strong>Comisión Mercado Pago (8%):</strong> $<span id="rp-mp">0.0</span></div>
-              <div><strong>Comisión ApuntesYa (10%):</strong> $<span id="rp-ay">0.0</span></div>
+              <div><strong>Comisión Mercado Pago {{ MP_FEE_PERCENT }}%:</strong> $<span id="rp-mp">0.0</span></div>
+              <div><strong>Comisión ApuntesYa {{ APY_FEE_PERCENT }}%:</strong> $<span id="rp-ay">0.0</span></div>
               <div><strong>Neto estimado para vos:</strong> $<span id="rp-neto">0.0</span></div>
               <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.0</span></div>
             </div>
