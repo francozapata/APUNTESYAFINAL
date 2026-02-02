@@ -60,6 +60,7 @@ from apuntesya2.pricing import (
     published_from_net_cents,
     cents_to_amount,
     amount_to_cents,
+    APY_RATE,
     breakdown_from_net,
     breakdown_from_published,
     money_1_decimal,
@@ -2645,7 +2646,8 @@ def buy_note(note_id):
         s.commit()
 
         price_ars = float(money_1_decimal(cents_to_amount(buyer_price_cents)))  # final comprador (P), 1 decimal
-        platform_fee_percent = 0.10  # 10% de P (comisión ApuntesYa)
+        # Comisión de la plataforma (se cobra automáticamente vía marketplace_fee)
+        platform_fee_percent = float(APY_RATE)
         back_urls = {
             "success": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
             "failure": url_for("mp_return", note_id=note.id, _external=True) + f"?external_reference=purchase:{p.id}",
@@ -4115,7 +4117,7 @@ def buy_combo(combo_id):
         s.commit()
 
         price_ars = float(money_1_decimal(cents_to_amount(price_cents)))
-        platform_fee_percent = 0.10
+        platform_fee_percent = float(APY_RATE)
         marketplace_fee = float(money_1_decimal(price_ars * platform_fee_percent))
 
         back_urls = {
