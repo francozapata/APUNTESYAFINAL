@@ -425,11 +425,38 @@ def pricing_ctx():
         pub = cents_to_amount(int(published_cents or 0))
         return breakdown_from_published(pub)
 
+    # --- Fees globales para UI (se leen desde ENV) ---
+    import os
+
+    def _env_float(name: str, default: float) -> float:
+        try:
+            return float(os.getenv(name, str(default)).strip())
+        except Exception:
+            return default
+
+    def _pct(x: float) -> float:
+        # 0.2054 -> 20.54
+        return round(x * 100.0, 2)
+
+    # Defaults coherentes si no están en ENV
+    apy_rate = _env_float("APY_COMMISSION_RATE", 0.10)
+    mp_rate = _env_float("MP_COMMISSION_RATE", 0.08)
+    total_rate = _env_float("TOTAL_FEE_RATE", apy_rate + mp_rate)
+
     return dict(
         published_price=published_price,
         published_price_cents=published_price_cents,
         fee_breakdown_from_net=fee_breakdown_from_net,
         fee_breakdown_from_published=fee_breakdown_from_published,
+
+        # 🔥 NUEVO: variables globales para templates
+        APY_FEE_RATE=apy_rate,
+        MP_FEE_RATE=mp_rate,
+        TOTAL_FEE_RATE=total_rate,
+
+        APY_FEE_PERCENT=_pct(apy_rate),
+        MP_FEE_PERCENT=_pct(mp_rate),
+        TOTAL_FEE_PERCENT=_pct(total_rate),
     )
 
 
