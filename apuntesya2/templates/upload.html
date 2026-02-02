@@ -300,8 +300,9 @@
                 ingresás el monto que querés recibir por la venta de tu apunte.
               </li>
               <li class="paso-item">
-                <strong>Sumamos la comisión total (18%):</strong>
-                agregamos una Comisión Total del 18% al precio de venta que verá el comprador (redondeo siempre para
+                <strong>Sumamos la comisión total ({{ TOTAL_FEE_PERCENT }}%):</strong>
+                agregamos una Comisión Total del ({{ TOTAL_FEE_PERCENT }}%) al precio de venta que verá el comprador
+                (redondeo siempre para
                 arriba y 1 decimal):
                 <ul class="desglose-comision">
                   <li><strong>{{ MP_FEE_PERCENT }}%</strong> (aprox.) para <strong>Mercado Pago</strong> (procesamiento
