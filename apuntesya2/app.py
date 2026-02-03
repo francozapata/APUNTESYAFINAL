@@ -2217,6 +2217,87 @@ def profile_purchases():
             created_at=p.created_at.strftime("%Y-%m-%d %H:%M"),
         ))
     return render_template("profile_purchases.html", items=items)
+@app.route("/my-purchases")
+@login_required
+def my_purchases():
+    """Unified page: paid purchases + free downloads (notes + combos)."""
+    with Session() as s:
+        # ---- Paid purchases (notes + combos) ----
+        rows = s.execute(
+            select(Purchase, Note, Combo)
+            .outerjoin(Note, Note.id == Purchase.note_id)
+            .outerjoin(Combo, Combo.id == Purchase.combo_id)
+            .where(
+                Purchase.buyer_id == current_user.id,
+                Purchase.status == "approved",
+            )
+            .order_by(Purchase.created_at.desc())
+        ).all()
+
+        paid_items = []
+        for p, n, c in rows:
+            buyer_price_cents = int(getattr(p, "amount_cents", 0) or 0)
+
+            if getattr(p, "note_id", None) and n:
+                paid_items.append(dict(
+                    kind="note",
+                    purchase_id=p.id,
+                    content_id=n.id,
+                    title=n.title,
+                    price_cents=buyer_price_cents,
+                    created_at=p.created_at.strftime("%d/%m/%Y %H:%M"),
+                    view_url=url_for("note_detail", note_id=n.id),
+                    download_url=url_for("download_note", note_id=n.id),
+                ))
+            elif getattr(p, "combo_id", None) and c:
+                paid_items.append(dict(
+                    kind="combo",
+                    purchase_id=p.id,
+                    content_id=c.id,
+                    title=c.title,
+                    price_cents=buyer_price_cents,
+                    created_at=p.created_at.strftime("%d/%m/%Y %H:%M"),
+                    view_url=url_for("combo_detail", combo_id=c.id),
+                    download_url=url_for("download_combo", combo_id=c.id),
+                ))
+
+        # ---- Free downloads (notes + combos) ----
+        # We show only downloads marked as free to avoid duplicates with paid purchases.
+        dl_rows = s.execute(
+            select(DownloadLog, Note, Combo)
+            .outerjoin(Note, Note.id == DownloadLog.note_id)
+            .outerjoin(Combo, Combo.id == DownloadLog.combo_id)
+            .where(
+                DownloadLog.user_id == current_user.id,
+                DownloadLog.is_free == True,
+            )
+            .order_by(DownloadLog.created_at.desc())
+        ).all()
+
+        free_items = []
+        for dl, n, c in dl_rows:
+            if getattr(dl, "note_id", None) and n:
+                free_items.append(dict(
+                    kind="note",
+                    content_id=n.id,
+                    title=n.title,
+                    created_at=dl.created_at.strftime("%d/%m/%Y %H:%M"),
+                    view_url=url_for("note_detail", note_id=n.id),
+                    download_url=url_for("download_note", note_id=n.id),
+                ))
+            elif getattr(dl, "combo_id", None) and c:
+                free_items.append(dict(
+                    kind="combo",
+                    content_id=c.id,
+                    title=c.title,
+                    created_at=dl.created_at.strftime("%d/%m/%Y %H:%M"),
+                    view_url=url_for("combo_detail", combo_id=c.id),
+                    download_url=url_for("download_combo", combo_id=c.id),
+                ))
+
+    return render_template("my_purchases.html", paid_items=paid_items, free_items=free_items)
+
+
 
 
 

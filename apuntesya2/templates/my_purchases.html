@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .activity-shell { max-width: 980px; margin: 32px auto; }
+  .activity-card { background:#fff; border-radius:16px; border:1px solid #e5e7f5; padding:22px 20px; box-shadow:0 10px 30px rgba(15,23,42,0.05); }
+
+  .section-title { margin:0 0 8px 0; font-size:22px; font-weight:800; color:#111827; }
+  .section-sub { margin:0 0 18px 0; color:#6b7280; font-size:14px; }
+  .sep { height:1px; background:#eef0ff; margin:18px 0; }
+
+  .item {
+    display:flex; align-items:flex-start; justify-content:space-between; gap:14px;
+    padding:16px 16px; border:1px solid #eef0ff; border-radius:16px; margin-top:12px;
+    background: linear-gradient(180deg, #ffffff, #fbfbff);
+  }
+  .left { min-width:0; flex: 1; }
+  .title { font-weight:900; color:#111827; margin:2px 0 6px 0; font-size:16px; letter-spacing:0.2px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
+  .chip {
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:12px; padding:6px 10px; border-radius:999px;
+    border:1px solid #e5e7f5; background:#fff; color:#374151; font-weight:750;
+  }
+  .chip.status-paid { border-color: rgba(37,99,235,0.25); background: rgba(37,99,235,0.08); color:#1d4ed8; }
+  .chip.status-free { border-color: rgba(16,185,129,0.28); background: rgba(16,185,129,0.10); color:#047857; }
+  .chip.price { border-color: rgba(99,102,241,0.22); background: rgba(99,102,241,0.08); color:#4338ca; }
+  .meta { margin:0; color:#6b7280; font-size:12.5px; }
+
+  .actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+  .btn-sm {
+    text-decoration:none; padding:10px 14px; border-radius:999px;
+    border:1px solid #e5e7f5; background:#fff; color:#111827; font-weight:800; font-size:13px;
+  }
+  .btn-sm.primary { background:#2563eb; color:#fff; border-color:transparent; box-shadow:0 10px 20px rgba(37,99,235,0.18); }
+  .btn-sm:hover { filter: brightness(0.98); }
+
+  .empty {
+    padding:16px; border:1px dashed #d8dcff; border-radius:16px;
+    color:#6b7280; background:#fafaff; margin-top:10px;
+  }
+  .empty a { color:#2563eb; font-weight:800; text-decoration:none; }
+
+  @media (max-width: 720px) {
+    .item { flex-direction: column; }
+    .actions { justify-content:flex-start; }
+  }
+</style>
+
+<div class="activity-shell">
+  <div class="activity-card">
+    <h2 class="section-title">🧾 Mis compras</h2>
+    <p class="section-sub">Acá vas a encontrar todo lo que compraste o descargaste (gratis o pago).</p>
+
+    <div class="sep"></div>
+
+    <h3 class="section-title" style="font-size:18px;">🛒 Compras</h3>
+    <p class="section-sub">Contenido pago que compraste y podés volver a ver o descargar.</p>
+
+    {% if paid_items and paid_items|length > 0 %}
+      {% for it in paid_items %}
+        <div class="item">
+          <div class="left">
+            <div class="chips">
+              <span class="chip">{% if it.kind == 'combo' %}📦 Combo{% else %}📄 Apunte{% endif %}</span>
+              <span class="chip status-paid">✅ Pago aprobado</span>
+              <span class="chip">📅 {{ it.created_at }}</span>
+              <span class="chip price">💳 ${{ "%.2f"|format((it.price_cents or 0)/100) }}</span>
+            </div>
+            <p class="title">{{ it.title }}</p>
+            <p class="meta">Estado: disponible para volver a descargar.</p>
+          </div>
+          <div class="actions">
+            <a class="btn-sm" href="{{ it.view_url }}">👁 Ver</a>
+            <a class="btn-sm primary" href="{{ it.download_url }}">⬇️ Descargar</a>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty">Todavía no tenés compras. Podés buscar apuntes y combos desde <a href="{{ url_for('index') }}">Inicio</a>.</div>
+    {% endif %}
+
+    <div class="sep"></div>
+
+    <h3 class="section-title" style="font-size:18px;">📥 Descargas gratuitas</h3>
+    <p class="section-sub">Contenido gratis que descargaste y podés volver a descargar cuando quieras.</p>
+
+    {% if free_items and free_items|length > 0 %}
+      {% for it in free_items %}
+        <div class="item">
+          <div class="left">
+            <div class="chips">
+              <span class="chip">{% if it.kind == 'combo' %}📦 Combo{% else %}📄 Apunte{% endif %}</span>
+              <span class="chip status-free">🟢 Gratis</span>
+              <span class="chip">📅 {{ it.created_at }}</span>
+              <span class="chip price">💸 $0.00</span>
+            </div>
+            <p class="title">{{ it.title }}</p>
+            <p class="meta">Estado: descargado (podés volver a bajarlo).</p>
+          </div>
+          <div class="actions">
+            <a class="btn-sm" href="{{ it.view_url }}">👁 Ver</a>
+            <a class="btn-sm primary" href="{{ it.download_url }}">⬇️ Descargar</a>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty">Todavía no descargaste contenido gratuito. Podés encontrar material gratis desde <a href="{{ url_for('index') }}">Inicio</a>.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
