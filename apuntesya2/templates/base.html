@@ -336,9 +336,14 @@
     }
 
     .notif-item {
+      display: block;
       padding: 10px 12px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       color: #e5e7eb;
+    }
+
+    .notif-item:hover {
+      background: rgba(255, 255, 255, 0.06);
     }
 
     .notif-item.unread {
@@ -409,17 +414,17 @@
           <div class="notif-dropdown" id="notifDropdown">
             <div class="notif-dd-head">
               <span>Notificaciones</span>
-              <a href="{{ url_for('profile') }}" class="notif-dd-link">Ver perfil</a>
+              <a href="{{ url_for('notifications_list') }}" class="notif-dd-link">Ver todas</a>
             </div>
 
             {% if nav_notifications and nav_notifications|length > 0 %}
             <div class="notif-dd-list">
               {% for n in nav_notifications %}
-              <div class="notif-item {% if not n.is_read %}unread{% endif %}">
+              <a href="{{ url_for('notification_open', notif_id=n.id) }}" class="notif-item {% if not n.is_read %}unread{% endif %}" style="text-decoration:none;">
                 <div class="notif-title">{{ n.title }}</div>
                 {% if n.body %}<div class="notif-body">{{ n.body }}</div>{% endif %}
                 <div class="notif-meta">{{ n.created_at.strftime('%d/%m/%Y %H:%M') if n.created_at else '' }}</div>
-              </div>
+              </a>
               {% endfor %}
             </div>
             {% else %}
@@ -578,27 +583,12 @@
         btn.setAttribute('aria-expanded', 'false');
       }
 
-      async function markRead() {
-        try {
-          const res = await fetch("{{ url_for('notifications_mark_read') }}", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ all: true })
-          });
-          if (res.ok && badge) badge.remove();
-        } catch (e) {
-          // ignore
-        }
-      }
 
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
         const isOpen = dd.classList.toggle('open');
         btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-        if (isOpen) {
-          await markRead();
-        }
       });
 
       document.addEventListener('click', (e) => {

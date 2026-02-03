@@ -1,0 +1,335 @@
+<style>
+  /* Mantener estética similar a Subir apunte */
+  .combo-shell {
+    max-width: 980px;
+    margin: 32px auto;
+  }
+
+  .combo-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e5e7f5;
+    padding: 22px 20px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+  }
+
+  .combo-header {
+    margin-bottom: 16px;
+  }
+
+  .combo-header h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #111827;
+  }
+
+  .combo-header p {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: #6b7280;
+  }
+
+  .combo-grid {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.3fr);
+    gap: 24px;
+  }
+
+  .combo-main,
+  .combo-side {
+    min-width: 0;
+  }
+
+  .combo-form-group {
+    margin-bottom: 12px;
+  }
+
+  .combo-form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+  }
+
+  /* Respetar la clase .input del proyecto (si existe) y proveer fallback */
+  .combo-form-group .input,
+  .combo-form-group input[type="text"],
+  .combo-form-group input[type="number"],
+  .combo-form-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid #dbe2ff;
+    background: #fff;
+  }
+
+  .combo-form-group textarea {
+    min-height: 96px;
+    resize: vertical;
+  }
+
+  .combo-hint {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+
+  .combo-side-box {
+    border-radius: 14px;
+    border: 1px solid #eeeeff;
+    background: #fafbff;
+    padding: 14px 14px 12px;
+    margin-bottom: 12px;
+  }
+
+  .combo-side-box h3 {
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .combo-side-box p {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: #4b5563;
+  }
+
+  .combo-pill-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .combo-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid #e5e7f5;
+    background: #fff;
+    font-size: 12px;
+    color: #374151;
+    font-weight: 700;
+  }
+
+  .combo-pill b {
+    font-weight: 800;
+  }
+
+  .combo-note-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .combo-note {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    border: 1px solid #eef2ff;
+    border-radius: 14px;
+    padding: 12px;
+    background: #fff;
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  }
+
+  .combo-note:hover {
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+    transform: translateY(-1px);
+  }
+
+  .combo-note.checked {
+    border-color: #bcd0ff;
+    background: #f6f8ff;
+  }
+
+  .combo-note-title {
+    margin: 0;
+    font-size: 13.5px;
+    font-weight: 900;
+    color: #111827;
+  }
+
+  .combo-note-meta {
+    margin: 4px 0 0;
+    color: #6b7280;
+    font-size: 12px;
+  }
+
+  .combo-note input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    accent-color: #2563eb;
+  }
+
+  .combo-actions {
+    margin-top: 16px;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .combo-actions .btn {
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-weight: 700;
+    font-size: 13px;
+    border: 1px solid #e5e7f5;
+    background: #fff;
+    color: #111827;
+    text-decoration: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .combo-actions .btn:hover {
+    background: #f7f9ff;
+  }
+
+  .combo-actions .btn.primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.16);
+  }
+
+  .combo-actions .btn.primary:hover {
+    opacity: 0.92;
+  }
+
+  @media (max-width: 880px) {
+    .combo-card {
+      padding: 20px 16px;
+    }
+
+    .combo-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>
+
+<div class="combo-shell">
+  <div class="combo-card">
+    <div class="combo-header">
+      <h2>Crear combo</h2>
+      <p>Armá un pack con tus apuntes. Elegís cuánto querés recibir y seleccionás qué incluye el combo 📦</p>
+    </div>
+
+    <form method="post" action="{{ url_for('create_combo') }}">
+      <div class="combo-grid">
+        <!-- COLUMNA IZQUIERDA -->
+        <div class="combo-main">
+          <div class="combo-form-group">
+            <label for="comboTitle">Título</label>
+            <input class="input" id="comboTitle" name="title" required placeholder="Ej: Pack final Álgebra I" />
+          </div>
+
+          <div class="combo-form-group">
+            <label for="comboDesc">Descripción</label>
+            <textarea class="input" id="comboDesc" name="description" required
+              placeholder="Qué incluye el combo, alcance, año, cátedra, etc."></textarea>
+            <div class="combo-hint">Tip: aclarar si incluye resúmenes, parciales, finales, guías, etc.</div>
+          </div>
+
+          <div class="combo-form-group" style="margin-top:14px">
+            <label>Seleccioná al menos 2 apuntes</label>
+            <div class="combo-pill-row">
+              <span class="combo-pill" id="selectedPill">✅ Seleccionados: <b id="selectedCount">0</b></span>
+              <span class="combo-pill">💡 Pack por materia / parcial / final</span>
+            </div>
+
+            {% if notes and notes|length > 0 %}
+              <div class="combo-note-list">
+                {% for n in notes %}
+                  <label class="combo-note" data-note>
+                    <div style="min-width:0">
+                      <p class="combo-note-title">{{ n.title }}</p>
+                      <p class="combo-note-meta">
+                        {{ n.university or "" }}
+                        {% if n.university %} · {% endif %}
+                        {{ n.faculty or "" }}
+                        {% if n.faculty %} · {% endif %}
+                        {{ n.career or "" }}
+                      </p>
+                    </div>
+                    <input type="checkbox" name="note_ids" value="{{ n.id }}" />
+                  </label>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="combo-hint" style="margin-top:8px">
+                No tenés apuntes aprobados disponibles para armar combos.
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- COLUMNA DERECHA -->
+        <div class="combo-side">
+          <div class="combo-side-box">
+            <h3>Precio</h3>
+            <div class="combo-form-group" style="margin-bottom:0">
+              <label for="comboNet">Neto que quiero recibir (ARS)</label>
+              <input class="input" id="comboNet" name="price_net" type="number" min="0" step="0.1" placeholder="0 para gratis" />
+              <div class="combo-hint">
+                Publicamos el combo sumando un <b>18%</b> (10% plataforma + 8% Mercado Pago), con redondeo <b>siempre para arriba</b> y <b>1 decimal</b>.
+              </div>
+              <div class="combo-hint" style="margin-top:6px">
+                Ejemplo: si querés recibir <b>$10</b>, se publica a <b>$12.2</b>.
+              </div>
+            </div>
+          </div>
+
+          <div class="combo-side-box">
+            <h3>Consejo</h3>
+            <p style="margin:0">Los combos funcionan mejor cuando tienen un objetivo claro (por ejemplo: “Final”, “Parcial 1”, “Guías + Resúmenes”).</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="combo-actions">
+        <a class="btn" href="{{ url_for('my_notes_hub') }}">← Cancelar</a>
+        <button class="btn primary" type="submit">📦 Crear combo</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const notes = Array.from(document.querySelectorAll('[data-note]'));
+    const countEl = document.getElementById('selectedCount');
+
+    function refresh() {
+      let c = 0;
+      for (const row of notes) {
+        const cb = row.querySelector('input[type="checkbox"]');
+        const checked = !!(cb && cb.checked);
+        row.classList.toggle('checked', checked);
+        if (checked) c += 1;
+      }
+      if (countEl) countEl.textContent = String(c);
+    }
+
+    for (const row of notes) {
+      const cb = row.querySelector('input[type="checkbox"]');
+      if (!cb) continue;
+      cb.addEventListener('change', refresh);
+    }
+    refresh();
+  })();
+</script>

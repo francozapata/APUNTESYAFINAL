@@ -16,3 +16,16 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS contact_instagram VARCHAR(80),
   ADD COLUMN IF NOT EXISTS contact_visible_public BOOLEAN DEFAULT TRUE,
   ADD COLUMN IF NOT EXISTS contact_visible_buyers BOOLEAN DEFAULT TRUE;
+
+
+-- -----------------------
+--  EXTRA: download_logs supports combo downloads
+--  (note_id must be nullable for combo-only logs)
+-- -----------------------
+ALTER TABLE download_logs
+  ALTER COLUMN note_id DROP NOT NULL;
+
+ALTER TABLE download_logs
+  ADD COLUMN IF NOT EXISTS combo_id INTEGER;
+
+CREATE INDEX IF NOT EXISTS idx_download_logs_combo_id ON download_logs(combo_id);

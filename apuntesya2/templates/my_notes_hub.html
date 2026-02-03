@@ -2,190 +2,317 @@
 {% block content %}
 
 <style>
-  .hub-shell {
-    max-width: 980px;
-    margin: 28px auto;
-  }
+  .hub-shell { max-width: 1100px; margin: var(--space-lg) auto; }
+  .hub-card { background:#fff; border:1px solid #e5e7f5; border-radius:16px; padding: var(--space-md); box-shadow:0 10px 30px rgba(15,23,42,.05); }
+  .hub-title { margin:0 0 var(--space-sm); font-size: var(--title-md); }
+  .hub-sub { margin:0 0 var(--space-md); color:#6b7280; font-size:13px; }
 
-  .hub-card {
-    background: #fff;
-    border: 1px solid #e5e7f5;
-    border-radius: 16px;
-    padding: 18px 16px;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, .05)
+  .hub-tabs { display:flex; gap:10px; flex-wrap:wrap; margin: 8px 0 10px; }
+  .hub-tab {
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:8px 12px; border-radius:999px; font-weight:700; font-size:13px;
+    /* Estado "gris" por defecto (cascada): recién se pinta de azul al seleccionar */
+    border:1px solid #e5e7eb; background:#f3f4f6; color:#374151;
+    cursor:pointer; user-select:none; text-decoration:none;
   }
+  .hub-tab:hover { background:#eef2ff; color:#111827; }
+  .hub-tab.active { background: linear-gradient(135deg,#4f7cff,#6b8dff); color:#fff; border-color: rgba(68,120,255,.75); box-shadow:0 8px 18px rgba(68,120,255,.16); }
+  .hub-tab.disabled { opacity:.55; cursor:not-allowed; }
 
-  .hub-title {
-    margin: 0 0 6px;
-    font-size: 22px
-  }
+  .hub-panel { display:none; margin-top: 12px; }
+  .hub-panel.active { display:block; }
 
-  .hub-sub {
-    margin: 0 0 14px;
-    color: #6b7280
+  .subtabs { display:flex; gap:10px; flex-wrap:wrap; margin: 8px 0 12px; }
+  .subtab {
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:8px 12px; border-radius:999px; font-weight:700; font-size:13px;
+    /* Estado gris por defecto (cascada) */
+    border:1px solid #e5e7eb; background:#f3f4f6; color:#374151;
+    cursor:pointer; user-select:none;
   }
+  .subtab:hover { background:#eef2ff; color:#111827; }
+  .subtab.active { background: #2563eb; color:#fff; border-color:#2563eb; box-shadow:0 8px 18px rgba(37,99,235,.16); }
 
-  .hub-actions {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-top: 8px
-  }
+  .list-grid { display:grid; grid-template-columns: 1fr; gap: 10px; }
+  .item-card { border:1px solid #eef2ff; border-radius:14px; padding:12px; background:#fff; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .item-meta { min-width: 220px; }
+  .item-title { margin:0 0 4px; font-size:14px; font-weight:800; color:#111827; }
+  .item-sub { margin:0; color:#6b7280; font-size:12px; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 
-  /* Botones más pequeños/delicados (manteniendo emojis) */
-  .btn-big {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 8px 12px;
-    border-radius: 999px;
-    background: linear-gradient(135deg, #4f7cff, #6b8dff);
-    color: #fff;
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 13px;
-    border: 1px solid rgba(68, 120, 255, .75);
-    box-shadow: 0 8px 18px rgba(68, 120, 255, .18)
+  .btn-mini {
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    padding:7px 11px; border-radius:999px; font-weight:700; font-size:12px;
+    border:1px solid #e5e7f5; background:#fff; color:#111827; text-decoration:none; cursor:pointer;
   }
+  .btn-mini:hover { background:#f7f9ff; }
+  .btn-mini.primary { background: #2563eb; border-color:#2563eb; color:#fff; }
+  .btn-mini.primary:hover { opacity:.92; }
+  .btn-mini.danger { background:#fee2e2; border-color:#fecaca; color:#7f1d1d; }
+  .btn-mini.danger:hover { background:#fecaca; }
 
-  .btn-big:hover {
-    opacity: .94
-  }
+  .muted-box { border:1px dashed #dbe2ff; border-radius:14px; padding:14px; background:#fafbff; color:#6b7280; font-size:13px; }
+  .section-title { margin:0 0 8px; font-size:15px; font-weight:900; color:#111827; }
+  .hr { height:1px; background:#eef2ff; margin: 10px 0; }
 
-  .btn-big.ghost {
-    background: #f7f9ff;
-    color: #334;
-    border-color: #e5e7f5;
-    box-shadow: none
-  }
+  /* Compact the embedded forms a bit when used inside the hub */
+  .hub-panel .upload-shell { margin: 0 auto; }
+  .hub-panel .shell { margin: 0 auto; }
 
-  .btn-big.ghost:hover {
-    background: #eef2ff
-  }
+  .stats-grid{ display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:12px; margin-top:12px; }
+  .stat-card{ background:#fff; border:1px solid #e5e7f5; border-radius:16px; padding:12px; box-shadow:0 10px 30px rgba(15,23,42,.04); }
+  .stat-k{ font-size:12px; color:#6b7280; margin:0 0 4px; }
+  .stat-v{ font-size:20px; font-weight:900; margin:0; }
+  .stat-sub{ font-size:12px; color:#6b7280; margin-top:6px; }
+  .note-stats-list{ margin-top:14px; display:flex; flex-direction:column; gap:10px; }
+  .note-stat-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:12px; border:1px solid #e5e7f5; border-radius:16px; background:#fff; box-shadow:0 10px 30px rgba(15,23,42,.04); }
+  .note-stat-title{ font-weight:900; margin:0; }
+  .note-stat-meta{ color:#6b7280; font-size:12px; margin-top:2px; }
+  .note-stat-badges{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .pill{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px; border:1px solid #e5e7eb; background:#f3f4f6; color:#374151;}
+  .pill.primary{ border-color:#c7d2fe; background:#eef2ff; color:#1e3a8a; }
+  @media (max-width: 900px){ .stats-grid{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
 
-  /* Reutilizamos el look del “Resumen de publicación” de /upload */
-  .upload-side-box {
-    background: #fff;
-    border: 1px solid #e5e7f5;
-    border-radius: 16px;
-    padding: 14px;
-    margin-top: 16px
-  }
-
-  .upload-side-box h3 {
-    margin: 0 0 8px;
-    font-size: 16px
-  }
-
-  .text-sm {
-    font-size: 13px;
-    color: #6b7280;
-    line-height: 1.35
-  }
-
-  .upload-resumen-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    margin-top: 10px
-  }
-
-  .upload-resumen-grid div {
-    border: 1px solid #eef2ff;
-    border-radius: 12px;
-    padding: 10px;
-    background: #f8fafc
-  }
-
-  .upload-resumen-grid div strong {
-    display: block;
-    font-size: 12px;
-    color: #334;
-    margin-bottom: 2px
-  }
-
-  @media (min-width:820px) {
-    .upload-resumen-grid {
-      grid-template-columns: 1fr 1fr
-    }
-  }
 </style>
 
 <div class="hub-shell">
   <div class="hub-card">
     <h1 class="hub-title">Mis apuntes</h1>
-    <p class="hub-sub">Desde acá podés crear apuntes, crear combos y administrar todo lo que ya publicaste.</p>
+    <p class="hub-sub">En modo cascada: primero elegís una acción y recién ahí aparecen las opciones del siguiente nivel.</p>
 
-    <div class="hub-actions">
-      <a class="btn-big" href="{{ url_for('upload_note') }}">➕ Nuevo apunte</a>
-      <a class="btn-big" href="{{ url_for('create_combo') }}">🧺 Nuevo combo</a>
-      <a class="btn-big ghost" href="{{ url_for('my_content_edit') }}">✏️ Editar mis apuntes/combos</a>
+    <!-- Nivel 1: dos botones iguales + estadísticas (luego) -->
+    <div class="hub-tabs" role="tablist" aria-label="Mis apuntes">
+      <button class="hub-tab" type="button" data-target="#panel-new">➕ Nuevo contenido</button>
+      <button class="hub-tab" type="button" data-target="#panel-edit">✏️ Editar contenido</button>
+      <button class="hub-tab" type="button" data-target="#panel-stats">📊 Estadísticas</button>
     </div>
 
-    <!-- Bloque informativo (misma estética que hoy) -->
-    <div class="upload-side-box" id="resumen-publicacion">
-      <h3>Resumen de publicación</h3>
-      <p class="text-sm">
-        Este cálculo es estimativo: si publicás un apunte pago, tomamos como base el precio que cargues
-        (lo que vos querés recibir) y calculamos cuánto se suma en comisiones
-        ({{ MP_FEE_PERCENT }}% procesamiento + {{ APY_FEE_PERCENT }}% plataforma) y cuál sería el total aproximado
-        que paga la persona que compra.
-      </p>
+    <!-- Placeholder inicial: solo se ven los botones del nivel 1 -->
+    <div id="hub-placeholder" class="muted-box" style="margin-top:12px">
+      👆 Seleccioná una opción para que aparezcan los siguientes pasos.
+    </div>
 
-      <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-        <label class="text-sm" style="font-weight:800;color:#334;">Lo que querés recibir (X):</label>
-        <input id="price" type="number" step="0.01" min="0" placeholder="Ej: 1200"
-          style="width:160px;padding:10px;border-radius:12px;border:1px solid #e5e7f5;" />
+    <!-- PANEL: NUEVO CONTENIDO -->
+    <div id="panel-new" class="hub-panel">
+      <div class="subtabs" role="tablist" aria-label="Nuevo contenido">
+        <button class="subtab" type="button" data-subtarget="#new-note">📄 Nuevo apunte</button>
+        <button class="subtab" type="button" data-subtarget="#new-combo">📦 Nuevo combo</button>
       </div>
 
-      <div class="upload-resumen-grid">
-        <div><strong>Lo que querés recibir (X):</strong> $<span id="rp-precio">0.00</span></div>
-        <div><strong>Comisión Mercado Pago (8%):</strong> $<span id="rp-mp">0.00</span></div>
-        <div><strong>Comisión ApuntesYa (10%):</strong> $<span id="rp-ay">0.0</span></div>
-        <div><strong>Neto estimado para vos:</strong> $<span id="rp-neto">0.00</span></div>
-        <div><strong>Total estimado que paga el comprador:</strong> $<span id="rp-buyer">0.00</span></div>
+      <div id="new-note" class="hub-panel" style="margin-top:0">
+        {% include "components/upload_form.html" %}
+      </div>
+
+      <div id="new-combo" class="hub-panel" style="margin-top:0">
+        {% include "components/combo_create_form.html" %}
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="muted-box">
+        💡 Tip: los botones de arriba quedan siempre en el mismo lugar. Así no te perdés y todo mantiene la misma lógica.
       </div>
     </div>
+
+    <!-- PANEL: EDITAR CONTENIDO -->
+    <div id="panel-edit" class="hub-panel">
+      <div class="subtabs" role="tablist" aria-label="Editar contenido">
+        <button class="subtab" type="button" data-subtarget="#edit-notes">📄 Mis apuntes</button>
+        <button class="subtab" type="button" data-subtarget="#edit-combos">📦 Mis combos</button>
+      </div>
+
+      <!-- Mis apuntes -->
+      <div id="edit-notes" class="hub-panel" style="margin-top:0">
+        <div class="section-title">Tus apuntes</div>
+
+        {% if my_notes and my_notes|length > 0 %}
+          <div class="list-grid">
+            {% for n in my_notes %}
+              <div class="item-card">
+                <div class="item-meta">
+                  <p class="item-title">{{ n.title }}</p>
+                  <p class="item-sub">
+                    Neto: <b>${{ (n.seller_net_cents or 0) / 100 }}</b>
+                    · Publicado: <b>${{ (n.price_cents or 0) / 100 }}</b>
+                    {% if n.download_count is not none %}· Descargas: <b>{{ n.download_count }}</b>{% endif %}
+                  </p>
+                </div>
+
+                <div class="actions">
+                  <a class="btn-mini" href="{{ url_for('note_detail', note_id=n.id) }}">👁 Ver</a>
+                  <a class="btn-mini primary" href="{{ url_for('seller_edit_note_get', note_id=n.id) }}">✏️ Editar</a>
+                  <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline">
+                    <button class="btn-mini danger" type="submit" onclick="return confirm('¿Eliminar este apunte?');">🗑 Eliminar</button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="muted-box">Todavía no tenés apuntes publicados.</div>
+        {% endif %}
+      </div>
+
+      <!-- Mis combos -->
+      <div id="edit-combos" class="hub-panel" style="margin-top:0">
+        <div class="section-title">Tus combos</div>
+
+        {% if combos and combos|length > 0 %}
+          <div class="list-grid">
+            {% for c in combos %}
+              <div class="item-card">
+                <div class="item-meta">
+                  <p class="item-title">{{ c.title }}</p>
+                  <p class="item-sub">
+                    Neto: <b>${{ (c.seller_net_cents or 0) / 100 }}</b>
+                    · Publicado: <b>${{ (c.price_cents or 0) / 100 }}</b>
+                  </p>
+                </div>
+
+                <div class="actions">
+                  <a class="btn-mini" href="{{ url_for('combo_detail', combo_id=c.id) }}">👁 Ver</a>
+                  <a class="btn-mini primary" href="{{ url_for('combo_edit', combo_id=c.id) }}">✏️ Editar</a>
+                  <form method="post" action="{{ url_for('combo_delete', combo_id=c.id) }}" style="display:inline">
+                    <button class="btn-mini danger" type="submit" onclick="return confirm('¿Eliminar este combo?');">🗑 Eliminar</button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="muted-box">Todavía no tenés combos publicados.</div>
+        {% endif %}
+      </div>
+
+      <div class="hr"></div>
+      <div class="muted-box">
+        ✅ Las acciones siguen siempre el mismo orden: <b>Ver</b> (neutral) · <b>Editar</b> (principal) · <b>Eliminar</b> (peligro).
+      </div>
+    </div>
+    <!-- ============== -->
+    <!-- Estadísticas -->
+    <!-- ============== -->
+    <div id="panel-stats" class="hub-panel" role="tabpanel" aria-label="Estadísticas">
+      <div class="muted-box">
+        📌 Estos números se calculan con <b>descargas reales</b> y <b>compras aprobadas</b>.
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <p class="stat-k">💰 Dinero ganado</p>
+          <p class="stat-v">$ {{ stats_totals.earned_total_ars }}</p>
+          <div class="stat-sub">Apuntes: $ {{ stats_totals.earned_notes_ars }} · Combos: $ {{ stats_totals.earned_combos_ars }}</div>
+        </div>
+        <div class="stat-card">
+          <p class="stat-k">🛒 Compras</p>
+          <p class="stat-v">{{ stats_totals.purchases_total }}</p>
+          <div class="stat-sub">Incluye apuntes + combos</div>
+        </div>
+        <div class="stat-card">
+          <p class="stat-k">📥 Descargas</p>
+          <p class="stat-v">{{ stats_totals.downloads_total }}</p>
+          <div class="stat-sub">Solo apuntes</div>
+        </div>
+        <div class="stat-card">
+          <p class="stat-k">📚 Publicaciones</p>
+          <p class="stat-v">{{ stats_totals.notes_count + stats_totals.combos_count }}</p>
+          <div class="stat-sub">{{ stats_totals.notes_count }} apuntes · {{ stats_totals.combos_count }} combos</div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <h3 class="hub-title" style="margin-top:0">📄 Por apunte</h3>
+      {% if note_stats and note_stats|length > 0 %}
+        <div class="note-stats-list">
+          {% for n in note_stats %}
+            <div class="note-stat-row">
+              <div>
+                <p class="note-stat-title">{{ n.title }}</p>
+                <div class="note-stat-meta">{{ n.university }} · {{ n.faculty }} · {{ n.career }}</div>
+              </div>
+              <div class="note-stat-badges">
+                <span class="pill">📥 {{ n.downloads }} descarga{{ '' if n.downloads == 1 else 's' }}</span>
+                <span class="pill">🛒 {{ n.purchases }} compra{{ '' if n.purchases == 1 else 's' }}</span>
+                <span class="pill primary">💰 $ {{ n.earned_ars }}</span>
+                <a class="pill" href="{{ url_for('note_detail', note_id=n.id) }}">👁 Ver</a>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="muted-box">Todavía no tenés apuntes para mostrar estadísticas.</div>
+      {% endif %}
+    </div>
+
+
   </div>
 </div>
 
 <script>
   (function () {
-    var box = document.getElementById('resumen-publicacion');
-    if (!box) return;
-
-    var precioInput = document.getElementById('price');
-    function toNum(v) {
-      var x = parseFloat((v || '').replace(',', '.'));
-      return isNaN(x) ? 0 : x;
+    function setActive(btns, activeBtn) {
+      btns.forEach(function (b) { b.classList.remove('active'); });
+      activeBtn.classList.add('active');
+    }
+    function showPanel(allPanels, targetSel) {
+      allPanels.forEach(function (p) { p.classList.remove('active'); });
+      var t = document.querySelector(targetSel);
+      if (t) t.classList.add('active');
     }
 
-    var ayPct = 10.0;
-    var mpPct = 8.0;
-    var totalPct = ayPct + mpPct; // 18%
-    function ceil1dec(n) { return Math.ceil(n * 10) / 10; }
-    function fmt(n) { return (n || 0).toFixed(1); }
-
-    function recalc() {
-      var x = toNum(precioInput.value);
-      var totalBuyer = (x <= 0) ? 0 : ceil1dec(x / 0.82);
-      var feeMP = totalBuyer * (mpPct / 100);
-      var feeAY = totalBuyer * (ayPct / 100);
-      var netoVendedor = x;
-
-      var $ = function (id) { return document.getElementById(id); };
-      if ($('rp-precio')) $('rp-precio').textContent = fmt(x);
-      if ($('rp-mp')) $('rp-mp').textContent = fmt(feeMP);
-      if ($('rp-ay')) $('rp-ay').textContent = fmt(feeAY);
-      if ($('rp-neto')) $('rp-neto').textContent = fmt(netoVendedor);
-      if ($('rp-buyer')) $('rp-buyer').textContent = fmt(totalBuyer);
+    function resetSecondLevel(panelEl) {
+      if (!panelEl) return;
+      // Reset subtabs styles
+      Array.prototype.slice.call(panelEl.querySelectorAll('.subtab')).forEach(function (b) {
+        b.classList.remove('active');
+      });
+      // Hide immediate sub-panels within that level
+      Array.prototype.slice.call(panelEl.querySelectorAll(':scope > .hub-panel')).forEach(function (p) {
+        p.classList.remove('active');
+      });
     }
 
-    if (precioInput) {
-      precioInput.addEventListener('input', recalc);
-      recalc();
+    function togglePlaceholder(show) {
+      var ph = document.getElementById('hub-placeholder');
+      if (!ph) return;
+      ph.style.display = show ? 'block' : 'none';
     }
+
+    // Level 1 tabs
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.hub-tab'));
+    var panels = Array.prototype.slice.call(document.querySelectorAll('.hub-card > .hub-panel'));
+    tabs.forEach(function (t) {
+      if (t.classList.contains('disabled')) return;
+      t.addEventListener('click', function () {
+        var target = t.getAttribute('data-target');
+        if (!target) return;
+        setActive(tabs.filter(function(x){return !x.classList.contains('disabled');}), t);
+        showPanel(panels, target);
+        togglePlaceholder(false);
+        // Cascada: al entrar a un panel de nivel 1, el nivel 2 aparece, pero sin selección.
+        resetSecondLevel(document.querySelector(target));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+
+    // Start state: no panel visible, placeholder on
+    togglePlaceholder(true);
+
+    // Subtabs (works for both new/edit sections)
+    Array.prototype.slice.call(document.querySelectorAll('.subtabs')).forEach(function (wrap) {
+      var btns = Array.prototype.slice.call(wrap.querySelectorAll('.subtab'));
+      var parentPanel = wrap.closest('.hub-panel');
+      var localPanels = parentPanel ? Array.prototype.slice.call(parentPanel.querySelectorAll(':scope > .hub-panel')) : [];
+      btns.forEach(function (b) {
+        b.addEventListener('click', function () {
+          var target = b.getAttribute('data-subtarget');
+          if (!target) return;
+          setActive(btns, b);
+          showPanel(localPanels, target);
+        });
+      });
+    });
   })();
 </script>
 

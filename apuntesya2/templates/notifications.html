@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .notifs-shell{ max-width:920px; margin:28px auto; }
+  .notifs-card{ background:#fff; border:1px solid #e5e7f5; border-radius:16px; padding:18px 16px; box-shadow:0 10px 30px rgba(15,23,42,.05); }
+  .notifs-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+  .notifs-title{ font-size:18px; font-weight:800; color:#111827; margin:0; }
+  .notifs-actions{ display:flex; gap:10px; flex-wrap:wrap; }
+  .btn-pill{ padding:7px 13px; border-radius:999px; border:none; background:#f3f6ff; color:#334155; font-size:13px; font-weight:700; cursor:pointer; text-decoration:none; border:1px solid #dfe4ff; }
+  .btn-pill.ghost{ background:#fff; color:#111827; }
+  .notif-row{ display:block; text-decoration:none; padding:12px 12px; border-radius:14px; border:1px solid #e5e7f5; background:#fafbff; margin-top:10px; }
+  .notif-row.unread{ background:#f1f7ff; border-color:#cfe0ff; }
+  .notif-title{ font-weight:800; color:#111827; font-size:13px; }
+  .notif-body{ color:#6b7280; font-size:13px; margin-top:4px; white-space:pre-wrap; }
+  .notif-meta{ color:#6b7280; font-size:11px; margin-top:6px; }
+</style>
+
+<div class="notifs-shell">
+  <div class="notifs-card">
+    <div class="notifs-head">
+      <h1 class="notifs-title">Notificaciones</h1>
+      <div class="notifs-actions">
+        <button class="btn-pill ghost" type="button" id="markAllReadBtn">Marcar todo como leído</button>
+        <a class="btn-pill" href="{{ url_for('my_notes_hub') }}">Ir a Mis apuntes</a>
+      </div>
+    </div>
+
+    {% if notifications and notifications|length > 0 %}
+      {% for n in notifications %}
+        <a class="notif-row {% if not n.is_read %}unread{% endif %}" href="{{ url_for('notification_open', notif_id=n.id) }}">
+          <div class="notif-title">{{ n.title }}</div>
+          {% if n.body %}<div class="notif-body">{{ n.body }}</div>{% endif %}
+          <div class="notif-meta">
+            {{ n.created_at.strftime('%d/%m/%Y %H:%M') if n.created_at else '' }}
+            {% if not n.is_read %} · <b>Nueva</b>{% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    {% else %}
+      <div style="padding:12px;color:#6b7280;">No tenés notificaciones por ahora.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  (function(){
+    const btn = document.getElementById('markAllReadBtn');
+    if(!btn) return;
+    btn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('{{ url_for("notifications_mark_read") }}', {method:'POST'});
+        const data = await res.json();
+        if(data && data.ok){ window.location.reload(); }
+      } catch(e) {}
+    });
+  })();
+</script>
+
+{% endblock %}

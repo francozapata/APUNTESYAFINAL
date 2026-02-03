@@ -205,7 +205,7 @@
   <hr style="margin:32px 0;">
 
   <p style="color:#555;">
-    Podés volver al <a href="{{ url_for('login') }}">inicio de sesión</a>.
+    Podés volver al {% if current_user.is_authenticated %}<a href="{{ url_for("index") }}">inicio</a>{% else %}<a href="{{ url_for("login") }}">inicio de sesión</a>{% endif %}.
   </p>
 </div>
 {% endblock %}

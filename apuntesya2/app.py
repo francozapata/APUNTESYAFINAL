@@ -1611,13 +1611,6 @@ def profile():
 
         mp_connected = bool(getattr(me, "mp_access_token", None))
 
-        # Notifications list for profile (latest 50)
-        notifications = s.execute(
-            select(Notification)
-            .where(Notification.user_id == current_user.id)
-            .order_by(Notification.created_at.desc())
-            .limit(50)
-        ).scalars().all()
 
     return render_template(
         "profile.html",
@@ -1632,7 +1625,7 @@ def profile():
         contact_visible_public=contact_visible_public,
         contact_visible_buyers=contact_visible_buyers,
         mp_connected=mp_connected,
-        notifications=notifications,
+        # Notificaciones ahora viven solo en el ícono de la navbar (y /notifications)
     )
 
 
@@ -1640,6 +1633,53 @@ def profile():
 # -----------------------------------------------------------------------------
 # Notifications
 # -----------------------------------------------------------------------------
+@app.get("/notifications")
+@login_required
+def notifications_list():
+    """Página simple para ver todas las notificaciones (solo lectura)."""
+    with Session() as s:
+        notifs = s.execute(
+            select(Notification)
+            .where(Notification.user_id == current_user.id)
+            .order_by(Notification.created_at.desc())
+            .limit(200)
+        ).scalars().all()
+    return render_template("notifications.html", notifications=notifs)
+
+
+@app.get("/notifications/<int:notif_id>")
+@login_required
+def notification_open(notif_id: int):
+    """Marca una notificación como leída y redirige a un lugar útil."""
+    target = None
+    with Session() as s:
+        n = s.get(Notification, notif_id)
+        if not n or n.user_id != current_user.id:
+            return redirect(url_for("notifications_list"))
+
+        # Mark read
+        try:
+            n.is_read = True
+            s.commit()
+        except Exception:
+            pass
+
+        kind = (n.kind or "").lower().strip()
+
+    # Routing heurístico por tipo
+    if kind in ("purchase_buyer",):
+        target = url_for("profile_purchases")
+    elif kind in ("sale_seller",):
+        target = url_for("profile_balance")
+    elif kind.startswith("note_") or kind.startswith("combo_"):
+        # Lo más lógico para el usuario: gestionar sus apuntes/combos
+        target = url_for("my_notes_hub")
+    elif "admin" in kind and getattr(current_user, "is_admin", False):
+        target = url_for("admin_hub")
+
+    return redirect(target or url_for("notifications_list"))
+
+
 @app.post("/notifications/mark_read")
 @login_required
 def notifications_mark_read():
@@ -1691,27 +1731,17 @@ def profile_update_contact():
 @app.get("/my-notes")
 @login_required
 def my_notes_hub():
-    """Hub para creadores: nuevo apunte / nuevo combo / editar publicaciones."""
-    return render_template("my_notes_hub.html")
-
-
-@app.get("/my-content/edit")
-@login_required
-def my_content_edit():
-    """Página unificada para ver/editar/borrar apuntes y combos del usuario."""
+    """Hub para creadores: nuevo contenido / editar publicaciones / (próximamente) estadísticas."""
     with Session() as s:
         # Apuntes del usuario + cantidad de descargas (compras aprobadas)
         rows = s.execute(
             select(
                 Note,
-                func.count(Purchase.id).label("download_count"),
+                func.count(DownloadLog.id).label("download_count"),
             )
             .outerjoin(
-                Purchase,
-                and_(
-                    Purchase.note_id == Note.id,
-                    Purchase.status == "approved",
-                ),
+                DownloadLog,
+                DownloadLog.note_id == Note.id,
             )
             .where(
                 Note.seller_id == current_user.id,
@@ -1735,7 +1765,188 @@ def my_content_edit():
             .order_by(Combo.created_at.desc())
         ).scalars().all()
 
-    return render_template("my_content_edit.html", my_notes=my_notes, combos=combos)
+        # Apuntes disponibles para armar combos (aprobados/activos si existen esos campos)
+        q_combo_notes = select(Note).where(
+            Note.seller_id == current_user.id,
+            Note.deleted_at.is_(None),
+        )
+        if hasattr(Note, "is_active"):
+            q_combo_notes = q_combo_notes.where(Note.is_active == True)
+        if hasattr(Note, "moderation_status"):
+            q_combo_notes = q_combo_notes.where(Note.moderation_status == "approved")
+
+        combo_notes = s.execute(q_combo_notes.order_by(Note.created_at.desc())).scalars().all()
+
+
+    
+        # -----------------------------------------------------------------
+        # Estadísticas (totales + por apunte) - basado en logs reales
+        # -----------------------------------------------------------------
+        # Totales de apuntes
+        total_downloads = s.execute(
+            select(func.count(DownloadLog.id))
+            .select_from(DownloadLog)
+            .join(Note, Note.id == DownloadLog.note_id)
+            .where(Note.seller_id == current_user.id)
+        ).scalar_one() or 0
+
+        total_purchases = s.execute(
+            select(func.count(Purchase.id))
+            .select_from(Purchase)
+            .join(Note, Note.id == Purchase.note_id)
+            .where(
+                Purchase.status == "approved",
+                Note.seller_id == current_user.id,
+            )
+        ).scalar_one() or 0
+
+        total_earned_cents_notes = s.execute(
+            select(func.coalesce(func.sum(Note.price_cents), 0))
+            .select_from(Purchase)
+            .join(Note, Note.id == Purchase.note_id)
+            .where(
+                Purchase.status == "approved",
+                Note.seller_id == current_user.id,
+            )
+        ).scalar_one() or 0
+
+        # Totales de combos
+        total_combo_purchases = s.execute(
+            select(func.count(ComboPurchase.id))
+            .select_from(ComboPurchase)
+            .join(Combo, Combo.id == ComboPurchase.combo_id)
+            .where(
+                ComboPurchase.status == "approved",
+                Combo.seller_id == current_user.id,
+            )
+        ).scalar_one() or 0
+
+        total_earned_cents_combos = s.execute(
+            select(func.coalesce(func.sum(Combo.seller_net_cents), 0))
+            .select_from(ComboPurchase)
+            .join(Combo, Combo.id == ComboPurchase.combo_id)
+            .where(
+                ComboPurchase.status == "approved",
+                Combo.seller_id == current_user.id,
+            )
+        ).scalar_one() or 0
+
+        stats_totals = {
+            "notes_count": int(len(my_notes)),
+            "combos_count": int(len(combos)),
+            "downloads_total": int(total_downloads),
+            "purchases_total": int(int(total_purchases) + int(total_combo_purchases)),
+            "earned_total_cents": int(int(total_earned_cents_notes) + int(total_earned_cents_combos)),
+            "earned_notes_cents": int(total_earned_cents_notes),
+            "earned_combos_cents": int(total_earned_cents_combos),
+        }
+
+        stats_totals["earned_total_ars"] = float(money_1_decimal(cents_to_amount(stats_totals["earned_total_cents"])))
+        stats_totals["earned_notes_ars"] = float(money_1_decimal(cents_to_amount(stats_totals["earned_notes_cents"])))
+        stats_totals["earned_combos_ars"] = float(money_1_decimal(cents_to_amount(stats_totals["earned_combos_cents"])))
+
+        # Por apunte
+        dl_sub = (
+            select(
+                DownloadLog.note_id.label("nid"),
+                func.count(DownloadLog.id).label("downloads"),
+            )
+            .select_from(DownloadLog)
+            .group_by(DownloadLog.note_id)
+            .subquery()
+        )
+
+        pc_sub = (
+            select(
+                Purchase.note_id.label("nid"),
+                func.count(Purchase.id).label("purchases"),
+                func.coalesce(func.sum(Note.price_cents), 0).label("earned_cents"),
+            )
+            .select_from(Purchase)
+            .join(Note, Note.id == Purchase.note_id)
+            .where(Purchase.status == "approved")
+            .group_by(Purchase.note_id)
+            .subquery()
+        )
+
+        note_stats_rows = s.execute(
+            select(
+                Note,
+                func.coalesce(pc_sub.c.purchases, 0).label("purchases"),
+                func.coalesce(dl_sub.c.downloads, 0).label("downloads"),
+                func.coalesce(pc_sub.c.earned_cents, 0).label("earned_cents"),
+            )
+            .outerjoin(pc_sub, pc_sub.c.nid == Note.id)
+            .outerjoin(dl_sub, dl_sub.c.nid == Note.id)
+            .where(
+                Note.seller_id == current_user.id,
+                Note.deleted_at.is_(None),
+            )
+            .order_by(Note.created_at.desc())
+        ).all()
+
+        note_stats = []
+        for n, pcount, dcount, earned_cents in note_stats_rows:
+            note_stats.append(
+                {
+                    "id": n.id,
+                    "title": n.title,
+                    "university": n.university,
+                    "faculty": n.faculty,
+                    "career": n.career,
+                    "purchases": int(pcount or 0),
+                    "downloads": int(dcount or 0),
+                    "earned_cents": int(earned_cents or 0),
+                    "earned_ars": float(money_1_decimal(cents_to_amount(int(earned_cents or 0)))),
+                    "is_free": int(getattr(n, "price_cents", 0) or 0) <= 0,
+                }
+            )
+
+
+    return render_template("my_notes_hub.html", my_notes=my_notes, combos=combos, notes=combo_notes, stats_totals=stats_totals, note_stats=note_stats)
+
+
+@app.get("/my-content/edit")
+@login_required
+def my_content_edit():
+    """Página unificada para ver/editar/borrar apuntes y combos del usuario."""
+    initial_tab = (request.args.get("tab") or "notes").lower()
+    if initial_tab not in ("notes","combos"):
+        initial_tab = "notes"
+    with Session() as s:
+        # Apuntes del usuario + cantidad de descargas (compras aprobadas)
+        rows = s.execute(
+            select(
+                Note,
+                func.count(DownloadLog.id).label("download_count"),
+            )
+            .outerjoin(
+                DownloadLog,
+                DownloadLog.note_id == Note.id,
+            )
+            .where(
+                Note.seller_id == current_user.id,
+                Note.deleted_at.is_(None),
+            )
+            .group_by(Note.id)
+            .order_by(Note.created_at.desc())
+        ).all()
+
+        my_notes = []
+        for note, download_count in rows:
+            note.download_count = int(download_count or 0)
+            my_notes.append(note)
+
+        combos = s.execute(
+            select(Combo)
+            .where(
+                Combo.seller_id == current_user.id,
+                Combo.is_active == True,
+            )
+            .order_by(Combo.created_at.desc())
+        ).scalars().all()
+
+    return render_template("my_content_edit.html", my_notes=my_notes, combos=combos, initial_tab=initial_tab)
 
 
 # -----------------------------------------------------------------------------
@@ -1832,7 +2043,7 @@ def seller_edit_note_post(note_id: int):
         s.commit()
 
     flash("Apunte actualizado.", "success")
-    return redirect(url_for("profile"))
+    return redirect(url_for("note_detail", note_id=note_id))
 
 
 @app.post("/profile/notes/<int:note_id>/delete")
@@ -1863,7 +2074,7 @@ def seller_delete_note(note_id: int):
 
         s.commit()
     flash("Apunte eliminado.", "success")
-    return redirect(url_for("profile"))
+    return redirect(url_for("my_content_edit", tab="notes"))
 
 @app.route("/profile/balance")
 @login_required
@@ -2588,6 +2799,123 @@ def download_note(note_id):
         return redirect(url_for("note_detail", note_id=note_id))
 
     return send_from_directory(app.config["UPLOAD_FOLDER"], note_file_path, as_attachment=True)
+
+
+@app.route("/combos/<int:combo_id>/download", methods=["GET","POST"])
+@login_required
+def download_combo(combo_id):
+    """Download a combo as a .zip (contains the PDF files of its notes)."""
+    with Session() as s:
+        combo = s.get(Combo, combo_id)
+        if not combo or (hasattr(combo, "is_active") and combo.is_active is False):
+            abort(404)
+
+        if getattr(combo, "moderation_status", "approved") != "approved":
+            # Owner/admin can still download
+            is_owner = bool(combo.seller_id == getattr(current_user, "id", None))
+            is_admin = bool(getattr(current_user, "is_admin", False))
+            if not (is_owner or is_admin):
+                abort(404)
+
+        is_admin = bool(getattr(current_user, "is_admin", False))
+        is_owner = bool(combo.seller_id == getattr(current_user, "id", None))
+
+        buyer_price_cents = _combo_buyer_price_cents(combo)
+        is_free = int(buyer_price_cents or 0) <= 0
+
+        allowed = False
+        if is_admin or is_owner:
+            allowed = True
+        elif bool(getattr(current_user, "is_premium", False)):
+            allowed = True
+        elif is_free:
+            allowed = True
+        else:
+            # Paid combo: needs approved purchase
+            has_cp = s.execute(
+                select(ComboPurchase.id).where(
+                    ComboPurchase.buyer_id == current_user.id,
+                    ComboPurchase.combo_id == combo.id,
+                    ComboPurchase.status == "approved",
+                )
+            ).scalar_one_or_none() is not None
+            allowed = bool(has_cp)
+
+        if not allowed:
+            flash("No tenés acceso a este combo.", "danger")
+            return redirect(url_for("combo_detail", combo_id=combo.id))
+
+        note_ids = (
+            s.execute(select(ComboNote.note_id).where(ComboNote.combo_id == combo.id))
+            .scalars()
+            .all()
+        )
+
+        note_files = []
+        if note_ids:
+            _notes = s.execute(select(Note).where(Note.id.in_(note_ids))).scalars().all()
+            for n in _notes:
+                fp = getattr(n, "file_path", None)
+                title = getattr(n, "title", "") or f"apunte_{getattr(n,'id', '')}"
+                nid = getattr(n, "id", None)
+                if fp:
+                    note_files.append((fp, title, nid))
+
+        # Log combo download (best effort)
+        try:
+            s.add(
+                DownloadLog(
+                    user_id=current_user.id,
+                    note_id=None,
+                    combo_id=combo.id,
+                    is_free=is_free,
+                )
+            )
+            s.commit()
+        except Exception as e:
+            try:
+                s.rollback()
+            except Exception:
+                pass
+            app.logger.warning("Combo DownloadLog insert failed: %s", e)
+
+    # Build zip in-memory
+    from io import BytesIO
+    import zipfile as _zipfile
+
+    buf = BytesIO()
+    with _zipfile.ZipFile(buf, "w", compression=_zipfile.ZIP_DEFLATED) as zf:
+        for n in notes:
+            # filename: keep original basename, fallback to title
+            base = os.path.basename(fp) or ""
+            if not base:
+                safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", (title or "").strip())[:80]
+                base = f"{safe or ('apunte_' + str(nid or ''))}.pdf"
+
+            try:
+                data = None
+                if gcs_bucket and "/" in fp:
+                    data = gcs_download_bytes(fp)
+                else:
+                    # local file
+                    local_path = os.path.join(app.config["UPLOAD_FOLDER"], fp)
+                    with open(local_path, "rb") as f:
+                        data = f.read()
+                if data:
+                    zf.writestr(base, data)
+            except Exception as e:
+                app.logger.warning("Combo download: failed to include note %s: %s", nid or "?", e)
+
+    buf.seek(0)
+
+    combo_title = (getattr(combo, "title", "") or f"combo_{combo.id}").strip()
+    safe_title = re.sub(r"[^a-zA-Z0-9._-]+", "_", combo_title)[:60] or f"combo_{combo.id}"
+    return send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"{safe_title}.zip",
+    )
 
 @app.route("/mp/connect")
 @login_required
@@ -3590,16 +3918,16 @@ def admin_api_files():
         for n in notes:
             data.append({
                 "id": n.id,
-                "title": n.title,
-                "file_path": n.file_path,
+                "title": getattr(n, "title", "") or "",
+                "file_path": getattr(n, "file_path", None),
                 "download_url": url_for("admin_download_note", note_id=n.id),
                 "created_at": (n.created_at.isoformat() if getattr(n, "created_at", None) else None),
-                "university": n.university,
-                "faculty": n.faculty,
-                "career": n.career,
-                "price_cents": n.price_cents
+                "university": getattr(n, "university", "") or "",
+                "faculty": getattr(n, "faculty", "") or "",
+                "career": getattr(n, "career", "") or "",
+                "price_cents": int(getattr(n, "price_cents", 0) or 0),
             })
-    return jsonify({"items": data})
+
 
 
 # Admin HUB - contenido unificado (apunte + archivo)
@@ -3635,18 +3963,17 @@ def admin_api_content():
         for n in notes:
             items.append({
                 "id": n.id,
-                "title": n.title,
+                "title": getattr(n, "title", "") or "",
                 "price_cents": int(getattr(n, "price_cents", 0) or 0),
-                "seller_name": sellers.get(n.seller_id, ""),
-                "university": n.university,
-                "faculty": n.faculty,
-                "career": n.career,
+                "seller_name": sellers.get(getattr(n, "seller_id", None), ""),
+                "university": getattr(n, "university", "") or "",
+                "faculty": getattr(n, "faculty", "") or "",
+                "career": getattr(n, "career", "") or "",
                 "file_path": getattr(n, "file_path", None),
                 "download_url": url_for("admin_download_note", note_id=n.id),
                 "created_at": (n.created_at.isoformat() if getattr(n, "created_at", None) else None),
             })
 
-    return jsonify({"items": items})
 
 
 # Admin HUB - moderación (apuntes + combos)
@@ -3996,8 +4323,8 @@ def combo_create():
 
             s.commit()
             flash("Combo creado correctamente.", "success")
-            # Volver al hub de "Mis apuntes" luego de crear el combo
-            return redirect(url_for("my_notes_hub"))
+            # Ir al detalle del combo recién creado
+            return redirect(url_for("combo_detail", combo_id=combo.id))
 
         return render_template("combo_create.html", notes=notes)
 
@@ -4081,7 +4408,7 @@ def combo_edit(combo_id: int):
 
             s.commit()
             flash("Combo actualizado.", "success")
-            return redirect(url_for("profile_combos"))
+            return redirect(url_for("combo_detail", combo_id=combo.id))
 
         return render_template("combo_edit.html", combo=combo, notes=notes, selected_ids=selected_ids)
 
@@ -4096,7 +4423,7 @@ def combo_delete(combo_id: int):
         combo.is_active = False
         s.commit()
     flash("Combo eliminado.", "success")
-    return redirect(url_for("profile_combos"))
+    return redirect(url_for("my_content_edit", tab="combos"))
 
 
 from flask import render_template, abort
@@ -4246,6 +4573,26 @@ def combo_detail(combo_id: int):
             except Exception:
                 s.rollback()
         buyer_price = buyer_price_cents / 100.0  # <- precio final real (sin gross_price)
+
+        can_download = False
+        if getattr(current_user, "is_authenticated", False):
+            is_owner2 = bool(current_user.id == combo.seller_id)
+            is_admin2 = bool(getattr(current_user, "is_admin", False))
+            is_free2 = int(buyer_price_cents or 0) <= 0
+            if is_owner2 or is_admin2 or bool(getattr(current_user, "is_premium", False)) or is_free2:
+                can_download = True
+            else:
+                try:
+                    has_cp2 = s.execute(
+                        select(ComboPurchase.id).where(
+                            ComboPurchase.buyer_id == current_user.id,
+                            ComboPurchase.combo_id == combo.id,
+                            ComboPurchase.status == "approved",
+                        )
+                    ).scalar_one_or_none() is not None
+                    can_download = bool(has_cp2)
+                except Exception:
+                    can_download = False
 
     return render_template(
         "combo_detail.html",

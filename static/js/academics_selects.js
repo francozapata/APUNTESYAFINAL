@@ -80,7 +80,17 @@
                 uniId = v ? parseInt(v, 10) : null;
                 opt(fac, 'Elegí tu Facultad', enableCreate);
                 opt(car, 'Elegí tu Carrera', enableCreate);
-                enable(fac, !!v); enable(car, false);
+                // En modo creación, si no hay universidad seleccionada aún,
+                // igual permitimos escribir Facultad/Carrera ("Otra…") para que
+                // la búsqueda no sea restrictiva.
+                if (!v && enableCreate) {
+                    enable(fac, true);
+                    enable(car, true);
+                } else {
+                    enable(fac, !!v);
+                    enable(car, false);
+                }
+
                 if (v) {
                     try {
                         const list = await getJSON('/api/academics/faculties?university_id=' + encodeURIComponent(v));

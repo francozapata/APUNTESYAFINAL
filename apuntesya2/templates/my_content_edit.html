@@ -2,16 +2,15 @@
 {% block content %}
 
 <style>
-  .shell{max-width:1100px;margin:28px auto;}
-  .card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:18px 16px;box-shadow:0 10px 30px rgba(15,23,42,.05)}
+  .shell{max-width:1100px;margin: var(--space-lg) auto;}
+  .card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding: var(--space-md);box-shadow:0 10px 30px rgba(15,23,42,.05)}
   .head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-  h1{margin:0;font-size:22px}
+  h1{margin:0;font-size:var(--title-md)}
   .muted{color:#6b7280}
 
-  .grid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:14px}
-  @media(min-width:980px){.grid{grid-template-columns:1fr 1fr}}
+  .grid{display:grid;grid-template-columns:1fr;gap: var(--space-md);margin-top: var(--space-md)}
 
-  .section{border:1px solid #eef2ff;border-radius:16px;padding:14px;background:#f8fafc}
+  .section{border:1px solid #eef2ff;border-radius:16px;padding: var(--space-md);background:#f8fafc}
   .section h2{margin:0 0 8px;font-size:16px}
 
   .row{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;border:1px solid #e5e7f5;border-radius:14px;padding:12px;background:#fff;margin-top:10px}
@@ -40,6 +39,11 @@
   .status-rejected{background:#fee2e2;border-color:#fca5a5}
 
   .top-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .tabs{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+  .tab-btn{cursor:pointer}
+  .tab-btn.active{background:linear-gradient(135deg,#4f7cff,#6b8dff);color:#fff;border-color:rgba(68,120,255,.75);box-shadow:0 8px 18px rgba(68,120,255,.14)}
+  .hidden{display:none !important}
+
 </style>
 
 <div class="shell">
@@ -57,15 +61,29 @@
       <a class="btn-pill" href="{{ url_for('create_combo') }}">🧺 Nuevo combo</a>
     </div>
 
+    <div class="tabs" role="tablist" aria-label="Secciones">
+      <button type="button" class="btn-pill ghost tab-btn" data-tab="notes">📄 Mis apuntes</button>
+      <button type="button" class="btn-pill ghost tab-btn" data-tab="combos">📦 Mis combos</button>
+    </div>
+
     <div class="grid">
 
       <!-- Apuntes -->
-      <div class="section">
+      <div class="section" id="section-notes">
         <h2>Mis apuntes</h2>
         <div class="muted" style="font-size:13px;">Tus apuntes (aunque estén en revisión). Los borrados no se muestran.</div>
 
         {% if not my_notes %}
-          <p class="muted" style="margin-top:10px;">Todavía no subiste ningún apunte.</p>
+          <div class="empty-state">
+  <div class="empty-icon">📄</div>
+  <div>
+    <p class="empty-title">Todavía no subiste apuntes</p>
+    <p class="empty-text">Cuando publiques tu primer apunte, lo vas a ver acá para editarlo o eliminarlo.</p>
+    <div class="empty-actions">
+      <a class="btn primary" href="{{ url_for('my_notes_hub') }}">➕ Crear mi primer apunte</a>
+    </div>
+  </div>
+</div>
         {% else %}
           {% for n in my_notes %}
             <div class="row">
@@ -97,7 +115,7 @@
                 <a href="{{ url_for('seller_edit_note_get', note_id=n.id) }}" class="btn-pill ghost">Editar</a>
                 <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline"
                       onsubmit="return confirm('¿Eliminar este apunte? Se despublicará y se borrará el archivo asociado.');">
-                  <button type="submit" class="btn-pill danger" style="border:0;">Borrar</button>
+                  <button type="submit" class="btn-pill danger" style="border:0;">Eliminar</button>
                 </form>
               </div>
             </div>
@@ -106,12 +124,21 @@
       </div>
 
       <!-- Combos -->
-      <div class="section">
+      <div class="section" id="section-combos">
         <h2>Mis combos</h2>
         <div class="muted" style="font-size:13px;">Tus combos activos.</div>
 
         {% if not combos %}
-          <p class="muted" style="margin-top:10px;">Todavía no creaste combos.</p>
+          <div class="empty-state">
+  <div class="empty-icon">📦</div>
+  <div>
+    <p class="empty-title">Todavía no creaste combos</p>
+    <p class="empty-text">Creá un combo para vender varios apuntes juntos con un mejor precio.</p>
+    <div class="empty-actions">
+      <a class="btn primary" href="{{ url_for('my_notes_hub') }}">➕ Crear mi primer combo</a>
+    </div>
+  </div>
+</div>
         {% else %}
           {% for c in combos %}
             <div class="row">
@@ -134,7 +161,7 @@
                 <a class="btn-pill ghost" href="{{ url_for('combo_edit', combo_id=c.id) }}">Editar</a>
                 <form method="post" action="{{ url_for('combo_delete', combo_id=c.id) }}" style="display:inline"
                       onsubmit="return confirm('¿Eliminar este combo? Se despublicará.');">
-                  <button type="submit" class="btn-pill danger" style="border:0;">Borrar</button>
+                  <button type="submit" class="btn-pill danger" style="border:0;">Eliminar</button>
                 </form>
               </div>
             </div>
@@ -145,5 +172,51 @@
     </div>
   </div>
 </div>
+
+
+<script>
+(function(){
+  const buttons = Array.from(document.querySelectorAll('.tab-btn'));
+  const secNotes = document.getElementById('section-notes');
+  const secCombos = document.getElementById('section-combos');
+  const params = new URLSearchParams(window.location.search);
+  const urlTab = (params.get('tab') || '').toLowerCase();
+
+  function setTab(tab){
+    if(tab !== 'notes' && tab !== 'combos') tab = 'notes';
+    // toggle active styles
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    // show/hide sections
+    if(secNotes) secNotes.classList.toggle('hidden', tab !== 'notes');
+    if(secCombos) secCombos.classList.toggle('hidden', tab !== 'combos');
+
+    // persist
+    try{ localStorage.setItem('mycontent_tab', tab); }catch(e){}
+    // keep URL in sync (so back/forward works nicely)
+    try{
+      const p = new URLSearchParams(window.location.search);
+      p.set('tab', tab);
+      const newUrl = window.location.pathname + '?' + p.toString();
+      window.history.replaceState({}, '', newUrl);
+    }catch(e){}
+  }
+
+  // initial tab: server hint -> urlTab -> localStorage -> notes
+  let initial = "{{ initial_tab|default('notes') }}";
+  initial = (urlTab || initial || '').toLowerCase();
+  if(!initial){
+    try{ initial = (localStorage.getItem('mycontent_tab') || 'notes'); }catch(e){ initial='notes'; }
+  } else if(!urlTab){
+    // if server set but url doesn't, still persist
+  }
+  if(initial !== 'notes' && initial !== 'combos'){
+    try{ initial = (localStorage.getItem('mycontent_tab') || 'notes'); }catch(e){ initial='notes'; }
+  }
+  setTab(initial);
+
+  buttons.forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+})();
+</script>
+
 
 {% endblock %}

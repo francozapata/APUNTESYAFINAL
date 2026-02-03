@@ -140,6 +140,34 @@
         let chosenUniId = null;
         let chosenFacId = null;
 
+        // Helpers: obtener textos actuales (incluyendo inputs "Otra…" si aplica)
+        function getCurrentTexts() {
+            const universityText = (uniSel && uniSel.value === '__other__')
+                ? ((uniOther && uniOther.value) || '').trim()
+                : (uniSel ? getSelectedText(uniSel) : '');
+
+            const facultyText = (facSel && facSel.value === '__other__')
+                ? ((facOther && facOther.value) || '').trim()
+                : (facSel ? getSelectedText(facSel) : '');
+
+            const careerText = (carSel && carSel.value === '__other__')
+                ? ((carOther && carOther.value) || '').trim()
+                : (carSel ? getSelectedText(carSel) : '');
+
+            return { universityText, facultyText, careerText };
+        }
+
+        function emitChange(level, value) {
+            const { universityText, facultyText, careerText } = getCurrentTexts();
+            // Mantener compatibilidad: agregamos los textos además de level/value
+            onChange({ level, value, universityText, facultyText, careerText });
+
+            // Si existen hidden inputs, los mantenemos sincronizados (útil en formularios de búsqueda)
+            if (hUni) hUni.value = universityText || '';
+            if (hFac) hFac.value = facultyText || '';
+            if (hCar) hCar.value = careerText || '';
+        }
+
         // Si no se permite crear, oculto inputs "otra…" y quito opción "Otra…"
         if (!enableCreate) {
             if (uniOther) uniOther.remove();
@@ -159,7 +187,7 @@
         if (uniSel) {
             uniSel.addEventListener('change', async () => {
                 const v = uniSel.value;
-                onChange({ level: 'university', value: v });
+                emitChange('university', v);
 
                 if (v === '__other__') {
                     if (!enableCreate) { uniSel.value = ''; return; }
@@ -180,7 +208,7 @@
         if (facSel) {
             facSel.addEventListener('change', async () => {
                 const v = facSel.value;
-                onChange({ level: 'faculty', value: v });
+                emitChange('faculty', v);
 
                 if (v === '__other__') {
                     if (!enableCreate) { facSel.value = ''; return; }
@@ -199,13 +227,20 @@
         if (carSel) {
             carSel.addEventListener('change', () => {
                 const v = carSel.value;
-                onChange({ level: 'career', value: v });
+                emitChange('career', v);
                 setVisible(carOther, v === '__other__' && enableCreate);
             });
         }
 
         // -- Resolver ocultos (para formularios de perfil/subir) --
-        async function resolveHidden() {
+        // resolveHidden: por defecto es RESTRICTIVO (perfil/subir).
+        // Para búsquedas no restrictivas, llamarlo con:
+        //   resolveHidden({ requireUniversity:false, requireFaculty:false, requireCareer:false })
+        async function resolveHidden(rules) {
+            rules = rules || {};
+            const requireUniversity = rules.requireUniversity !== undefined ? !!rules.requireUniversity : true;
+            const requireFaculty = rules.requireFaculty !== undefined ? !!rules.requireFaculty : true;
+            const requireCareer = rules.requireCareer !== undefined ? !!rules.requireCareer : true;
             // UNIVERSIDAD
             let uName = '';
             if (uniSel && uniSel.value === '__other__') {
@@ -219,18 +254,36 @@
                 uName = getSelectedText(uniSel);
                 chosenUniId = parseInt(uniSel.value, 10);
             } else {
-                throw new Error('Seleccioná tu Universidad.');
+                if (requireUniversity) throw new Error('Seleccioná tu Universidad.');
+                // no restrictivo: dejamos vacío
+                uName = '';
+                chosenUniId = null;
             }
             if (hUni) hUni.value = uName;
 
             // FACULTAD
             let fName = '';
             if (!facSel || facSel.value === '__other__' || !facSel.value) {
-                if (!enableCreate) throw new Error('Seleccioná tu Facultad.');
-                const name = (facOther && facOther.value.trim()) || '';
-                if (!name) throw new Error('Escribí tu Facultad.');
-                const f = await createFaculty(name, chosenUniId);
-                chosenFacId = f.id; fName = f.name;
+                if (!enableCreate) {
+                    if (requireFaculty) throw new Error('Seleccioná tu Facultad.');
+                    fName = ''; chosenFacId = null;
+                } else {
+                    const name = (facOther && facOther.value.trim()) || '';
+                    if (!name) {
+                        if (requireFaculty) throw new Error('Escribí tu Facultad.');
+                        fName = ''; chosenFacId = null;
+                    } else {
+                        if (!chosenUniId) {
+                            // si no hay uni seleccionada, y se quiere crear fac, pedimos uni (modo restrictivo)
+                            if (requireUniversity) throw new Error('Seleccioná tu Universidad.');
+                            // no restrictivo: no creamos nada
+                            fName = ''; chosenFacId = null;
+                        } else {
+                            const f = await createFaculty(name, chosenUniId);
+                            chosenFacId = f.id; fName = f.name;
+                        }
+                    }
+                }
             } else {
                 fName = getSelectedText(facSel);
                 chosenFacId = parseInt(facSel.value, 10);
@@ -240,11 +293,24 @@
             // CARRERA
             let cName = '';
             if (!carSel || carSel.value === '__other__' || !carSel.value) {
-                if (!enableCreate) throw new Error('Seleccioná tu Carrera.');
-                const name = (carOther && carOther.value.trim()) || '';
-                if (!name) throw new Error('Escribí tu Carrera.');
-                const c = await createCareer(name, chosenFacId);
-                cName = c.name;
+                if (!enableCreate) {
+                    if (requireCareer) throw new Error('Seleccioná tu Carrera.');
+                    cName = '';
+                } else {
+                    const name = (carOther && carOther.value.trim()) || '';
+                    if (!name) {
+                        if (requireCareer) throw new Error('Escribí tu Carrera.');
+                        cName = '';
+                    } else {
+                        if (!chosenFacId) {
+                            if (requireFaculty) throw new Error('Seleccioná tu Facultad.');
+                            cName = '';
+                        } else {
+                            const c = await createCareer(name, chosenFacId);
+                            cName = c.name;
+                        }
+                    }
+                }
             } else {
                 cName = getSelectedText(carSel);
             }
