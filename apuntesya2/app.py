@@ -49,7 +49,21 @@ from firebase_admin import credentials, auth as fb_auth
 
 # modelos
 from apuntesya2.models import (
-    Base, User, Note, Purchase, University, Faculty, Career, WebhookEvent, Review, DownloadLog, Notification, Combo, ComboNote, ComboPurchase
+    Base,
+    User,
+    Note,
+    Purchase,
+    University,
+    Faculty,
+    Career,
+    WebhookEvent,
+    Review,
+    DownloadLog,
+    Notification,
+    Combo,
+    ComboNote,
+    ComboPurchase,
+    AuditEvent,
 )
 
 # helpers MP
@@ -326,6 +340,45 @@ login_manager.login_view = "login"
 def load_user(user_id):
     with Session() as s:
         return s.get(User, int(user_id))
+
+
+@app.before_request
+def _enforce_user_suspension():
+    """Si el usuario suspendió su cuenta, limitamos el acceso solo al perfil.
+
+    - Puede ver /profile
+    - Puede reactivar /account/reactivate
+    - Puede eliminar /account/delete
+    - Puede cerrar sesión
+    """
+    try:
+        if not getattr(current_user, "is_authenticated", False):
+            return None
+        if not getattr(current_user, "is_suspended", False):
+            return None
+
+        # endpoints permitidos mientras está suspendido
+        allowed = {
+            "profile",
+            "logout",
+            "disconnect_mp",
+            "disconnect_mp_post",
+            "account_reactivate",
+            "account_suspend",
+            "account_delete",
+            "static",
+        }
+        if (request.endpoint or "") in allowed:
+            return None
+
+        # permitir cualquier endpoint de auth/session_login para poder entrar
+        if (request.endpoint or "").startswith("auth_"):
+            return None
+
+        flash("Tu cuenta está suspendida. Solo podés acceder a tu perfil hasta reactivarla.", "warning")
+        return redirect(url_for("profile"))
+    except Exception:
+        return None
 
 # Decorador simple para admin (única definición)
 def admin_required(fn):
@@ -970,78 +1023,61 @@ def send_email(to_email: str, subject: str, text_body: str, html_body: str | Non
     if not cfg["enabled"] or not cfg["host"] or not to_email:
         return False
 
+
+def _make_audit_code(now: datetime | None = None, seq: int | None = None) -> str:
+    """Build a human-friendly audit code.
+
+    Example: AY-20260204-000123
+    """
+    now = now or datetime.utcnow()
+    return f"AY-{now.strftime('%Y%m%d')}-{(seq or 0):06d}"
+
+
+def log_audit_event(
+    *,
+    actor_user_id: int | None,
+    action: str,
+    target_type: str | None = None,
+    target_id: int | None = None,
+    meta: dict | None = None,
+) -> str:
+    """Persist an audit event and return its code."""
+    with Session() as s:
+        ev = AuditEvent(
+            code="PENDING",
+            actor_user_id=actor_user_id,
+            action=(action or "").strip()[:64],
+            target_type=(target_type or None),
+            target_id=target_id,
+            meta=meta or None,
+        )
+        s.add(ev)
+        s.flush()  # get id
+        ev.code = _make_audit_code(seq=int(ev.id))
+        s.commit()
+        return ev.code
+
+
+def notify_user(
+    *,
+    user_id: int,
+    title: str,
+    body: str,
+    kind: str = "info",
+    email: bool = False,
+    email_subject: str | None = None,
+) -> None:
+    """Best-effort in-app notification + optional email."""
     try:
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = cfg["from"]
-        msg["To"] = to_email
-        msg.set_content(text_body or "")
-
-        if html_body:
-            msg.add_alternative(html_body, subtype="html")
-
-        context = ssl.create_default_context()
-        if cfg["tls"]:
-            with _smtp_connect(cfg["host"], cfg["port"], timeout=15, force_ipv4=cfg.get("force_ipv4", True)) as s:
-                s.ehlo()
-                # Ensure the certificate matches the original hostname (SNI)
-                try:
-                    s.starttls(context=context, server_hostname=cfg["host"])
-                except TypeError:
-                    s.starttls(context=context)
-                s.ehlo()
-                if cfg["user"] and cfg["pass"]:
-                    s.login(cfg["user"], cfg["pass"])
-                s.send_message(msg)
-        else:
-            with _smtp_connect(cfg["host"], cfg["port"], timeout=15, force_ipv4=cfg.get("force_ipv4", True)) as s:
-                if cfg["user"] and cfg["pass"]:
-                    s.login(cfg["user"], cfg["pass"])
-                s.send_message(msg)
-        return True
-    except Exception as e:
-        try:
-            app.logger.warning(f"email send failed to {to_email}: {e}")
-        except Exception:
-            pass
-        return False
-
-    try:
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = cfg["from"]
-        msg["To"] = to_email
-        msg.set_content(text_body or "")
-
-        if html_body:
-            msg.add_alternative(html_body, subtype="html")
-
-        context = ssl.create_default_context()
-        if cfg["tls"]:
-            with _smtp_connect(cfg["host"], cfg["port"], timeout=15, force_ipv4=cfg.get("force_ipv4", True)) as s:
-                s.ehlo()
-                # Ensure the certificate matches the original hostname (SNI)
-                try:
-                    s.starttls(context=context, server_hostname=cfg["host"])
-                except TypeError:
-                    # Older Python/smtplib signature fallback
-                    s.starttls(context=context)
-                s.ehlo()
-                if cfg["user"] and cfg["pass"]:
-                    s.login(cfg["user"], cfg["pass"])
-                s.send_message(msg)
-        else:
-            with _smtp_connect(cfg["host"], cfg["port"], timeout=15, force_ipv4=cfg.get("force_ipv4", True)) as s:
-                if cfg["user"] and cfg["pass"]:
-                    s.login(cfg["user"], cfg["pass"])
-                s.send_message(msg)
-        return True
-    except Exception as e:
-        try:
-            app.logger.warning(f"email send failed to {to_email}: {e}")
-        except Exception:
-            pass
-        return False
+        with Session() as s:
+            s.add(Notification(user_id=user_id, kind=kind, title=title, body=body))
+            u = s.get(User, user_id)
+            to_email = (getattr(u, "email", "") or "").strip().lower() if u else ""
+            s.commit()
+        if email and to_email:
+            send_email(to_email, email_subject or title, body)
+    except Exception:
+        pass
 
 def _create_notification_once(session_db, user_id: int, kind: str, title: str, body: str) -> bool:
     """Create a notification once (best-effort dedupe) without schema changes.
@@ -1629,7 +1665,7 @@ def profile():
     )
 
 
-
+# -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # Notifications
 # -----------------------------------------------------------------------------
@@ -3038,7 +3074,7 @@ def mp_oauth_callback():
     flash("¡Cuenta de Mercado Pago conectada!")
     return redirect(url_for("profile"))
 
-@app.route("/mp/disconnect")
+@app.route("/mp/disconnect", methods=["GET"])
 @login_required
 def disconnect_mp():
     with Session() as s:
@@ -3050,6 +3086,143 @@ def disconnect_mp():
         s.commit()
     flash("Se desvinculó Mercado Pago.")
     return redirect(url_for("profile"))
+
+
+@app.post("/mp/disconnect")
+@login_required
+def disconnect_mp_post():
+    """POST version to avoid accidental clicks."""
+    return disconnect_mp()
+
+
+# -----------------------------------------------------------------------------
+# Cuenta: suspender/reactivar/eliminar
+# -----------------------------------------------------------------------------
+@app.post("/account/suspend")
+@login_required
+def account_suspend():
+    with Session() as s:
+        u = s.get(User, current_user.id)
+        if not u:
+            abort(404)
+        u.is_suspended = True
+        u.suspended_at = datetime.utcnow()
+        s.commit()
+
+    code = log_audit_event(actor_user_id=current_user.id, action="user_suspend", target_type="user", target_id=current_user.id)
+    flash(f"Tu cuenta quedó suspendida. Nº de gestión: {code}", "warning")
+    return redirect(url_for("profile"))
+
+
+@app.post("/account/reactivate")
+@login_required
+def account_reactivate():
+    with Session() as s:
+        u = s.get(User, current_user.id)
+        if not u:
+            abort(404)
+        u.is_suspended = False
+        u.suspended_at = None
+        s.commit()
+
+    code = log_audit_event(actor_user_id=current_user.id, action="user_reactivate", target_type="user", target_id=current_user.id)
+    flash(f"Tu cuenta se reactivó correctamente. Nº de gestión: {code}", "success")
+    return redirect(url_for("profile"))
+
+
+@app.post("/account/delete")
+@login_required
+def account_delete():
+    """Eliminación 'definitiva' (soft-delete + anonimización) del usuario.
+
+    - Desvincula Mercado Pago
+    - Elimina compras/descargas del comprador
+    - Borra/anonimiza datos personales
+    - Mantiene apuntes/combos subidos (para quienes ya los descargaron/compraron)
+    """
+    confirm = (request.form.get("confirm") or "").strip().lower()
+    if confirm != "ELIMINAR".lower():
+        flash("Para eliminar tu cuenta escribí ELIMINAR en la confirmación.", "warning")
+        return redirect(url_for("profile"))
+
+    with Session() as s:
+        u = s.get(User, current_user.id)
+        if not u:
+            abort(404)
+
+        # --- desvincular MP ---
+        u.mp_user_id = None
+        u.mp_access_token = None
+        u.mp_refresh_token = None
+        u.mp_token_expires_at = None
+
+        # --- borrar compras y descargas (historial del comprador) ---
+        try:
+            s.execute(text("DELETE FROM purchases WHERE buyer_id = :uid"), {"uid": u.id})
+        except Exception:
+            # fallback ORM
+            try:
+                for p in s.execute(select(Purchase).where(Purchase.buyer_id == u.id)).scalars().all():
+                    s.delete(p)
+            except Exception:
+                pass
+
+        # Combos purchases (si existe la tabla)
+        try:
+            s.execute(text("DELETE FROM combo_purchases WHERE buyer_id = :uid"), {"uid": u.id})
+        except Exception:
+            try:
+                for p in s.execute(select(ComboPurchase).where(ComboPurchase.buyer_id == u.id)).scalars().all():
+                    s.delete(p)
+            except Exception:
+                pass
+
+        try:
+            s.execute(text("DELETE FROM download_logs WHERE user_id = :uid"), {"uid": u.id})
+        except Exception:
+            try:
+                for d in s.execute(select(DownloadLog).where(DownloadLog.user_id == u.id)).scalars().all():
+                    s.delete(d)
+            except Exception:
+                pass
+
+        # --- borrar notificaciones del usuario (opcional, pero alineado con 'borra datos') ---
+        try:
+            s.execute(text("DELETE FROM notifications WHERE user_id = :uid"), {"uid": u.id})
+        except Exception:
+            pass
+
+        # --- anonimización ---
+        u.deleted_at = datetime.utcnow()
+        u.is_suspended = True
+        u.suspended_at = datetime.utcnow()
+        u.is_active = False  # hard disable to avoid re-login with same Google email
+
+        # Guardamos un placeholder único para no romper unique(email)
+        placeholder_email = f"deleted_{u.id}_{int(datetime.utcnow().timestamp())}@apuntesya.local"
+        u.email = placeholder_email
+        u.name = "Usuario eliminado"
+        u.phone = None
+        u.phone_verified = False
+        u.phone_verified_at = None
+        u.imagen_de_perfil = None
+
+        # contactos
+        u.seller_contact = None
+        u.contact_email = None
+        u.contact_whatsapp = None
+        u.contact_phone = None
+        u.contact_website = None
+        u.contact_instagram = None
+        u.contact_visible_public = False
+        u.contact_visible_buyers = False
+
+        s.commit()
+
+    code = log_audit_event(actor_user_id=None, action="user_delete", target_type="user", target_id=current_user.id)
+    logout_user()
+    flash(f"Tu cuenta fue eliminada. Nº de gestión: {code}", "info")
+    return redirect(url_for("index"))
 
 # -----------------------------------------------------------------------------
 # Comprar
@@ -4009,6 +4182,8 @@ def admin_api_files():
                 "price_cents": int(getattr(n, "price_cents", 0) or 0),
             })
 
+    return jsonify({"items": data})
+
 
 
 # Admin HUB - contenido unificado (apunte + archivo)
@@ -4016,34 +4191,60 @@ def admin_api_files():
 @login_required
 @admin_required
 def admin_api_content():
+    """Contenido unificado para el Hub admin (apuntes + combos) con métricas."""
     q = (request.args.get("q") or "").strip()
     limit = request.args.get("limit", type=int) or 120
 
     with Session() as s:
-        stmt = select(Note).where(Note.is_active == True)
-        if q:
-            like = f"%{q}%"
-            stmt = stmt.where(or_(
+        like = f"%{q}%" if q else None
+
+        # ---------------- Notes ----------------
+        notes_stmt = select(Note)
+        if hasattr(Note, "deleted_at"):
+            notes_stmt = notes_stmt.where(Note.deleted_at.is_(None))
+        if hasattr(Note, "is_active"):
+            notes_stmt = notes_stmt.where(Note.is_active == True)
+        if like:
+            notes_stmt = notes_stmt.where(or_(
                 Note.title.ilike(like),
                 Note.description.ilike(like),
                 Note.university.ilike(like),
                 Note.faculty.ilike(like),
                 Note.career.ilike(like),
             ))
+        notes_stmt = notes_stmt.order_by(desc(getattr(Note, "created_at", Note.id))).limit(limit)
+        notes = s.execute(notes_stmt).scalars().all()
 
-        stmt = stmt.order_by(desc(Note.created_at)).limit(limit)
-        notes = s.execute(stmt).scalars().all()
+        note_ids = [n.id for n in notes]
+        seller_ids = list({n.seller_id for n in notes if getattr(n, "seller_id", None)})
 
-        seller_ids = list({n.seller_id for n in notes if n.seller_id})
         sellers = {}
         if seller_ids:
             sellers_rows = s.execute(select(User.id, User.name).where(User.id.in_(seller_ids))).all()
             sellers = {i: n for i, n in sellers_rows}
 
+        # purchases/downloads counts (notes)
+        purchases_note = {}
+        downloads_note = {}
+        if note_ids:
+            for nid, cnt in s.execute(
+                select(Purchase.note_id, func.count(Purchase.id))
+                .where(Purchase.note_id.in_(note_ids))
+                .group_by(Purchase.note_id)
+            ).all():
+                purchases_note[int(nid)] = int(cnt or 0)
+            for nid, cnt in s.execute(
+                select(DownloadLog.note_id, func.count(DownloadLog.id))
+                .where(DownloadLog.note_id.in_(note_ids))
+                .group_by(DownloadLog.note_id)
+            ).all():
+                downloads_note[int(nid)] = int(cnt or 0)
+
         items = []
         for n in notes:
             items.append({
-                "id": n.id,
+                "type": "note",
+                "id": int(n.id),
                 "title": getattr(n, "title", "") or "",
                 "price_cents": int(getattr(n, "price_cents", 0) or 0),
                 "seller_name": sellers.get(getattr(n, "seller_id", None), ""),
@@ -4052,9 +4253,72 @@ def admin_api_content():
                 "career": getattr(n, "career", "") or "",
                 "file_path": getattr(n, "file_path", None),
                 "download_url": url_for("admin_download_note", note_id=n.id),
+                "purchases_count": int(purchases_note.get(int(n.id), 0)),
+                "downloads_count": int(downloads_note.get(int(n.id), 0)),
                 "created_at": (n.created_at.isoformat() if getattr(n, "created_at", None) else None),
             })
 
+        # ---------------- Combos ----------------
+        combos_stmt = select(Combo)
+        if hasattr(Combo, "is_active"):
+            combos_stmt = combos_stmt.where(Combo.is_active == True)
+        if like:
+            combos_stmt = combos_stmt.where(or_(
+                Combo.title.ilike(like),
+                Combo.description.ilike(like),
+            ))
+        combos_stmt = combos_stmt.order_by(desc(getattr(Combo, "created_at", Combo.id))).limit(limit)
+        combos = s.execute(combos_stmt).scalars().all()
+
+        combo_ids = [c.id for c in combos]
+        combo_seller_ids = list({c.seller_id for c in combos if getattr(c, "seller_id", None)})
+        combo_sellers = {}
+        if combo_seller_ids:
+            rows = s.execute(select(User.id, User.name).where(User.id.in_(combo_seller_ids))).all()
+            combo_sellers = {i: n for i, n in rows}
+
+        purchases_combo = {}
+        downloads_combo = {}
+        if combo_ids:
+            try:
+                for cid, cnt in s.execute(
+                    select(ComboPurchase.combo_id, func.count(ComboPurchase.id))
+                    .where(ComboPurchase.combo_id.in_(combo_ids))
+                    .group_by(ComboPurchase.combo_id)
+                ).all():
+                    purchases_combo[int(cid)] = int(cnt or 0)
+            except Exception:
+                pass
+            try:
+                for cid, cnt in s.execute(
+                    select(DownloadLog.combo_id, func.count(DownloadLog.id))
+                    .where(DownloadLog.combo_id.in_(combo_ids))
+                    .group_by(DownloadLog.combo_id)
+                ).all():
+                    downloads_combo[int(cid)] = int(cnt or 0)
+            except Exception:
+                pass
+
+        for c in combos:
+            items.append({
+                "type": "combo",
+                "id": int(c.id),
+                "title": getattr(c, "title", "") or "",
+                "price_cents": int(getattr(c, "price_cents", 0) or 0),
+                "seller_name": combo_sellers.get(getattr(c, "seller_id", None), ""),
+                "university": "",
+                "faculty": "",
+                "career": "",
+                "file_path": None,
+                "download_url": url_for("download_combo", combo_id=c.id),
+                "purchases_count": int(purchases_combo.get(int(c.id), 0)),
+                "downloads_count": int(downloads_combo.get(int(c.id), 0)),
+                "created_at": (getattr(c, "created_at", None).isoformat() if getattr(c, "created_at", None) else None),
+            })
+
+    # Orden: más recientes primero (best-effort)
+    items.sort(key=lambda x: (x.get("created_at") or ""), reverse=True)
+    return jsonify({"items": items})
 
 
 # Admin HUB - moderación (apuntes + combos)
@@ -4160,36 +4424,106 @@ def admin_api_moderation():
     return jsonify({"ok": True, "status": status, "notes": notes_out, "combos": combos_out})
 
 
+def _admin_soft_delete_note(s, n: Note, reason: str | None = None) -> None:
+    n.is_active = False
+    if hasattr(n, "deleted_at"):
+        n.deleted_at = datetime.utcnow()
+
+    # borrar archivo (best-effort)
+    try:
+        fp = getattr(n, "file_path", None)
+        if fp:
+            if gcs_bucket:
+                gcs_delete_blob(fp)
+            else:
+                local = os.path.join(app.config["UPLOAD_FOLDER"], fp)
+                if os.path.exists(local):
+                    os.remove(local)
+    except Exception:
+        pass
+
+    # notificar vendedor
+    try:
+        body = "Tu apunte fue eliminado por un administrador por incumplimiento con los Términos de la plataforma."
+        if reason:
+            body += f"\n\nMotivo: {reason}"
+        notify_user(
+            user_id=int(n.seller_id),
+            kind="danger",
+            title="Apunte eliminado",
+            body=body,
+            email=True,
+            email_subject="ApuntesYa: apunte eliminado",
+        )
+    except Exception:
+        pass
+
+
+def _admin_soft_delete_combo(s, c: Combo, reason: str | None = None) -> None:
+    try:
+        c.is_active = False
+    except Exception:
+        pass
+    if hasattr(c, "deleted_at"):
+        try:
+            c.deleted_at = datetime.utcnow()
+        except Exception:
+            pass
+
+    # notificar vendedor
+    try:
+        body = "Tu combo fue eliminado por un administrador por incumplimiento con los Términos de la plataforma."
+        if reason:
+            body += f"\n\nMotivo: {reason}"
+        notify_user(
+            user_id=int(c.seller_id),
+            kind="danger",
+            title="Combo eliminado",
+            body=body,
+            email=True,
+            email_subject="ApuntesYa: combo eliminado",
+        )
+    except Exception:
+        pass
+
+
 @app.post("/admin/api/content/<int:note_id>/delete")
 @login_required
 @admin_required
 def admin_api_content_delete(note_id: int):
-    """Borra (soft) el apunte y hace best-effort de borrar el archivo asociado."""
+    """Compat: elimina un apunte por id (sin tipo)."""
+    return admin_api_content_delete_typed("note", note_id)
+
+
+@app.post("/admin/api/content/<string:ctype>/<int:item_id>/delete")
+@login_required
+@admin_required
+def admin_api_content_delete_typed(ctype: str, item_id: int):
+    reason = None
+    if request.is_json:
+        reason = (request.get_json(silent=True) or {}).get("reason")
+    else:
+        reason = request.form.get("reason")
+    reason = (reason or "").strip() or None
+
     with Session() as s:
-        n = s.get(Note, note_id)
+        if (ctype or "").lower() == "combo":
+            c = s.get(Combo, item_id)
+            if not c:
+                return jsonify({"ok": False, "error": "not_found"}), 404
+            _admin_soft_delete_combo(s, c, reason=reason)
+            s.commit()
+            code = log_audit_event(actor_user_id=current_user.id, action="admin_delete_combo", target_type="combo", target_id=int(c.id), meta={"reason": reason})
+            return jsonify({"ok": True, "ticket": code})
+
+        # default: note
+        n = s.get(Note, item_id)
         if not n:
             return jsonify({"ok": False, "error": "not_found"}), 404
-
-        n.is_active = False
-        if hasattr(n, "deleted_at"):
-            n.deleted_at = datetime.utcnow()
-
-        # borrar archivo (best-effort)
-        try:
-            fp = getattr(n, "file_path", None)
-            if fp:
-                if gcs_bucket:
-                    gcs_delete_blob(fp)
-                else:
-                    local = os.path.join(app.config["UPLOAD_FOLDER"], fp)
-                    if os.path.exists(local):
-                        os.remove(local)
-        except Exception:
-            pass
-
+        _admin_soft_delete_note(s, n, reason=reason)
         s.commit()
-
-    return jsonify({"ok": True})
+        code = log_audit_event(actor_user_id=current_user.id, action="admin_delete_note", target_type="note", target_id=int(n.id), meta={"reason": reason})
+        return jsonify({"ok": True, "ticket": code})
 
 
 @app.get("/admin/download/<int:note_id>")

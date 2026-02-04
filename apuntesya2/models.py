@@ -43,8 +43,15 @@ class User(Base, UserMixin):
     career: Mapped[str] = mapped_column(String(120), nullable=False)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Suspensión voluntaria por el propio usuario.
+    # A diferencia de un bloqueo/admin, permite iniciar sesión pero restringe
+    # movimientos fuera del perfil hasta reactivarla.
+    is_suspended: Mapped[bool] = mapped_column(Boolean, default=False)
+    suspended_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     deleted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Mercado Pago OAuth
     mp_user_id: Mapped[str] = mapped_column(String(64), nullable=True)
@@ -241,6 +248,25 @@ class AdminAction(Base):
     reason: Mapped[str] = mapped_column(Text, nullable=True)
     ip: Mapped[str] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class AuditEvent(Base):
+    """Registro simple de gestiones importantes (auditoría).
+
+    La idea es tener un identificador numérico (id) y un "código" amigable
+    que el admin pueda buscar/compartir (ej: AY-20260204-000123).
+    """
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
+    actor_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=True)
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    meta: Mapped[dict] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 # --- Academic taxonomy (auto-learning dropdowns) ---

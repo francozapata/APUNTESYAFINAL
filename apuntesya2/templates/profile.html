@@ -180,11 +180,45 @@
           {% if current_user.mp_user_id %}
             <p class="mp-status"><span class="mp-status-dot"></span><span>Cuenta de Mercado Pago conectada</span></p>
             <p class="muted" style="margin-top:6px;">Los pagos de tus ventas se acreditan en esta cuenta.</p>
+            <form method="POST" action="{{ url_for('disconnect_mp_post') }}" style="margin-top:10px;">
+              <button class="btn-pill ghost" type="submit" onclick="return confirm('¿Desvincular tu cuenta de Mercado Pago?');">
+                Desvincular Mercado Pago
+              </button>
+            </form>
           {% else %}
             <p class="mp-status mp-status-text-off"><span class="mp-status-dot off"></span><span>Sin cuenta de Mercado Pago vinculada</span></p>
             <p class="muted" style="margin:6px 0 8px;">Para recibir pagos por tus ventas, vas a necesitar vincular una cuenta de Mercado Pago.</p>
             <a href="{{ url_for('connect_mp') }}" class="btn-pill">Vincular Mercado Pago</a>
           {% endif %}
+        </div>
+
+        <div class="profile-right-box">
+          <h4>Gestión de cuenta</h4>
+          {% if current_user.is_suspended %}
+            <p class="muted" style="margin-bottom:6px;">Tu cuenta está <b>suspendida</b>. Solo podés usar tu perfil hasta reactivarla.</p>
+            <form method="POST" action="{{ url_for('account_reactivate') }}">
+              <button class="btn-pill" type="submit">Reactivar cuenta</button>
+            </form>
+          {% else %}
+            <p class="muted" style="margin-bottom:6px;">Podés suspender tu cuenta para pausar toda actividad dentro de la plataforma.</p>
+            <form method="POST" action="{{ url_for('account_suspend') }}">
+              <button class="btn-pill ghost" type="submit" onclick="return confirm('¿Suspender tu cuenta? Podrás reactivarla desde tu perfil.');">
+                Suspender cuenta
+              </button>
+            </form>
+          {% endif %}
+
+          <hr style="margin:14px 0;border:none;border-top:1px solid #e5e7f5;">
+          <p class="muted" style="margin:0 0 8px;">
+            <b>Eliminar cuenta:</b> desvincula tu Mercado Pago, elimina tus compras/descargas y borra tus datos personales.
+            Tus apuntes/combos quedan disponibles <b>solo para quienes ya los compraron/descargaron</b>.
+          </p>
+          <form method="POST" action="{{ url_for('account_delete') }}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input name="confirm" placeholder="Escribí ELIMINAR" style="padding:10px 12px;border:1px solid #e5e7f5;border-radius:12px;min-width:180px;" />
+            <button class="btn-pill" type="submit" style="background:#ef4444;border-color:#ef4444;" onclick="return confirm('¿Eliminar cuenta definitivamente? Esta acción no se puede deshacer.');">
+              Eliminar cuenta
+            </button>
+          </form>
         </div>
 
         <div class="profile-right-box">

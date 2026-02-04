@@ -17,6 +17,31 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS contact_visible_public BOOLEAN DEFAULT TRUE,
   ADD COLUMN IF NOT EXISTS contact_visible_buyers BOOLEAN DEFAULT TRUE;
 
+-- -----------------------
+--  CUENTA: suspensión voluntaria
+-- -----------------------
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP;
+
+-- -----------------------
+--  AUDITORÍA: gestiones importantes
+-- -----------------------
+CREATE TABLE IF NOT EXISTS audit_events (
+  id SERIAL PRIMARY KEY,
+  code VARCHAR(32) UNIQUE NOT NULL,
+  actor_user_id INTEGER NULL,
+  action VARCHAR(64) NOT NULL,
+  target_type VARCHAR(32) NULL,
+  target_id INTEGER NULL,
+  meta JSONB NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_events_code ON audit_events(code);
+CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON audit_events(actor_user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_events_action ON audit_events(action);
+
 
 -- -----------------------
 --  EXTRA: download_logs supports combo downloads

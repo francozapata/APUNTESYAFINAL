@@ -468,33 +468,60 @@
                 return;
             }
 
-            contentPane.innerHTML = items.map(it => `
+            contentPane.innerHTML = items.map(it => {
+            const kind = (it.type || 'note');
+            const badge = kind === 'combo'
+              ? '<span class="muted" style="font-weight:700;">Combo</span>'
+              : '<span class="muted" style="font-weight:700;">Apunte</span>';
+            const priceTxt = `$${((it.price_cents || 0) / 100).toFixed(2)}`;
+            const metrics = `<div class="muted" style="margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;">
+                <span><b>Compras:</b> ${it.purchases_count || 0}</span>
+                <span><b>Descargas:</b> ${it.downloads_count || 0}</span>
+            </div>`;
+            const viewLink = (kind === 'combo')
+              ? `/combo/${it.id}`
+              : `/note/${it.id}`;
+            const downloadBtn = it.download_url ? `<a class="btn" href="${it.download_url}">Descargar</a>` : '';
+            return `
         <div class="row-card">
           <div class="row-main">
             <div>
               <strong>${escapeHtml(it.title)}</strong>
               ${it.seller_name ? `<span class="muted">${escapeHtml(it.seller_name)}</span>` : ''}
+              <span style="margin-left:10px;">${badge}</span>
             </div>
             <span class="muted">
               ${escapeHtml(it.university || '')} • ${escapeHtml(it.faculty || '')} • ${escapeHtml(it.career || '')}
             </span>
             ${it.file_path ? `<span class="muted">Archivo: ${escapeHtml(it.file_path)}</span>` : ''}
+            ${metrics}
           </div>
           <div class="right">
-            <span class="muted">$${((it.price_cents || 0) / 100).toFixed(2)}</span>
-            <a class="btn" href="${it.download_url}">Descargar</a>
-            <button class="btn ghost" onclick="deleteContent(${it.id})">Eliminar</button>
+            <span class="muted">${priceTxt}</span>
+            <a class="btn ghost" href="${viewLink}" target="_blank" rel="noopener noreferrer">Ver</a>
+            ${downloadBtn}
+            <button class="btn ghost" onclick="deleteContent('${kind}', ${it.id})">Eliminar</button>
           </div>
         </div>
-      `).join('');
+      `;
+            }).join('');
         }
 
         // ---------- Acciones de contenido (apunte + archivo) ----------
-        window.deleteContent = async function (id) {
-            if (!confirm('¿Eliminar este apunte y su archivo asociado?')) return;
-            const r = await fetch(`/admin/api/content/${id}/delete`, { method: 'POST' });
+        window.deleteContent = async function (kind, id) {
+            const label = (kind === 'combo') ? 'combo' : 'apunte';
+            const reason = prompt(`Motivo (opcional) para eliminar este ${label}:`) || '';
+            if (!confirm(`¿Eliminar este ${label}?`)) return;
+            const r = await fetch(`/admin/api/content/${encodeURIComponent(kind)}/${id}/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason })
+            });
             const js = await r.json().catch(() => ({ ok: false }));
-            if (js.ok) { load(); } else { alert('No se pudo borrar.'); }
+            if (js.ok) {
+                load();
+                if (js.ticket) alert(`Eliminado. Nº de gestión: ${js.ticket}`);
+            } else { alert('No se pudo borrar.'); }
         }
 
         // ---------- Acciones de usuarios ----------
