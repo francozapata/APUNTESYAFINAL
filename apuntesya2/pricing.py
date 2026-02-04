@@ -1,31 +1,53 @@
 """Centralized pricing/commission rules for ApuntesYa.
 
-Uniform rule (applies to notes and combos):
+Current policy (Option B + payment methods limited):
 
 - Seller inputs NET (what they want to receive): X
-- Buyer-facing published price: P = ceil_to_1_decimal(X / 0.82)
-- Total fees inside P: 18% (10% platform + 8% Mercado Pago)
+- Buyer-facing published price is computed to guarantee that net, while
+  reserving a *minimum* platform margin.
+
+The published price is computed using estimated payment processor fee
+(Mercado Pago) + a minimum platform margin. At payment time, the seller is
+credited *exactly* the net, and the platform keeps the remainder.
 
 Rounding:
 - Published prices are ALWAYS rounded UP (ceiling) to 1 decimal.
 - UI displays prices with 1 decimal.
 
-This module is the *single source of truth* for every price shown/charged.
+Environment knobs:
+- MP_FEE_IMMEDIATE_TOTAL_PCT: estimated MP fee percent (e.g. 4.3)
+- APY_PLATFORM_MARGIN_PCT: platform minimum margin percent (default 15)
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+
+
+def _pct_env(name: str, default_pct: str) -> Decimal:
+    """Read percent env var (e.g. '15' or '4.3') and return Decimal rate."""
+    raw = os.getenv(name, default_pct)
+    try:
+        d = Decimal(str(raw).strip())
+    except Exception:
+        d = Decimal(default_pct)
+    return (d / Decimal(100)).quantize(Decimal("0.0001"))
 
 
 # ----------------------------
 # Rates (single source of truth)
 # ----------------------------
-MP_RATE = Decimal("0.08")
-APY_RATE = Decimal("0.10")
-TOTAL_RATE = Decimal("0.18")
-SELLER_SHARE = Decimal("0.82")  # 1 - TOTAL_RATE
+
+# Estimated MP fee for immediate settlement (used for publishing)
+MP_RATE = _pct_env("MP_FEE_IMMEDIATE_TOTAL_PCT", "8")
+
+# Platform minimum margin
+APY_RATE = _pct_env("APY_PLATFORM_MARGIN_PCT", "15")
+
+TOTAL_RATE = (MP_RATE + APY_RATE).quantize(Decimal("0.0001"))
+SELLER_SHARE = (Decimal("1") - TOTAL_RATE).quantize(Decimal("0.0001"))
 
 
 def _d(x: int | float | str | Decimal) -> Decimal:

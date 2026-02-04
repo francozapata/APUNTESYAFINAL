@@ -51,7 +51,15 @@ def create_preference_for_seller_token(seller_access_token:str, title:str, unit_
         "external_reference": external_reference,
         "back_urls": back_urls,
         "notification_url": notification_url,
-        "marketplace_fee": round(float(marketplace_fee), 2)
+        "marketplace_fee": round(float(marketplace_fee), 2),
+        # Option 2 (limited payment methods): no installments, no cash/ticket, no ATM.
+        "payment_methods": {
+            "installments": 1,
+            "excluded_payment_types": [
+                {"id": "ticket"},
+                {"id": "atm"},
+            ],
+        },
     }
 
     # Activar auto_return SOLO si success es https

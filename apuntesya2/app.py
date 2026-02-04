@@ -2966,7 +2966,7 @@ def download_combo(combo_id):
 
     buf = BytesIO()
     with _zipfile.ZipFile(buf, "w", compression=_zipfile.ZIP_DEFLATED) as zf:
-        for n in notes:
+        for fp, title, nid in note_files:
             # filename: keep original basename, fallback to title
             base = os.path.basename(fp) or ""
             if not base:
