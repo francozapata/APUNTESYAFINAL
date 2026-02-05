@@ -244,10 +244,11 @@
         </div>
 
         <div class="tabs">
-            <button id="tabUsers" class="tab active">👥 <span>Usuarios</span></button>
-            <button id="tabContent" class="tab">📚 <span>Apuntes y archivos</span></button>
-            <button id="tabModeration" class="tab">🛡️ <span>Moderador</span></button>
-            <button id="tabTickets" class="tab">🧾 <span>Gestiones</span></button>
+            <!-- type="button" para evitar submits accidentales si este template queda dentro de un <form> -->
+            <button id="tabUsers" class="tab active" type="button">👥 <span>Usuarios</span></button>
+            <button id="tabContent" class="tab" type="button">📚 <span>Apuntes y archivos</span></button>
+            <button id="tabModeration" class="tab" type="button">🛡️ <span>Moderador</span></button>
+            <button id="tabTickets" class="tab" type="button">🧾 <span>Gestiones</span></button>
         </div>
 
         <!-- BUSCADOR -->
@@ -258,10 +259,10 @@
         <div id="contentPane" style="display:none;margin-top:14px;"></div>
         <div id="moderationPane" style="display:none;margin-top:14px;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                <button class="btn ghost" id="modStatusPendingAi">Pendientes IA</button>
-                <button class="btn ghost" id="modStatusPendingManual">Revisión manual</button>
-                <button class="btn ghost" id="modStatusApproved">Aprobados</button>
-                <button class="btn ghost" id="modStatusRejected">Rechazados</button>
+                <button class="btn ghost" id="modStatusPendingAi" type="button">Pendientes IA</button>
+                <button class="btn ghost" id="modStatusPendingManual" type="button">Revisión manual</button>
+                <button class="btn ghost" id="modStatusApproved" type="button">Aprobados</button>
+                <button class="btn ghost" id="modStatusRejected" type="button">Rechazados</button>
             </div>
             <div id="moderationList"></div>
         </div>
@@ -411,8 +412,8 @@
                     const reason = n.moderation_reason ? `<div class="muted" style="margin-top:6px;">Motivo: ${escapeHtml(n.moderation_reason)}</div>` : '';
                     const seller = n.seller_name ? `<span class="muted">${escapeHtml(n.seller_name)}</span>` : '';
                     const actions = `
-                        ${n.moderation_status !== 'approved' ? `<button class="btn" onclick="approveNote(${n.id})">Aprobar</button>` : ''}
-                        ${n.moderation_status !== 'rejected' ? `<button class="btn ghost" onclick="rejectNote(${n.id})">Rechazar</button>` : ''}
+                        ${n.moderation_status !== 'approved' ? `<button type="button" class="btn" onclick="approveNote(${n.id})">Aprobar</button>` : ''}
+                        ${n.moderation_status !== 'rejected' ? `<button type="button" class="btn ghost" onclick="rejectNote(${n.id})">Rechazar</button>` : ''}
                         <a class="btn ghost" href="/note/${n.id}" target="_blank" rel="noopener noreferrer">Ver</a>
                     `;
                     return `
@@ -448,8 +449,8 @@
                     const reason = c.moderation_reason ? `<div class="muted" style="margin-top:6px;">Motivo: ${escapeHtml(c.moderation_reason)}</div>` : '';
                     const seller = c.seller_name ? `<span class="muted">${escapeHtml(c.seller_name)}</span>` : '';
                     const actions = `
-                        ${c.moderation_status !== 'approved' ? `<button class="btn" onclick="approveCombo(${c.id})">Aprobar</button>` : ''}
-                        ${c.moderation_status !== 'rejected' ? `<button class="btn ghost" onclick="rejectCombo(${c.id})">Rechazar</button>` : ''}
+                        ${c.moderation_status !== 'approved' ? `<button type="button" class="btn" onclick="approveCombo(${c.id})">Aprobar</button>` : ''}
+                        ${c.moderation_status !== 'rejected' ? `<button type="button" class="btn ghost" onclick="rejectCombo(${c.id})">Rechazar</button>` : ''}
                         <a class="btn ghost" href="/combo/${c.id}" target="_blank" rel="noopener noreferrer">Ver</a>
                     `;
                     return `
@@ -525,21 +526,21 @@
                 if (!u.is_admin) {
                     if (u.is_blocked || !u.is_active) {
                         actionsHtml += `
-              <button class="btn" onclick="unblockUser(${u.id})">Desbloquear</button>
+              <button type="button" class="btn" onclick="unblockUser(${u.id})">Desbloquear</button>
             `;
                     } else {
                         actionsHtml += `
-              <button class="btn ghost" onclick="blockUser(${u.id})">Bloquear</button>
+              <button type="button" class="btn ghost" onclick="blockUser(${u.id})">Bloquear</button>
             `;
                     }
                     actionsHtml += `
-            <button class="btn ghost" onclick="deleteUser(${u.id})">Eliminar</button>
+            <button type="button" class="btn ghost" onclick="deleteUser(${u.id})">Eliminar</button>
           `;
                 }
 
                 // 🔍 Botón: Ver detalle del usuario
                 actionsHtml += `
-          <button class="btn ghost" onclick="window.location='/admin/user/${u.id}'">
+          <button type="button" class="btn ghost" onclick="window.location='/admin/user/${u.id}'">
             Ver detalle
           </button>
         `;
@@ -601,7 +602,7 @@
             <span class="muted">${priceTxt}</span>
             <a class="btn ghost" href="${viewLink}" target="_blank" rel="noopener noreferrer">Ver</a>
             ${downloadBtn}
-            <button class="btn ghost" onclick="deleteContent('${kind}', ${it.id})">Eliminar</button>
+            <button type="button" class="btn ghost" onclick="deleteContent('${kind}', ${it.id})">Eliminar</button>
           </div>
         </div>
       `;
