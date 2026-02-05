@@ -4327,36 +4327,134 @@ def admin_api_content():
 @login_required
 @admin_required
 def admin_api_tickets():
-    """Lista y búsqueda de tickets de gestión (audit_events)."""
+    """Lista y búsqueda de tickets de gestión (audit_events).
+
+    Devuelve información lista para UI: resumen, labels y links al objeto involucrado.
+    """
     q = (request.args.get("q") or "").strip()
     limit = request.args.get("limit", type=int) or 200
 
-    with Session() as s:
-        stmt = select(AuditEvent).order_by(desc(AuditEvent.created_at)).limit(limit)
+    def _action_label(action: str) -> str:
+        a = (action or "").strip()
+        return {
+            "user_suspend": "Cuenta suspendida",
+            "user_reactivate": "Cuenta reactivada",
+            "user_delete": "Cuenta eliminada",
+            "admin_delete_note": "Apunte eliminado por admin",
+            "admin_delete_combo": "Combo eliminado por admin",
+        }.get(a, a)
 
+    with Session() as s:
         if q:
             like = f"%{q}%"
-            stmt = select(AuditEvent).where(
-                AuditEvent.code.ilike(like)
-            ).order_by(desc(AuditEvent.created_at)).limit(limit)
+            stmt = (
+                select(AuditEvent)
+                .where(AuditEvent.code.ilike(like))
+                .order_by(desc(AuditEvent.created_at))
+                .limit(limit)
+            )
+        else:
+            stmt = select(AuditEvent).order_by(desc(AuditEvent.created_at)).limit(limit)
 
         events = s.execute(stmt).scalars().all()
 
+        # Actors
         actor_ids = list({e.actor_user_id for e in events if getattr(e, "actor_user_id", None)})
         actors = {}
         if actor_ids:
             rows = s.execute(select(User.id, User.name, User.email).where(User.id.in_(actor_ids))).all()
             actors = {int(r[0]): {"name": r[1], "email": r[2]} for r in rows}
 
+        # Targets: notes / combos / users (best-effort)
+        note_ids = [int(e.target_id) for e in events if (e.target_type == "note" and e.target_id is not None)]
+        combo_ids = [int(e.target_id) for e in events if (e.target_type == "combo" and e.target_id is not None)]
+        user_ids = [int(e.target_id) for e in events if (e.target_type == "user" and e.target_id is not None)]
+
+        notes = {}
+        if note_ids:
+            rows = s.execute(select(Note.id, Note.title).where(Note.id.in_(note_ids))).all()
+            notes = {int(r[0]): {"title": r[1]} for r in rows}
+
+        combos = {}
+        if combo_ids:
+            rows = s.execute(select(Combo.id, Combo.title).where(Combo.id.in_(combo_ids))).all()
+            combos = {int(r[0]): {"title": r[1]} for r in rows}
+
+        users = {}
+        if user_ids:
+            rows = s.execute(select(User.id, User.name, User.email).where(User.id.in_(user_ids))).all()
+            users = {int(r[0]): {"name": r[1], "email": r[2]} for r in rows}
+
         items = []
         for ev in events:
             a = actors.get(int(ev.actor_user_id)) if ev.actor_user_id else None
+
             meta_pretty = None
             try:
                 if ev.meta:
                     meta_pretty = json.dumps(ev.meta, ensure_ascii=False, indent=2)
             except Exception:
                 meta_pretty = None
+
+            # target label + url + compact info
+            target_label = None
+            target_url = None
+            note_info = None
+            combo_info = None
+            user_info = None
+
+            if ev.target_type == "note" and ev.target_id is not None:
+                n = notes.get(int(ev.target_id))
+                title = (n or {}).get("title") or ""
+                target_label = f"Apunte #{int(ev.target_id)}" + (f" · {title}" if title else "")
+                target_url = f"/note/{int(ev.target_id)}"
+                note_info = target_label
+            elif ev.target_type == "combo" and ev.target_id is not None:
+                c = combos.get(int(ev.target_id))
+                title = (c or {}).get("title") or ""
+                target_label = f"Combo #{int(ev.target_id)}" + (f" · {title}" if title else "")
+                target_url = f"/combos/{int(ev.target_id)}"
+                combo_info = target_label
+            elif ev.target_type == "user" and ev.target_id is not None:
+                u = users.get(int(ev.target_id))
+                nm = (u or {}).get("name") or f"Usuario #{int(ev.target_id)}"
+                em = (u or {}).get("email")
+                target_label = nm + (f" · {em}" if em else "")
+                user_info = target_label
+
+            action_label = _action_label(ev.action)
+
+            # summary short, human-friendly
+            summary = None
+            if ev.action == "admin_delete_note":
+                reason = None
+                try:
+                    reason = (ev.meta or {}).get("reason")
+                except Exception:
+                    reason = None
+                summary = f"Se eliminó un apunte{' (' + reason + ')' if reason else ''}."
+            elif ev.action == "admin_delete_combo":
+                reason = None
+                try:
+                    reason = (ev.meta or {}).get("reason")
+                except Exception:
+                    reason = None
+                summary = f"Se eliminó un combo{' (' + reason + ')' if reason else ''}."
+            elif ev.action == "user_suspend":
+                summary = "La cuenta quedó suspendida: solo acceso al perfil hasta reactivación."
+            elif ev.action == "user_reactivate":
+                summary = "La cuenta fue reactivada y recuperó el acceso total."
+            elif ev.action == "user_delete":
+                summary = "Se eliminó la cuenta (anonimización + limpieza de compras/descargas)."
+
+            # inline meta (very short)
+            meta_inline = None
+            try:
+                if isinstance(ev.meta, dict):
+                    if ev.meta.get("reason"):
+                        meta_inline = f"Motivo: {ev.meta.get('reason')}"
+            except Exception:
+                meta_inline = None
 
             items.append({
                 "id": int(ev.id),
@@ -4365,11 +4463,19 @@ def admin_api_tickets():
                 "actor_user_id": (int(ev.actor_user_id) if ev.actor_user_id else None),
                 "actor_name": (a.get("name") if a else None),
                 "actor_email": (a.get("email") if a else None),
-                "action": ev.action,
+                "action": action_label,
+                "action_raw": ev.action,
                 "target_type": ev.target_type,
                 "target_id": (int(ev.target_id) if ev.target_id is not None else None),
+                "target_label": target_label,
+                "target_url": target_url,
+                "summary": summary,
+                "note_info": note_info,
+                "combo_info": combo_info,
+                "user_info": user_info,
                 "meta": ev.meta,
                 "meta_pretty": meta_pretty,
+                "meta_inline": meta_inline,
             })
 
     return jsonify({"items": items})

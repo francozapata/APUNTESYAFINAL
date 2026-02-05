@@ -166,7 +166,75 @@
             justify-content: flex-start;
         }
     }
-</style>
+
+    /* Modal */
+    .modal-backdrop{
+        position:fixed; inset:0;
+        background:rgba(15,23,42,0.45);
+        display:none;
+        align-items:center;
+        justify-content:center;
+        padding:16px;
+        z-index:1000;
+    }
+    .modal{
+        width:min(860px, 100%);
+        background:#fff;
+        border-radius:18px;
+        border:1px solid #e5e7f5;
+        box-shadow:0 20px 60px rgba(15,23,42,0.25);
+        overflow:hidden;
+    }
+    .modal-head{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap:10px;
+        padding:16px 16px 10px;
+        border-bottom:1px solid #eef0ff;
+    }
+    .modal-head h3{
+        margin:0;
+        font-size:16px;
+        font-weight:800;
+        color:#111827;
+        line-height:1.2;
+    }
+    .modal-body{
+        padding:14px 16px 16px;
+    }
+    .kv{
+        display:grid;
+        grid-template-columns: 160px 1fr;
+        gap:8px 12px;
+        font-size:13px;
+        align-items:start;
+    }
+    .kv b{ color:#111827; }
+    .codepill{
+        display:inline-flex;
+        padding:4px 10px;
+        border-radius:999px;
+        background:#f3f6ff;
+        border:1px solid #dfe4ff;
+        font-weight:800;
+        font-size:12px;
+        color:#223;
+    }
+    pre.meta{
+        margin:10px 0 0;
+        background:#0b1020;
+        color:#e5e7ff;
+        border-radius:14px;
+        padding:12px 12px;
+        overflow:auto;
+        font-size:12px;
+        line-height:1.35;
+        border:1px solid rgba(255,255,255,0.06);
+        max-height:320px;
+        white-space:pre-wrap;
+    }
+    </style>
 
 <div class="admin-shell">
     <div class="admin-card">
@@ -199,6 +267,25 @@
         </div>
         <div id="ticketsPane" style="display:none;margin-top:14px;"></div>
     </div>
+</div>
+
+
+<!-- MODAL Ticket -->
+<div id="ticketModalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="codepill" id="ticketModalCode">AY-...</div>
+        <h3 id="ticketModalTitle" style="margin-top:8px;">Detalle de gestión</h3>
+        <div class="muted" id="ticketModalSub" style="margin-top:4px;"></div>
+      </div>
+      <button class="btn ghost" id="ticketModalClose" type="button">✖ Cerrar</button>
+    </div>
+    <div class="modal-body">
+      <div class="kv" id="ticketModalKv"></div>
+      <pre class="meta" id="ticketModalMeta" style="display:none;"></pre>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -301,7 +388,7 @@
                 renderContent(js.items || []);
             } else if (activeTab === 'tickets') {
                 ticketsPane.innerHTML = '<div class="muted">Cargando…</div>';
-                const r = await fetch(`/admin/api/tickets?q=${encodeURIComponent(q)}`);
+                const r = await fetch(`/admin/api/tickets?q=${q}`);
                 const js = await r.json();
                 renderTickets(js.items || []);
             } else {
@@ -592,11 +679,48 @@
         load();
     
 
+        
         function renderTickets(items) {
             if (!items.length) {
                 ticketsPane.innerHTML = '<div class="muted">Sin gestiones para mostrar.</div>';
                 return;
             }
+
+            ticketsPane.innerHTML = items.map(ev => {
+                const when = ev.created_at ? new Date(ev.created_at).toLocaleString() : '';
+                const actor = (ev.actor_name || ev.actor_email || (ev.actor_user_id ? ('Usuario #' + ev.actor_user_id) : 'Sistema'));
+                const summary = ev.summary || '';
+                const targetLabel = ev.target_label || ((ev.target_type && ev.target_id) ? `${ev.target_type} #${ev.target_id}` : (ev.target_type || ''));
+                const targetLine = targetLabel ? (' · ' + targetLabel) : '';
+                const metaInline = ev.meta_inline ? `<span class="muted" style="display:block;margin-top:4px;white-space:pre-wrap;">${ev.meta_inline}</span>` : '';
+
+                return `
+                    <div class="row-card">
+                        <div class="row-main">
+                            <strong>${ev.code || ''}</strong>
+                            <span class="muted">${when} · <b>${ev.action || ''}</b>${targetLine} · ${actor}</span>
+                            ${summary ? `<span class="muted" style="display:block;margin-top:6px;"><b>Resumen:</b> ${summary}</span>` : ''}
+                            ${metaInline}
+                        </div>
+                        <div class="right">
+                            <button class="btn ghost" type="button" data-ticket='${encodeURIComponent(JSON.stringify(ev))}'>Ver detalle</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // bind buttons
+            ticketsPane.querySelectorAll('button[data-ticket]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    try {
+                        const ev = JSON.parse(decodeURIComponent(btn.getAttribute('data-ticket')));
+                        openTicketModal(ev);
+                    } catch (e) {
+                        alert('No se pudo abrir el detalle de la gestión.');
+                    }
+                });
+            });
+        }
 
             ticketsPane.innerHTML = items.map(ev => {
                 const when = ev.created_at ? new Date(ev.created_at).toLocaleString() : '';
@@ -614,6 +738,73 @@
                 `;
             }).join('');
         }
+
+
+        // --- Modal detalle ticket ---
+        const ticketModalBackdrop = document.getElementById('ticketModalBackdrop');
+        const ticketModalClose = document.getElementById('ticketModalClose');
+        const ticketModalCode = document.getElementById('ticketModalCode');
+        const ticketModalTitle = document.getElementById('ticketModalTitle');
+        const ticketModalSub = document.getElementById('ticketModalSub');
+        const ticketModalKv = document.getElementById('ticketModalKv');
+        const ticketModalMeta = document.getElementById('ticketModalMeta');
+
+        function closeTicketModal() {
+            if (ticketModalBackdrop) ticketModalBackdrop.style.display = 'none';
+        }
+
+        function openTicketModal(ev) {
+            if (!ticketModalBackdrop) return;
+
+            const when = ev.created_at ? new Date(ev.created_at).toLocaleString() : '';
+            const actor = (ev.actor_name || ev.actor_email || (ev.actor_user_id ? ('Usuario #' + ev.actor_user_id) : 'Sistema'));
+            const title = ev.summary ? ev.summary : 'Detalle de gestión';
+            const targetLabel = ev.target_label || ((ev.target_type && ev.target_id) ? `${ev.target_type} #${ev.target_id}` : (ev.target_type || ''));
+
+            ticketModalCode.textContent = ev.code || '';
+            ticketModalTitle.textContent = title;
+            ticketModalSub.textContent = `${when}${targetLabel ? ' · ' + targetLabel : ''} · ${actor}`;
+
+            const rows = [];
+
+            rows.push(`<b>Acción</b><div>${(ev.action || '')}</div>`);
+            if (targetLabel) rows.push(`<b>Objeto</b><div>${targetLabel}</div>`);
+            if (ev.target_url) {
+                rows.push(`<b>Link</b><div><a class="btn ghost" style="padding:6px 10px;border-radius:999px;" href="${ev.target_url}" target="_blank" rel="noopener">Abrir</a></div>`);
+            }
+            if (ev.note_info) {
+                rows.push(`<b>Apunte</b><div>${ev.note_info}</div>`);
+            }
+            if (ev.combo_info) {
+                rows.push(`<b>Combo</b><div>${ev.combo_info}</div>`);
+            }
+            if (ev.user_info) {
+                rows.push(`<b>Usuario</b><div>${ev.user_info}</div>`);
+            }
+            if (ev.created_at) rows.push(`<b>Fecha</b><div>${when}</div>`);
+            if (ev.summary) rows.push(`<b>Resumen</b><div>${ev.summary}</div>`);
+
+            ticketModalKv.innerHTML = rows.join('');
+
+            const metaPretty = ev.meta_pretty || '';
+            if (metaPretty) {
+                ticketModalMeta.style.display = '';
+                ticketModalMeta.textContent = metaPretty;
+            } else {
+                ticketModalMeta.style.display = 'none';
+                ticketModalMeta.textContent = '';
+            }
+
+            ticketModalBackdrop.style.display = 'flex';
+        }
+
+        if (ticketModalClose) ticketModalClose.addEventListener('click', closeTicketModal);
+        if (ticketModalBackdrop) ticketModalBackdrop.addEventListener('click', (e) => {
+            if (e.target === ticketModalBackdrop) closeTicketModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeTicketModal();
+        });
 
 })();
 </script>
