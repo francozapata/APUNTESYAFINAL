@@ -168,73 +168,84 @@
     }
 
     /* Modal */
-    .modal-backdrop{
-        position:fixed; inset:0;
-        background:rgba(15,23,42,0.45);
-        display:none;
-        align-items:center;
-        justify-content:center;
-        padding:16px;
-        z-index:1000;
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        z-index: 1000;
     }
-    .modal{
-        width:min(860px, 100%);
-        background:#fff;
-        border-radius:18px;
-        border:1px solid #e5e7f5;
-        box-shadow:0 20px 60px rgba(15,23,42,0.25);
-        overflow:hidden;
+
+    .modal {
+        width: min(860px, 100%);
+        background: #fff;
+        border-radius: 18px;
+        border: 1px solid #e5e7f5;
+        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+        overflow: hidden;
     }
-    .modal-head{
-        display:flex;
-        align-items:flex-start;
-        justify-content:space-between;
-        gap:10px;
-        padding:16px 16px 10px;
-        border-bottom:1px solid #eef0ff;
+
+    .modal-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 16px 16px 10px;
+        border-bottom: 1px solid #eef0ff;
     }
-    .modal-head h3{
-        margin:0;
-        font-size:16px;
-        font-weight:800;
-        color:#111827;
-        line-height:1.2;
+
+    .modal-head h3 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 800;
+        color: #111827;
+        line-height: 1.2;
     }
-    .modal-body{
-        padding:14px 16px 16px;
+
+    .modal-body {
+        padding: 14px 16px 16px;
     }
-    .kv{
-        display:grid;
+
+    .kv {
+        display: grid;
         grid-template-columns: 160px 1fr;
-        gap:8px 12px;
-        font-size:13px;
-        align-items:start;
+        gap: 8px 12px;
+        font-size: 13px;
+        align-items: start;
     }
-    .kv b{ color:#111827; }
-    .codepill{
-        display:inline-flex;
-        padding:4px 10px;
-        border-radius:999px;
-        background:#f3f6ff;
-        border:1px solid #dfe4ff;
-        font-weight:800;
-        font-size:12px;
-        color:#223;
+
+    .kv b {
+        color: #111827;
     }
-    pre.meta{
-        margin:10px 0 0;
-        background:#0b1020;
-        color:#e5e7ff;
-        border-radius:14px;
-        padding:12px 12px;
-        overflow:auto;
-        font-size:12px;
-        line-height:1.35;
-        border:1px solid rgba(255,255,255,0.06);
-        max-height:320px;
-        white-space:pre-wrap;
+
+    .codepill {
+        display: inline-flex;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #f3f6ff;
+        border: 1px solid #dfe4ff;
+        font-weight: 800;
+        font-size: 12px;
+        color: #223;
     }
-    </style>
+
+    pre.meta {
+        margin: 10px 0 0;
+        background: #0b1020;
+        color: #e5e7ff;
+        border-radius: 14px;
+        padding: 12px 12px;
+        overflow: auto;
+        font-size: 12px;
+        line-height: 1.35;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        max-height: 320px;
+        white-space: pre-wrap;
+    }
+</style>
 
 <div class="admin-shell">
     <div class="admin-card">
@@ -273,20 +284,20 @@
 
 <!-- MODAL Ticket -->
 <div id="ticketModalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true">
-  <div class="modal">
-    <div class="modal-head">
-      <div>
-        <div class="codepill" id="ticketModalCode">AY-...</div>
-        <h3 id="ticketModalTitle" style="margin-top:8px;">Detalle de gestión</h3>
-        <div class="muted" id="ticketModalSub" style="margin-top:4px;"></div>
-      </div>
-      <button class="btn ghost" id="ticketModalClose" type="button">✖ Cerrar</button>
+    <div class="modal">
+        <div class="modal-head">
+            <div>
+                <div class="codepill" id="ticketModalCode">AY-...</div>
+                <h3 id="ticketModalTitle" style="margin-top:8px;">Detalle de gestión</h3>
+                <div class="muted" id="ticketModalSub" style="margin-top:4px;"></div>
+            </div>
+            <button class="btn ghost" id="ticketModalClose" type="button">✖ Cerrar</button>
+        </div>
+        <div class="modal-body">
+            <div class="kv" id="ticketModalKv"></div>
+            <pre class="meta" id="ticketModalMeta" style="display:none;"></pre>
+        </div>
     </div>
-    <div class="modal-body">
-      <div class="kv" id="ticketModalKv"></div>
-      <pre class="meta" id="ticketModalMeta" style="display:none;"></pre>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -571,20 +582,20 @@
             }
 
             contentPane.innerHTML = items.map(it => {
-            const kind = (it.type || 'note');
-            const badge = kind === 'combo'
-              ? '<span class="muted" style="font-weight:700;">Combo</span>'
-              : '<span class="muted" style="font-weight:700;">Apunte</span>';
-            const priceTxt = `$${((it.price_cents || 0) / 100).toFixed(2)}`;
-            const metrics = `<div class="muted" style="margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;">
+                const kind = (it.type || 'note');
+                const badge = kind === 'combo'
+                    ? '<span class="muted" style="font-weight:700;">Combo</span>'
+                    : '<span class="muted" style="font-weight:700;">Apunte</span>';
+                const priceTxt = `$${((it.price_cents || 0) / 100).toFixed(2)}`;
+                const metrics = `<div class="muted" style="margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;">
                 <span><b>Compras:</b> ${it.purchases_count || 0}</span>
                 <span><b>Descargas:</b> ${it.downloads_count || 0}</span>
             </div>`;
-            const viewLink = (kind === 'combo')
-              ? `/combo/${it.id}`
-              : `/note/${it.id}`;
-            const downloadBtn = it.download_url ? `<a class="btn" href="${it.download_url}">Descargar</a>` : '';
-            return `
+                const viewLink = (kind === 'combo')
+                    ? `/combo/${it.id}`
+                    : `/note/${it.id}`;
+                const downloadBtn = it.download_url ? `<a class="btn" href="${it.download_url}">Descargar</a>` : '';
+                return `
         <div class="row-card">
           <div class="row-main">
             <div>
@@ -678,9 +689,7 @@
         // primera carga
         setModStatus('pending_manual');
         load();
-    
 
-        
         function renderTickets(items) {
             if (!items.length) {
                 ticketsPane.innerHTML = '<div class="muted">Sin gestiones para mostrar.</div>';
@@ -693,21 +702,26 @@
                 const summary = ev.summary || '';
                 const targetLabel = ev.target_label || ((ev.target_type && ev.target_id) ? `${ev.target_type} #${ev.target_id}` : (ev.target_type || ''));
                 const targetLine = targetLabel ? (' · ' + targetLabel) : '';
-                const metaInline = ev.meta_inline ? `<span class="muted" style="display:block;margin-top:4px;white-space:pre-wrap;">${ev.meta_inline}</span>` : '';
+                const metaInline = ev.meta_inline
+                    ? `<span class="muted" style="display:block;margin-top:4px;white-space:pre-wrap;">${escapeHtml(ev.meta_inline)}</span>`
+                    : '';
+
+                // Guardamos el JSON completo en data-ticket (codificado) para abrir modal
+                const payload = encodeURIComponent(JSON.stringify(ev));
 
                 return `
-                    <div class="row-card">
-                        <div class="row-main">
-                            <strong>${ev.code || ''}</strong>
-                            <span class="muted">${when} · <b>${ev.action || ''}</b>${targetLine} · ${actor}</span>
-                            ${summary ? `<span class="muted" style="display:block;margin-top:6px;"><b>Resumen:</b> ${summary}</span>` : ''}
-                            ${metaInline}
-                        </div>
-                        <div class="right">
-                            <button class="btn ghost" type="button" data-ticket='${encodeURIComponent(JSON.stringify(ev))}'>Ver detalle</button>
-                        </div>
-                    </div>
-                `;
+            <div class="row-card">
+                <div class="row-main">
+                    <strong>${escapeHtml(ev.code || '')}</strong>
+                    <span class="muted">${escapeHtml(when)} · <b>${escapeHtml(ev.action || '')}</b>${escapeHtml(targetLine)} · ${escapeHtml(actor)}</span>
+                    ${summary ? `<span class="muted" style="display:block;margin-top:6px;"><b>Resumen:</b> ${escapeHtml(summary)}</span>` : ''}
+                    ${metaInline}
+                </div>
+                <div class="right">
+                    <button class="btn ghost" type="button" data-ticket="${payload}">Ver detalle</button>
+                </div>
+            </div>
+        `;
             }).join('');
 
             // bind buttons
@@ -723,22 +737,6 @@
             });
         }
 
-            ticketsPane.innerHTML = items.map(ev => {
-                const when = ev.created_at ? new Date(ev.created_at).toLocaleString() : '';
-                const actor = (ev.actor_name || ev.actor_email || (ev.actor_user_id ? ('Usuario #' + ev.actor_user_id) : 'Sistema'));
-                const target = (ev.target_type && ev.target_id) ? `${ev.target_type} #${ev.target_id}` : (ev.target_type || '');
-                const meta = ev.meta_pretty ? `<span class="muted" style="display:block;margin-top:4px;white-space:pre-wrap;">${ev.meta_pretty}</span>` : '';
-                return `
-                    <div class="row-card">
-                        <div class="row-main">
-                            <strong>${ev.code || ''}</strong>
-                            <span class="muted">${when} · <b>${ev.action || ''}</b>${target ? ' · ' + target : ''} · ${actor}</span>
-                            ${meta}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
 
 
         // --- Modal detalle ticket ---
@@ -807,6 +805,6 @@
             if (e.key === 'Escape') closeTicketModal();
         });
 
-})();
+    })();
 </script>
 {% endblock %}
