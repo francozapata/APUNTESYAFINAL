@@ -179,6 +179,7 @@
             <button id="tabUsers" class="tab active">👥 <span>Usuarios</span></button>
             <button id="tabContent" class="tab">📚 <span>Apuntes y archivos</span></button>
             <button id="tabModeration" class="tab">🛡️ <span>Moderador</span></button>
+            <button id="tabTickets" class="tab">🧾 <span>Gestiones</span></button>
         </div>
 
         <!-- BUSCADOR -->
@@ -196,6 +197,7 @@
             </div>
             <div id="moderationList"></div>
         </div>
+        <div id="ticketsPane" style="display:none;margin-top:14px;"></div>
     </div>
 </div>
 
@@ -204,10 +206,12 @@
         const tabUsers = document.getElementById('tabUsers');
         const tabContent = document.getElementById('tabContent');
         const tabModeration = document.getElementById('tabModeration');
+        const tabTickets = document.getElementById('tabTickets');
         const searchBox = document.getElementById('searchBox');
         const usersPane = document.getElementById('usersPane');
         const contentPane = document.getElementById('contentPane');
         const moderationPane = document.getElementById('moderationPane');
+        const ticketsPane = document.getElementById('ticketsPane');
         const moderationList = document.getElementById('moderationList');
 
         const modStatusPendingAi = document.getElementById('modStatusPendingAi');
@@ -215,7 +219,7 @@
         const modStatusApproved = document.getElementById('modStatusApproved');
         const modStatusRejected = document.getElementById('modStatusRejected');
 
-        let activeTab = 'users'; // 'users' | 'content' | 'moderation'
+        let activeTab = 'users'; // 'users' | 'content' | 'moderation' | 'tickets'
         let moderationStatus = 'pending_manual';
         let timer = null;
 
@@ -224,17 +228,21 @@
             tabUsers.classList.toggle('active', tab === 'users');
             tabContent.classList.toggle('active', tab === 'content');
             tabModeration.classList.toggle('active', tab === 'moderation');
+            tabTickets.classList.toggle('active', tab === 'tickets');
 
             usersPane.style.display = tab === 'users' ? '' : 'none';
             contentPane.style.display = tab === 'content' ? '' : 'none';
             moderationPane.style.display = tab === 'moderation' ? '' : 'none';
+            ticketsPane.style.display = tab === 'tickets' ? '' : 'none';
 
             searchBox.placeholder =
                 tab === 'users'
                     ? 'Buscar usuario (nombre/email)'
                     : (tab === 'content'
                         ? 'Buscar por título, descripción, universidad, facultad o carrera'
-                        : 'Buscar por título o vendedor');
+                        : (tab === 'tickets'
+                            ? 'Buscar gestión por número (AY-...)'
+                            : 'Buscar por título o vendedor'));
 
             load();
         }
@@ -242,6 +250,7 @@
         tabUsers.addEventListener('click', () => sw('users'));
         tabContent.addEventListener('click', () => sw('content'));
         tabModeration.addEventListener('click', () => sw('moderation'));
+        tabTickets.addEventListener('click', () => sw('tickets'));
 
         function setModStatus(st) {
             moderationStatus = st;
@@ -290,6 +299,11 @@
                 const r = await fetch(`/admin/api/content?q=${q}`);
                 const js = await r.json();
                 renderContent(js.items || []);
+            } else if (activeTab === 'tickets') {
+                ticketsPane.innerHTML = '<div class="muted">Cargando…</div>';
+                const r = await fetch(`/admin/api/tickets?q=${encodeURIComponent(q)}`);
+                const js = await r.json();
+                renderTickets(js.items || []);
             } else {
                 moderationList.innerHTML = '<div class="muted">Cargando…</div>';
                 const r = await fetch(`/admin/api/moderation?status=${encodeURIComponent(moderationStatus)}&q=${q}`);
@@ -576,6 +590,31 @@
         // primera carga
         setModStatus('pending_manual');
         load();
-    })();
+    
+
+        function renderTickets(items) {
+            if (!items.length) {
+                ticketsPane.innerHTML = '<div class="muted">Sin gestiones para mostrar.</div>';
+                return;
+            }
+
+            ticketsPane.innerHTML = items.map(ev => {
+                const when = ev.created_at ? new Date(ev.created_at).toLocaleString() : '';
+                const actor = (ev.actor_name || ev.actor_email || (ev.actor_user_id ? ('Usuario #' + ev.actor_user_id) : 'Sistema'));
+                const target = (ev.target_type && ev.target_id) ? `${ev.target_type} #${ev.target_id}` : (ev.target_type || '');
+                const meta = ev.meta_pretty ? `<span class="muted" style="display:block;margin-top:4px;white-space:pre-wrap;">${ev.meta_pretty}</span>` : '';
+                return `
+                    <div class="row-card">
+                        <div class="row-main">
+                            <strong>${ev.code || ''}</strong>
+                            <span class="muted">${when} · <b>${ev.action || ''}</b>${target ? ' · ' + target : ''} · ${actor}</span>
+                            ${meta}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+})();
 </script>
 {% endblock %}

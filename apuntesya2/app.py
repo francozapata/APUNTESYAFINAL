@@ -4321,6 +4321,60 @@ def admin_api_content():
     return jsonify({"items": items})
 
 
+
+# Admin HUB - gestiones (tickets / auditoría)
+@app.get("/admin/api/tickets")
+@login_required
+@admin_required
+def admin_api_tickets():
+    """Lista y búsqueda de tickets de gestión (audit_events)."""
+    q = (request.args.get("q") or "").strip()
+    limit = request.args.get("limit", type=int) or 200
+
+    with Session() as s:
+        stmt = select(AuditEvent).order_by(desc(AuditEvent.created_at)).limit(limit)
+
+        if q:
+            like = f"%{q}%"
+            stmt = select(AuditEvent).where(
+                AuditEvent.code.ilike(like)
+            ).order_by(desc(AuditEvent.created_at)).limit(limit)
+
+        events = s.execute(stmt).scalars().all()
+
+        actor_ids = list({e.actor_user_id for e in events if getattr(e, "actor_user_id", None)})
+        actors = {}
+        if actor_ids:
+            rows = s.execute(select(User.id, User.name, User.email).where(User.id.in_(actor_ids))).all()
+            actors = {int(r[0]): {"name": r[1], "email": r[2]} for r in rows}
+
+        items = []
+        for ev in events:
+            a = actors.get(int(ev.actor_user_id)) if ev.actor_user_id else None
+            meta_pretty = None
+            try:
+                if ev.meta:
+                    meta_pretty = json.dumps(ev.meta, ensure_ascii=False, indent=2)
+            except Exception:
+                meta_pretty = None
+
+            items.append({
+                "id": int(ev.id),
+                "code": ev.code,
+                "created_at": (ev.created_at.isoformat() if getattr(ev, "created_at", None) else None),
+                "actor_user_id": (int(ev.actor_user_id) if ev.actor_user_id else None),
+                "actor_name": (a.get("name") if a else None),
+                "actor_email": (a.get("email") if a else None),
+                "action": ev.action,
+                "target_type": ev.target_type,
+                "target_id": (int(ev.target_id) if ev.target_id is not None else None),
+                "meta": ev.meta,
+                "meta_pretty": meta_pretty,
+            })
+
+    return jsonify({"items": items})
+
+
 # Admin HUB - moderación (apuntes + combos)
 @app.get("/admin/api/moderation")
 @login_required
