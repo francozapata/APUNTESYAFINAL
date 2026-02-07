@@ -20,6 +20,7 @@ from sqlalchemy import (
     CheckConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
+from typing import Optional
 
 
 Base = declarative_base()
@@ -132,6 +133,12 @@ class Note(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_reported: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Archivo/marketplace: si se archiva, se oculta para nuevos compradores pero
+    # debe seguir disponible para quienes ya lo compraron/descargaron.
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    archived_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    archived_reason: Mapped[str] = mapped_column(Text, nullable=True)
+
     seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     seller = relationship("User", back_populates="notes")
 
@@ -165,6 +172,11 @@ class Combo(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Archivo/marketplace
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    archived_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    archived_reason: Mapped[str] = mapped_column(Text, nullable=True)
+
     # Moderation fields
     moderation_status: Mapped[str] = mapped_column(String(32), default="pending_ai")
     moderation_reason: Mapped[str] = mapped_column(Text, nullable=True)
@@ -180,6 +192,8 @@ class Combo(Base):
     moderated_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    deleted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     # Relaciones
     seller = relationship("User", back_populates="combos")
@@ -220,6 +234,19 @@ class Purchase(Base):
 
     status: Mapped[str] = mapped_column(String(32), default="pending")
     amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+
+    # ------------------------------------------------------------------
+    # Campos extra para "Movimientos" y "Estadísticas" del admin.
+    # Son opcionales para mantener compatibilidad hacia atrás.
+    # ------------------------------------------------------------------
+    buyer_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    seller_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # Desglose de dinero (en centavos). Para compras viejas puede quedar en 0.
+    gross_cents: Mapped[int] = mapped_column(Integer, default=0)
+    platform_fee_cents: Mapped[int] = mapped_column(Integer, default=0)
+    mp_fee_cents: Mapped[int] = mapped_column(Integer, default=0)
+    seller_net_cents: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class ComboPurchase(Base):
@@ -267,6 +294,30 @@ class AuditEvent(Base):
     target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     meta: Mapped[dict] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class AnalyticsEvent(Base):
+    """Eventos livianos para estadísticas (page views, clicks, funnel, etc.).
+
+    Nota: NO guarda datos sensibles. El objetivo es poder medir uso y conversión.
+    """
+
+    __tablename__ = "analytics_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    note_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    combo_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    referrer: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
 # --- Academic taxonomy (auto-learning dropdowns) ---
@@ -328,7 +379,9 @@ class DownloadLog(Base):
     note_id: Mapped[int] = mapped_column(ForeignKey("notes.id"), nullable=True, index=True)
     combo_id: Mapped[int] = mapped_column(Integer, nullable=True)
 
+    # "is_free" es el nombre histórico. "was_free" se usa en algunos endpoints/admin.
     is_free: Mapped[bool] = mapped_column(Boolean, default=False)
+    was_free: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

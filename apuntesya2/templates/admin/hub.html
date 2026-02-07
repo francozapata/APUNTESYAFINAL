@@ -245,6 +245,50 @@
         max-height: 320px;
         white-space: pre-wrap;
     }
+
+
+    /* Stats */
+    .kpi-grid{
+        display:grid;
+        grid-template-columns: repeat(4, minmax(0,1fr));
+        gap:10px;
+        margin-top:14px;
+    }
+    .kpi{
+        background:#fafbff;
+        border:1px solid #e5e7f5;
+        border-radius:16px;
+        padding:12px 14px;
+        box-shadow:0 6px 18px rgba(15,23,42,0.05);
+    }
+    .kpi .lbl{ color:#6b7280; font-size:12px; font-weight:700; }
+    .kpi .val{ margin-top:6px; font-size:18px; font-weight:900; color:#111827; }
+    .kpi .sub{ margin-top:4px; color:#6b7280; font-size:12px; }
+    .mini-grid{
+        display:grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap:12px;
+        margin-top:12px;
+    }
+    .panel{
+        background:#ffffff;
+        border:1px solid #e5e7f5;
+        border-radius:16px;
+        padding:14px;
+        box-shadow:0 6px 18px rgba(15,23,42,0.05);
+    }
+    .panel h3{ margin:0 0 10px; font-size:14px; font-weight:900; color:#111827; }
+    .barrow{ display:flex; align-items:center; gap:10px; margin:8px 0; }
+    .barrow .name{ flex:1; min-width:0; font-size:13px; color:#111827; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .bar{ flex:2; height:10px; background:#eef2ff; border-radius:999px; overflow:hidden; border:1px solid #e5e7f5; }
+    .bar > div{ height:100%; background:#4478ff; border-radius:999px; }
+    .barrow .num{ width:70px; text-align:right; font-size:12px; color:#6b7280; }
+
+    @media (max-width: 860px){
+        .kpi-grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+        .mini-grid{ grid-template-columns: 1fr; }
+    }
+
 </style>
 
 <div class="admin-shell">
@@ -260,6 +304,7 @@
             <button id="tabContent" class="tab" type="button">📚 <span>Apuntes y archivos</span></button>
             <button id="tabModeration" class="tab" type="button">🛡️ <span>Moderador</span></button>
             <button id="tabTickets" class="tab" type="button">🧾 <span>Gestiones</span></button>
+            <button id="tabStats" class="tab" type="button">📈 <span>Estadísticas</span></button>
         </div>
 
         <!-- BUSCADOR -->
@@ -278,6 +323,32 @@
             <div id="moderationList"></div>
         </div>
         <div id="ticketsPane" style="display:none;margin-top:14px;"></div>
+        <div id="statsPane" style="display:none;margin-top:14px;">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                <span class="muted" style="font-weight:700;">Rango:</span>
+                <select id="statsDays" class="input" style="width:auto;min-width:160px;">
+                    <option value="7">Últimos 7 días</option>
+                    <option value="30" selected>Últimos 30 días</option>
+                    <option value="90">Últimos 90 días</option>
+                    <option value="365">Últimos 12 meses</option>
+                </select>
+                <button id="statsRefresh" type="button" class="btn ghost">🔄 Actualizar</button>
+            </div>
+
+            <div id="statsKpis" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;"></div>
+            <div class="row-card" style="margin-top:14px;">
+                <div class="row-main">
+                    <strong>Movimientos (compras + descargas)</strong>
+                    <span class="muted">Filtrá por fecha, vendedor, comprador o título. Para buscar por número AY-..., usá la pestaña Gestiones.</span>
+                </div>
+                <div class="right" style="gap:6px;">
+                    <input id="movFrom" class="input" type="date" style="width:auto;min-width:170px;" />
+                    <input id="movTo" class="input" type="date" style="width:auto;min-width:170px;" />
+                    <button id="movRefresh" type="button" class="btn ghost">Buscar</button>
+                </div>
+            </div>
+            <div id="movementsPane"></div>
+        </div>
     </div>
 </div>
 
@@ -306,11 +377,20 @@
         const tabContent = document.getElementById('tabContent');
         const tabModeration = document.getElementById('tabModeration');
         const tabTickets = document.getElementById('tabTickets');
+        const tabStats = document.getElementById('tabStats');
         const searchBox = document.getElementById('searchBox');
         const usersPane = document.getElementById('usersPane');
         const contentPane = document.getElementById('contentPane');
         const moderationPane = document.getElementById('moderationPane');
         const ticketsPane = document.getElementById('ticketsPane');
+        const statsPane = document.getElementById('statsPane');
+        const statsKpis = document.getElementById('statsKpis');
+        const statsDays = document.getElementById('statsDays');
+        const statsRefresh = document.getElementById('statsRefresh');
+        const movementsPane = document.getElementById('movementsPane');
+        const movFrom = document.getElementById('movFrom');
+        const movTo = document.getElementById('movTo');
+        const movRefresh = document.getElementById('movRefresh');
         const moderationList = document.getElementById('moderationList');
 
         const modStatusPendingAi = document.getElementById('modStatusPendingAi');
@@ -318,7 +398,7 @@
         const modStatusApproved = document.getElementById('modStatusApproved');
         const modStatusRejected = document.getElementById('modStatusRejected');
 
-        let activeTab = 'users'; // 'users' | 'content' | 'moderation' | 'tickets'
+        let activeTab = 'users'; // 'users' | 'content' | 'moderation' | 'tickets' | 'stats' | 'stats'
         let moderationStatus = 'pending_manual';
         let timer = null;
 
@@ -328,11 +408,13 @@
             tabContent.classList.toggle('active', tab === 'content');
             tabModeration.classList.toggle('active', tab === 'moderation');
             tabTickets.classList.toggle('active', tab === 'tickets');
+            if (tabStats) tabStats.classList.toggle('active', tab === 'stats');
 
             usersPane.style.display = tab === 'users' ? '' : 'none';
             contentPane.style.display = tab === 'content' ? '' : 'none';
             moderationPane.style.display = tab === 'moderation' ? '' : 'none';
             ticketsPane.style.display = tab === 'tickets' ? '' : 'none';
+            if (statsPane) statsPane.style.display = tab === 'stats' ? '' : 'none';
 
             searchBox.placeholder =
                 tab === 'users'
@@ -341,7 +423,9 @@
                         ? 'Buscar por título, descripción, universidad, facultad o carrera'
                         : (tab === 'tickets'
                             ? 'Buscar gestión por número (AY-...)'
-                            : 'Buscar por título o vendedor'));
+                            : (tab === 'stats'
+                                ? 'Buscar movimiento (comprador/vendedor/título)'
+                                : 'Buscar por título o vendedor')));
 
             load();
         }
@@ -350,6 +434,10 @@
         tabContent.addEventListener('click', () => sw('content'));
         tabModeration.addEventListener('click', () => sw('moderation'));
         tabTickets.addEventListener('click', () => sw('tickets'));
+        if (tabStats) tabStats.addEventListener('click', () => sw('stats'));
+
+        if (statsRefresh) statsRefresh.addEventListener('click', () => load());
+        if (movRefresh) movRefresh.addEventListener('click', () => load());
 
         function setModStatus(st) {
             moderationStatus = st;
@@ -403,12 +491,96 @@
                 const r = await fetch(`/admin/api/tickets?q=${q}`);
                 const js = await r.json();
                 renderTickets(js.items || []);
+            } else if (activeTab === 'stats') {
+                // KPIs
+                statsKpis.innerHTML = '<div class="muted">Cargando estadísticas…</div>';
+                const days = encodeURIComponent(statsDays.value || '30');
+                const r = await fetch(`/admin/api/stats?days=${days}`);
+                const js = await r.json();
+                renderStats(js);
+
+                // Movimientos
+                movementsPane.innerHTML = '<div class="muted">Cargando movimientos…</div>';
+                const from = encodeURIComponent(movFrom.value || '');
+                const to = encodeURIComponent(movTo.value || '');
+                const rm = await fetch(`/admin/api/movements?q=${q}&from=${from}&to=${to}`);
+                const jm = await rm.json();
+                renderMovements(jm.items || []);
             } else {
                 moderationList.innerHTML = '<div class="muted">Cargando…</div>';
                 const r = await fetch(`/admin/api/moderation?status=${encodeURIComponent(moderationStatus)}&q=${q}`);
                 const js = await r.json();
                 renderModeration(js.notes || [], js.combos || []);
             }
+        }
+
+        // Stats controls
+        if (statsRefresh) statsRefresh.addEventListener('click', load);
+        if (movRefresh) movRefresh.addEventListener('click', load);
+        if (statsDays) statsDays.addEventListener('change', load);
+        if (movFrom) movFrom.addEventListener('change', () => { if (activeTab === 'stats') load(); });
+        if (movTo) movTo.addEventListener('change', () => { if (activeTab === 'stats') load(); });
+
+        function renderStats(data) {
+            const k = data.kpis || {};
+            const fmtMoney = (c) => {
+                const v = (typeof c === 'number' ? c : 0) / 100.0;
+                return '$' + v.toFixed(2);
+            };
+
+            const cards = [
+                ['Usuarios (total)', k.users_total],
+                ['Usuarios (últ. ' + (data.range_days || 30) + ' días)', k.users_range],
+                ['Apuntes (total)', k.notes_total],
+                ['Combos (total)', k.combos_total],
+                ['Compras (últ. ' + (data.range_days || 30) + ' días)', k.purchases_range],
+                ['Ingresos brutos (últ. ' + (data.range_days || 30) + ' días)', fmtMoney(k.revenue_gross_range_cents)],
+                ['Descargas gratis (últ. ' + (data.range_days || 30) + ' días)', k.free_downloads_range],
+                ['Pageviews (últ. ' + (data.range_days || 30) + ' días)', k.pageviews_range],
+                ['Conversión aprox.', (k.conversion_rate_pct || 0) + '%'],
+            ];
+
+            statsKpis.innerHTML = `
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+                ${cards.map(([t, v]) => `
+                  <div class="row-card" style="margin-top:0;align-items:flex-start;">
+                    <div class="row-main">
+                      <div class="muted" style="font-weight:800;">${escapeHtml(t)}</div>
+                      <div style="font-size:22px;font-weight:900;margin-top:6px;">${escapeHtml(String(v ?? 0))}</div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+        }
+
+        function renderMovements(items) {
+            if (!items.length) {
+                movementsPane.innerHTML = '<div class="muted">Sin movimientos para ese filtro.</div>';
+                return;
+            }
+            movementsPane.innerHTML = items.map(m => {
+                const when = m.created_at ? new Date(m.created_at).toLocaleString() : '';
+                const who = (m.buyer_name || m.buyer_email || m.user_name || m.user_email || '');
+                const seller = (m.seller_name || m.seller_email || '');
+                const amount = (m.amount_cents !== null && m.amount_cents !== undefined) ? ('$' + ((m.amount_cents || 0) / 100).toFixed(2)) : '';
+                const subtitle = [when, m.kind, (who ? ('• ' + who) : ''), (seller ? ('→ ' + seller) : ''), (amount ? ('• ' + amount) : ''), (m.status ? ('• ' + m.status) : '')].filter(Boolean).join(' ');
+                const extra = m.summary ? `<span class="muted" style="display:block;margin-top:6px;"><b>Resumen:</b> ${escapeHtml(m.summary)}</span>` : '';
+                const itemLine = m.item_title ? `<span class="muted" style="display:block;margin-top:4px;">📎 ${escapeHtml(m.item_title)}</span>` : '';
+                return `
+                  <div class="row-card">
+                    <div class="row-main">
+                      <strong>${escapeHtml(m.code || '')}</strong>
+                      <span class="muted" style="display:block;margin-top:2px;">${escapeHtml(subtitle)}</span>
+                      ${itemLine}
+                      ${extra}
+                    </div>
+                    <div class="right">
+                      ${m.item_url ? `<a class="btn ghost" href="${m.item_url}" target="_blank" rel="noopener">Abrir</a>` : ''}
+                    </div>
+                  </div>
+                `;
+            }).join('');
         }
 
         function renderModeration(notes, combos) {

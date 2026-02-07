@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container" style="max-width:900px;margin:40px auto 80px auto;">
+  <h1 style="margin-bottom:16px;">Política de Privacidad</h1>
+  <p style="color:#555;margin-bottom:24px;">
+    Esta Política describe cómo ApuntesYa trata los datos personales para brindar el servicio.
+  </p>
+
+  <hr style="margin:32px 0;">
+
+  <h2>1. Datos que recopilamos</h2>
+  <ul style="color:#555;">
+    <li>Datos de cuenta: nombre, email y foto provistos por Google al iniciar sesión.</li>
+    <li>Datos de uso: acciones dentro de la plataforma (por ejemplo, publicaciones, compras, descargas) para operar y auditar el servicio.</li>
+    <li>Datos de pago: se procesan a través de un proveedor externo (por ejemplo, Mercado Pago). ApuntesYa no almacena datos sensibles de tarjetas.</li>
+    <li>Datos opcionales de contacto del vendedor: WhatsApp/teléfono, email, Instagram y/o sitio web, si el vendedor decide cargarlos.</li>
+  </ul>
+
+  <h2>2. Finalidades</h2>
+  <ul style="color:#555;">
+    <li>Permitir el acceso y la autenticación.</li>
+    <li>Gestionar publicaciones, compras, ventas y acceso a descargas.</li>
+    <li>Prevenir fraude, abuso y mejorar la seguridad.</li>
+    <li>Soporte y comunicaciones vinculadas al servicio (notificaciones y emails transaccionales).</li>
+  </ul>
+
+  <h2>3. Compartición con terceros</h2>
+  <p style="color:#555;">
+    Solo compartimos datos con proveedores necesarios para operar la plataforma (por ejemplo, procesadores de pago y almacenamiento de archivos),
+    bajo condiciones de confidencialidad y con el único fin de prestar el servicio.
+  </p>
+
+  <h2>4. Conservación</h2>
+  <p style="color:#555;">
+    Conservamos los datos por el tiempo necesario para brindar el servicio, cumplir obligaciones legales y resolver disputas.
+    Podés solicitar la eliminación de tu cuenta, sujeto a limitaciones legales o de seguridad.
+  </p>
+
+  <h2>5. Derechos y contacto</h2>
+  <p style="color:#555;">
+    Podés solicitar acceso, actualización o eliminación de datos personales a través de los canales de contacto publicados en la plataforma.
+  </p>
+
+  <h2>6. Cambios</h2>
+  <p style="color:#555;">
+    Esta política puede actualizarse para reflejar cambios del servicio o normativa. Publicaremos una versión actualizada en este mismo enlace.
+  </p>
+
+  <hr style="margin:32px 0;">
+  <p style="color:#555;">
+    Volver al {% if current_user.is_authenticated %}<a href="{{ url_for('index') }}">inicio</a>{% else %}<a href="{{ url_for('login') }}">inicio de sesión</a>{% endif %}.
+  </p>
+</div>
+{% endblock %}

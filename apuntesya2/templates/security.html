@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container" style="max-width:900px;margin:40px auto 80px auto;">
+  <h1 style="margin-bottom:16px;">Política de Seguridad</h1>
+  <p style="color:#555;margin-bottom:24px;">
+    Esta Política resume las medidas de seguridad que aplica ApuntesYa y buenas prácticas recomendadas.
+  </p>
+
+  <hr style="margin:32px 0;">
+
+  <h2>1. Medidas técnicas y organizativas</h2>
+  <ul style="color:#555;">
+    <li>Autenticación mediante Google (OAuth), sin almacenar contraseñas en ApuntesYa.</li>
+    <li>Controles de acceso por roles (por ejemplo, vistas administrativas restringidas).</li>
+    <li>Registro de eventos relevantes (auditoría) para detección de abuso y soporte.</li>
+    <li>Procesamiento de pagos con proveedores externos (por ejemplo, Mercado Pago), sin almacenar datos completos de tarjetas.</li>
+  </ul>
+
+  <h2>2. Seguridad del contenido</h2>
+  <ul style="color:#555;">
+    <li>Moderación automatizada (IA) y posible revisión manual para reducir contenido prohibido o riesgoso.</li>
+    <li>Vista previa con marca de agua para ayudar a evaluar el material antes de comprar.</li>
+  </ul>
+
+  <h2>3. Reportes y respuesta a incidentes</h2>
+  <p style="color:#555;">
+    Si detectamos actividad sospechosa o un incidente de seguridad, podremos:
+  </p>
+  <ul style="color:#555;">
+    <li>Suspender temporalmente cuentas o contenidos para proteger a la comunidad.</li>
+    <li>Solicitar verificación adicional o medidas correctivas.</li>
+    <li>Notificar a las personas afectadas cuando corresponda.</li>
+  </ul>
+
+  <h2>4. Recomendaciones para usuarios</h2>
+  <ul style="color:#555;">
+    <li>No compartas tu sesión ni tu cuenta con terceros.</li>
+    <li>Revisá los permisos de tu cuenta de Google y cerrá sesión en dispositivos compartidos.</li>
+    <li>Ante cualquier sospecha, contactanos desde los canales oficiales.</li>
+  </ul>
+
+  <h2>5. Cambios</h2>
+  <p style="color:#555;">
+    Esta política puede actualizarse para reflejar cambios en el servicio o mejores prácticas.
+  </p>
+
+  <hr style="margin:32px 0;">
+  <p style="color:#555;">
+    Volver al {% if current_user.is_authenticated %}<a href="{{ url_for('index') }}">inicio</a>{% else %}<a href="{{ url_for('login') }}">inicio de sesión</a>{% endif %}.
+  </p>
+</div>
+{% endblock %}

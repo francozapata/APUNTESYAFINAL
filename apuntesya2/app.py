@@ -37,7 +37,7 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, f
 from flask_login import (
     LoginManager, login_user, logout_user, current_user, login_required
 )
-from sqlalchemy import create_engine, select, or_, and_, func, text, desc
+from sqlalchemy import create_engine, select, or_, and_, func, text, desc, cast, Date
 from sqlalchemy import inspect
 from sqlalchemy.orm import sessionmaker, scoped_session
 from werkzeug.security import generate_password_hash
@@ -64,6 +64,7 @@ from apuntesya2.models import (
     ComboNote,
     ComboPurchase,
     AuditEvent,
+    AnalyticsEvent,
 )
 
 # helpers MP
@@ -1058,6 +1059,35 @@ def log_audit_event(
         return ev.code
 
 
+def log_analytics_event(
+    *,
+    event: str,
+    user_id: int | None = None,
+    path: str | None = None,
+    note_id: int | None = None,
+    combo_id: int | None = None,
+    meta: dict | None = None,
+) -> None:
+    """Best-effort analytics logging. Never blocks main flow."""
+    try:
+        ev = AnalyticsEvent(
+            event=(event or "").strip()[:64],
+            user_id=user_id,
+            path=(path or None),
+            note_id=note_id,
+            combo_id=combo_id,
+            ip=(request.headers.get("X-Forwarded-For") or request.remote_addr or "")[:64] or None,
+            user_agent=(request.headers.get("User-Agent") or "")[:255] or None,
+            referrer=(request.headers.get("Referer") or "")[:255] or None,
+            meta=meta or None,
+        )
+        with Session() as s:
+            s.add(ev)
+            s.commit()
+    except Exception:
+        pass
+
+
 def notify_user(
     *,
     user_id: int,
@@ -1211,6 +1241,16 @@ from sqlalchemy import select, desc
 
 @app.route("/")
 def index():
+    # Analytics: página principal
+    try:
+        log_analytics_event(
+            event="page_view",
+            user_id=(current_user.id if current_user.is_authenticated else None),
+            path=request.path,
+            meta={"page": "home"},
+        )
+    except Exception:
+        pass
     with Session() as s:
         # Notes (solo aprobados/activos si existen esos campos)
         q_notes = select(Note).order_by(desc(Note.created_at)).limit(30)
@@ -1219,7 +1259,7 @@ def index():
             q_notes = q_notes.where(Note.is_active == True)
 
         if hasattr(Note, "moderation_status"):
-            q_notes = q_notes.where(Note.moderation_status == "approved")
+            q_notes = q_notes.where(Note.moderation_status == "approved").where(Note.is_archived == False)
 
         if hasattr(Note, "deleted_at"):
             q_notes = q_notes.where(Note.deleted_at.is_(None))
@@ -1233,6 +1273,7 @@ def index():
                 Combo.is_active == True,
                 # si tenés moderación en combos:
                 Combo.moderation_status == "approved",
+                    Combo.is_archived == False,
                 # si existiera deleted_at en Combo:
                 # Combo.deleted_at.is_(None),
             )
@@ -1252,7 +1293,7 @@ def index():
             if hasattr(Note, "is_active"):
                 q_most = q_most.where(Note.is_active == True)
             if hasattr(Note, "moderation_status"):
-                q_most = q_most.where(Note.moderation_status == "approved")
+                q_most = q_most.where(Note.moderation_status == "approved").where(Note.is_archived == False)
             if hasattr(Note, "deleted_at"):
                 q_most = q_most.where(Note.deleted_at.is_(None))
 
@@ -1273,7 +1314,7 @@ def index():
             if hasattr(Note, "is_active"):
                 q_best = q_best.where(Note.is_active == True)
             if hasattr(Note, "moderation_status"):
-                q_best = q_best.where(Note.moderation_status == "approved")
+                q_best = q_best.where(Note.moderation_status == "approved").where(Note.is_archived == False)
             if hasattr(Note, "deleted_at"):
                 q_best = q_best.where(Note.deleted_at.is_(None))
 
@@ -1321,6 +1362,7 @@ def search_quick():
                 .where(
                     Note.is_active == True,
                     Note.moderation_status == "approved",
+                    Note.is_archived == False,
                     Note.deleted_at.is_(None),
                     or_(Note.title.ilike(like), Note.description.ilike(like)),
                 )
@@ -1338,8 +1380,10 @@ def search_quick():
                 .where(
                     Combo.is_active == True,
                     Combo.moderation_status == "approved",
+                    Combo.is_archived == False,
                     Note.is_active == True,
                     Note.moderation_status == "approved",
+                    Note.is_archived == False,
                     Note.deleted_at.is_(None),
                     or_(
                         Combo.title.ilike(like),
@@ -1378,6 +1422,7 @@ def search_advanced():
         notes_stmt = select(Note).where(
             Note.is_active == True,
             Note.moderation_status == "approved",
+                    Note.is_archived == False,
             Note.deleted_at.is_(None),
         )
 
@@ -1422,8 +1467,10 @@ def search_advanced():
             .where(
                 Combo.is_active == True,
                 Combo.moderation_status == "approved",
+                    Combo.is_archived == False,
                 Note.is_active == True,
                 Note.moderation_status == "approved",
+                    Note.is_archived == False,
                 Note.deleted_at.is_(None),
             )
         )
@@ -1482,7 +1529,7 @@ def search():
         # ---- notes
         notes_stmt = (
             select(Note)
-            .where(Note.moderation_status == "approved")
+            .where(Note.moderation_status == "approved").where(Note.is_archived == False)
             .where(or_(
                 Note.title.ilike(f"%{q}%"),
                 Note.description.ilike(f"%{q}%"),
@@ -1497,7 +1544,7 @@ def search():
             combos_stmt = (
                 select(Combo)
                 .where(Combo.is_active == True)  # noqa: E712
-                .where(Combo.moderation_status == "approved")
+                .where(Combo.moderation_status == "approved").where(Combo.is_archived == False)
                 .where(or_(
                     Combo.title.ilike(f"%{q}%"),
                     Combo.description.ilike(f"%{q}%"),
@@ -1809,7 +1856,7 @@ def my_notes_hub():
         if hasattr(Note, "is_active"):
             q_combo_notes = q_combo_notes.where(Note.is_active == True)
         if hasattr(Note, "moderation_status"):
-            q_combo_notes = q_combo_notes.where(Note.moderation_status == "approved")
+            q_combo_notes = q_combo_notes.where(Note.moderation_status == "approved").where(Note.is_archived == False)
 
         combo_notes = s.execute(q_combo_notes.order_by(Note.created_at.desc())).scalars().all()
 
@@ -2508,6 +2555,35 @@ def note_detail(note_id):
             if current_user.id != note.seller_id and not getattr(current_user, "is_admin", False):
                 abort(404)
 
+        # ARCHIVED_VISIBILITY: si el contenido fue archivado (por ejemplo, cuenta eliminada o moderación),
+        # lo ocultamos para nuevos usuarios, pero mantenemos acceso a quienes ya lo compraron/descargaron.
+        if bool(getattr(note, "is_archived", False)):
+            is_admin = bool(current_user.is_authenticated and getattr(current_user, "is_admin", False))
+            is_owner = bool(current_user.is_authenticated and current_user.id == note.seller_id)
+            if not (is_admin or is_owner):
+                has_access = False
+                if current_user.is_authenticated:
+                    try:
+                        if int(note.price_cents or 0) <= 0:
+                            has_access = s.execute(
+                                select(DownloadLog.id).where(
+                                    DownloadLog.user_id == current_user.id,
+                                    DownloadLog.note_id == note.id,
+                                ).limit(1)
+                            ).scalar_one_or_none() is not None
+                        else:
+                            has_access = s.execute(
+                                select(Purchase.id).where(
+                                    Purchase.buyer_id == current_user.id,
+                                    Purchase.note_id == note.id,
+                                    Purchase.status == 'approved'
+                                ).limit(1)
+                            ).scalar_one_or_none() is not None
+                    except Exception:
+                        has_access = False
+                if not has_access:
+                    abort(404)
+
         # ¿Puede descargar?
         can_download = False
         if current_user.is_authenticated:
@@ -2629,6 +2705,18 @@ def note_detail(note_id):
         if base_price > 0:
             buyer_price = round(base_price * GROSS_MULTIPLIER, 2)
 
+    # Analytics: vista de apunte
+    try:
+        log_analytics_event(
+            event="page_view",
+            user_id=(current_user.id if current_user.is_authenticated else None),
+            path=request.path,
+            note_id=int(note_id),
+            meta={"page": "note_detail", "price_cents": int(getattr(note, "price_cents", 0) or 0)},
+        )
+    except Exception:
+        pass
+
     return render_template(
         "note_detail.html",
         note=note,
@@ -2660,6 +2748,7 @@ def seller_profile(seller_id: int):
                 Note.seller_id == seller_id,
                 Note.is_active == True,
                 Note.moderation_status == "approved",
+                    Note.is_archived == False,
                 Note.deleted_at.is_(None)
             )
             .order_by(Note.created_at.desc())
@@ -2888,9 +2977,23 @@ def download_note(note_id):
                     note_id=note.id,
                     combo_id=None,
                     is_free=is_free,
+                    was_free=is_free,
                 )
             )
             s.commit()
+
+            # Analytics
+            try:
+                log_analytics_event(
+                    event="download",
+                    user_id=int(current_user.id),
+                    path=request.path,
+                    note_id=int(note.id),
+                    combo_id=None,
+                    meta={"is_free": bool(is_free)},
+                )
+            except Exception:
+                pass
         except Exception as e:
             try:
                 s.rollback()
@@ -2986,9 +3089,22 @@ def download_combo(combo_id):
                     note_id=None,
                     combo_id=combo.id,
                     is_free=is_free,
+                    was_free=is_free,
                 )
             )
             s.commit()
+
+            # Analytics
+            try:
+                log_analytics_event(
+                    event="download",
+                    user_id=int(current_user.id),
+                    path=request.path,
+                    combo_id=int(combo.id),
+                    meta={"is_free": bool(is_free)},
+                )
+            except Exception:
+                pass
         except Exception as e:
             try:
                 s.rollback()
@@ -3192,6 +3308,23 @@ def account_delete():
         except Exception:
             pass
 
+        # ACCOUNT_DELETE_ARCHIVE: ocultamos contenidos del vendedor para nuevos compradores,
+        # pero mantenemos acceso a quienes ya lo descargaron/compraron.
+        try:
+            now = datetime.utcnow()
+            s.execute(update(Note).where(Note.seller_id == u.id).values(
+                is_archived=True,
+                archived_at=now,
+                archived_reason="Cuenta eliminada"
+            ))
+            s.execute(update(Combo).where(Combo.seller_id == u.id).values(
+                is_archived=True,
+                archived_at=now,
+                archived_reason="Cuenta eliminada"
+            ))
+        except Exception:
+            pass
+
         # --- anonimización ---
         u.deleted_at = datetime.utcnow()
         u.is_suspended = True
@@ -3250,7 +3383,31 @@ def buy_note(note_id):
         buyer_price_cents = published_from_net_cents(net_cents)
 
         # Store the buyer-paid amount in the purchase
-        p = Purchase(buyer_id=current_user.id, note_id=note.id, status="pending", amount_cents=buyer_price_cents)
+        # (y completamos campos extra para admin/estadísticas si existen)
+        gross_cents = int(buyer_price_cents or 0)
+        try:
+            mp_fee_cents = int(round(gross_cents * (float(MP_FEE_IMMEDIATE_TOTAL_PCT) / 100.0)))
+        except Exception:
+            mp_fee_cents = 0
+        # Platform fee = lo que queda para ApuntesYa (sin MP) luego de que el vendedor reciba su neto
+        try:
+            platform_fee_cents = max(0, gross_cents - mp_fee_cents - int(net_cents or 0))
+        except Exception:
+            platform_fee_cents = 0
+
+        p = Purchase(
+            buyer_id=current_user.id,
+            note_id=note.id,
+            status="pending",
+            amount_cents=gross_cents,
+            # admin fields (nullable in DB)
+            buyer_email=getattr(current_user, "email", None),
+            seller_id=int(getattr(note, "seller_id", 0) or 0) or None,
+            gross_cents=gross_cents,
+            platform_fee_cents=platform_fee_cents,
+            mp_fee_cents=mp_fee_cents,
+            seller_net_cents=int(net_cents or 0),
+        )
         s.add(p)
         s.commit()
 
@@ -3544,6 +3701,17 @@ def _upsert_purchase_from_payment(pay: dict):
                     if status:
                         p.status = status
                     s.commit()
+                    # Analytics (best-effort)
+                    try:
+                        if (status or "").lower() == "approved":
+                            log_analytics_event(
+                                event="purchase_approved",
+                                user_id=int(p.buyer_id) if p.buyer_id else None,
+                                note_id=int(p.note_id) if p.note_id else None,
+                                meta={"amount_cents": int(p.amount_cents or 0), "payment_id": payment_id},
+                            )
+                    except Exception:
+                        pass
             # Emit notifications/emails if approved (idempotent)
             try:
                 if (status or "").lower() == "approved":
@@ -3564,6 +3732,62 @@ def _upsert_purchase_from_payment(pay: dict):
                     if status:
                         cp.status = status
                     s.commit()
+
+                    # -------------------------------------------------
+                    # Mirror en tabla purchases para que el admin (stats/movements)
+                    # tenga una única fuente de movimientos.
+                    # Idempotente: si ya existe un Purchase para este payment+combo+buyer,
+                    # no vuelve a crearlo.
+                    try:
+                        if (status or "").lower() == "approved":
+                            existing = s.execute(
+                                select(Purchase).where(
+                                    Purchase.payment_id == payment_id,
+                                    Purchase.combo_id == cp.combo_id,
+                                    Purchase.buyer_id == cp.buyer_id,
+                                ).limit(1)
+                            ).scalars().first()
+                            if not existing:
+                                combo = s.get(Combo, cp.combo_id) if cp.combo_id else None
+                                buyer_u = s.get(User, cp.buyer_id) if cp.buyer_id else None
+                                gross_cents = int(getattr(cp, "amount_cents", 0) or 0)
+                                try:
+                                    mp_fee_cents = int(round(gross_cents * (MP_FEE_IMMEDIATE_TOTAL_PCT / 100.0)))
+                                except Exception:
+                                    mp_fee_cents = 0
+                                seller_net_cents = int(getattr(combo, "seller_net_cents", 0) or 0) if combo else 0
+                                platform_fee_cents = max(0, gross_cents - mp_fee_cents - seller_net_cents)
+                                s.add(
+                                    Purchase(
+                                        buyer_id=cp.buyer_id,
+                                        note_id=None,
+                                        combo_id=cp.combo_id,
+                                        status="approved",
+                                        amount_cents=gross_cents,
+                                        payment_id=payment_id,
+                                        # extra fields
+                                        buyer_email=(getattr(buyer_u, "email", None) if buyer_u else None),
+                                        seller_id=(getattr(combo, "seller_id", None) if combo else None),
+                                        gross_cents=gross_cents,
+                                        mp_fee_cents=mp_fee_cents,
+                                        platform_fee_cents=platform_fee_cents,
+                                        seller_net_cents=seller_net_cents,
+                                    )
+                                )
+                                s.commit()
+                    except Exception:
+                        pass
+                    # Analytics (best-effort)
+                    try:
+                        if (status or "").lower() == "approved":
+                            log_analytics_event(
+                                event="combo_purchase_approved",
+                                user_id=int(cp.buyer_id) if cp.buyer_id else None,
+                                combo_id=int(cp.combo_id) if cp.combo_id else None,
+                                meta={"amount_cents": int(cp.amount_cents or 0), "payment_id": payment_id},
+                            )
+                    except Exception:
+                        pass
             # Emit notifications/emails if approved (idempotent)
             try:
                 if (status or "").lower() == "approved":
@@ -3863,7 +4087,8 @@ def help_commissions():
 @login_required
 @admin_required
 def admin_hub():
-    return render_template("admin/hub.html")
+    from datetime import datetime
+    return render_template("admin/hub.html", today_str=datetime.utcnow().strftime('%Y-%m-%d'))
 
 # Admin HUB - usuarios
 @app.route("/admin/api/users", methods=["GET", "POST"], endpoint="admin_api_users_list")
@@ -4481,6 +4706,407 @@ def admin_api_tickets():
     return jsonify({"items": items})
 
 
+# -----------------------
+# A4) Admin: Dashboard + movimientos
+# -----------------------
+
+@app.get("/admin/api/stats")
+@login_required
+@admin_required
+def admin_api_stats():
+    # KPIs principales + series para el dashboard de admin.
+    days = 30
+    try:
+        days = max(7, min(int(request.args.get("days", "30")), 365))
+    except Exception:
+        days = 30
+
+    since = datetime.utcnow() - timedelta(days=days)
+
+    with Session() as s:
+        # Totales
+        total_users = s.execute(select(func.count(User.id))).scalar_one()
+        total_notes = s.execute(select(func.count(Note.id))).scalar_one()
+        total_combos = s.execute(select(func.count(Combo.id))).scalar_one()
+
+        # Compras aprobadas
+        approved_q = select(func.count(Purchase.id), func.coalesce(func.sum(Purchase.gross_cents), 0),
+                            func.coalesce(func.sum(Purchase.platform_fee_cents), 0),
+                            func.coalesce(func.sum(Purchase.mp_fee_cents), 0),
+                            func.coalesce(func.sum(Purchase.seller_net_cents), 0)).where(Purchase.status == "approved")
+        purchases_count, gross_cents, platform_cents, mp_cents, seller_cents = s.execute(approved_q).one()
+
+        # Descargas gratuitas
+        free_downloads = s.execute(select(func.count(DownloadLog.id)).where(DownloadLog.was_free == True)).scalar_one()
+
+        # Series diarias (UTC)
+        def _day_expr(col):
+            return func.date_trunc("day", col)
+
+        # purchases series
+        purch_rows = s.execute(
+            select(_day_expr(Purchase.created_at).label("d"), func.count(Purchase.id).label("c"))
+            .where(Purchase.status == "approved", Purchase.created_at >= since)
+            .group_by("d").order_by("d")
+        ).all()
+        purch_map = {r.d.date().isoformat(): int(r.c) for r in purch_rows}
+
+        # downloads series (free)
+        dl_rows = s.execute(
+            select(_day_expr(DownloadLog.created_at).label("d"), func.count(DownloadLog.id).label("c"))
+            .where(DownloadLog.was_free == True, DownloadLog.created_at >= since)
+            .group_by("d").order_by("d")
+        ).all()
+        dl_map = {r.d.date().isoformat(): int(r.c) for r in dl_rows}
+
+        # page views series
+        pv_rows = s.execute(
+            select(_day_expr(AnalyticsEvent.created_at).label("d"), func.count(AnalyticsEvent.id).label("c"))
+            .where(AnalyticsEvent.event == "page_view", AnalyticsEvent.created_at >= since)
+            .group_by("d").order_by("d")
+        ).all()
+        pv_map = {r.d.date().isoformat(): int(r.c) for r in pv_rows}
+
+        # generate days list
+        days_list = []
+        cur = (datetime.utcnow() - timedelta(days=days-1)).date()
+        for i in range(days):
+            days_list.append((cur + timedelta(days=i)).isoformat())
+
+        series = {
+            "days": days_list,
+            "purchases": [purch_map.get(d, 0) for d in days_list],
+            "free_downloads": [dl_map.get(d, 0) for d in days_list],
+            "page_views": [pv_map.get(d, 0) for d in days_list],
+        }
+
+        # Top sellers (approved purchases)
+        top_sellers_rows = s.execute(
+            select(Purchase.seller_id, func.coalesce(func.sum(Purchase.seller_net_cents), 0).label("net"), func.count(Purchase.id).label("cnt"))
+            .where(Purchase.status == "approved")
+            .group_by(Purchase.seller_id)
+            .order_by(func.coalesce(func.sum(Purchase.seller_net_cents), 0).desc())
+            .limit(10)
+        ).all()
+        seller_ids = [r.seller_id for r in top_sellers_rows if r.seller_id]
+        seller_map = {}
+        if seller_ids:
+            for u in s.execute(select(User).where(User.id.in_(seller_ids))).scalars().all():
+                seller_map[u.id] = {"name": u.name, "email": u.email}
+
+        top_sellers = []
+        for r in top_sellers_rows:
+            u = seller_map.get(r.seller_id, {})
+            top_sellers.append({
+                "seller_id": r.seller_id,
+                "seller_name": u.get("name") or f"Usuario #{r.seller_id}",
+                "seller_email": u.get("email"),
+                "sales_count": int(r.cnt),
+                "seller_net_cents": int(r.net or 0),
+            })
+
+        # Top content by purchases (note + combo)
+        top_notes = s.execute(
+            select(Purchase.note_id, func.count(Purchase.id).label("cnt"))
+            .where(Purchase.status == "approved", Purchase.note_id.isnot(None))
+            .group_by(Purchase.note_id)
+            .order_by(func.count(Purchase.id).desc())
+            .limit(10)
+        ).all()
+        note_ids = [r.note_id for r in top_notes if r.note_id]
+        note_title = {}
+        if note_ids:
+            for n in s.execute(select(Note.id, Note.title).where(Note.id.in_(note_ids))).all():
+                note_title[n.id] = n.title
+
+        top_combos = s.execute(
+            select(Purchase.combo_id, func.count(Purchase.id).label("cnt"))
+            .where(Purchase.status == "approved", Purchase.combo_id.isnot(None))
+            .group_by(Purchase.combo_id)
+            .order_by(func.count(Purchase.id).desc())
+            .limit(10)
+        ).all()
+        combo_ids = [r.combo_id for r in top_combos if r.combo_id]
+        combo_title = {}
+        if combo_ids:
+            for c in s.execute(select(Combo.id, Combo.title).where(Combo.id.in_(combo_ids))).all():
+                combo_title[c.id] = c.title
+
+        top_content = {
+            "notes": [{"id": r.note_id, "title": note_title.get(r.note_id) or f"Apunte #{r.note_id}", "purchases": int(r.cnt)} for r in top_notes],
+            "combos": [{"id": r.combo_id, "title": combo_title.get(r.combo_id) or f"Combo #{r.combo_id}", "purchases": int(r.cnt)} for r in top_combos],
+        }
+
+    return jsonify({
+        "ok": True,
+        "totals": {
+            "users": int(total_users or 0),
+            "notes": int(total_notes or 0),
+            "combos": int(total_combos or 0),
+            "purchases": int(purchases_count or 0),
+            "free_downloads": int(free_downloads or 0),
+        },
+        "money": {
+            "gross_cents": int(gross_cents or 0),
+            "platform_fee_cents": int(platform_cents or 0),
+            "mp_fee_cents": int(mp_cents or 0),
+            "seller_net_cents": int(seller_cents or 0),
+        },
+        "series": series,
+        "top_sellers": top_sellers,
+        "top_content": top_content,
+    })
+
+
+@app.get("/admin/api/movements")
+@login_required
+@admin_required
+def admin_api_movements():
+    q = (request.args.get("q") or "").strip().lower()
+    date_from = (request.args.get("from") or "").strip()
+    date_to = (request.args.get("to") or "").strip()
+
+    def _parse_date(s):
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            return None
+
+    dt_from = _parse_date(date_from)
+    dt_to = _parse_date(date_to)
+    if dt_to:
+        dt_to = dt_to + timedelta(days=1)  # inclusive
+
+    items = []
+    with Session() as s:
+        # Purchases
+        pq = select(Purchase).order_by(Purchase.created_at.desc()).limit(200)
+        if dt_from:
+            pq = pq.where(Purchase.created_at >= dt_from)
+        if dt_to:
+            pq = pq.where(Purchase.created_at < dt_to)
+        if q:
+            pq = pq.where(func.lower(Purchase.buyer_email).like(f"%{q}%"))
+
+        purchases = s.execute(pq).scalars().all()
+
+        # preload users and content titles
+        buyer_emails = {p.buyer_email for p in purchases if p.buyer_email}
+        seller_ids = {p.seller_id for p in purchases if p.seller_id}
+        note_ids = {p.note_id for p in purchases if p.note_id}
+        combo_ids = {p.combo_id for p in purchases if p.combo_id}
+
+        users_by_email = {}
+        if buyer_emails:
+            for u in s.execute(select(User).where(func.lower(User.email).in_([e.lower() for e in buyer_emails]))).scalars().all():
+                users_by_email[u.email.lower()] = u
+        sellers = {}
+        if seller_ids:
+            for u in s.execute(select(User).where(User.id.in_(seller_ids))).scalars().all():
+                sellers[u.id] = u
+        notes = {}
+        if note_ids:
+            for n in s.execute(select(Note).where(Note.id.in_(note_ids))).scalars().all():
+                notes[n.id] = n
+        combos = {}
+        if combo_ids:
+            for c in s.execute(select(Combo).where(Combo.id.in_(combo_ids))).scalars().all():
+                combos[c.id] = c
+
+        for p in purchases:
+            seller = sellers.get(p.seller_id)
+            buyer = users_by_email.get((p.buyer_email or "").lower())
+            obj = None
+            obj_type = None
+            if p.note_id:
+                obj = notes.get(p.note_id)
+                obj_type = "note"
+            elif p.combo_id:
+                obj = combos.get(p.combo_id)
+                obj_type = "combo"
+
+            title = (obj.title if obj else None)
+            # resumen
+            summary_parts = []
+            if obj_type == "note":
+                summary_parts.append("Compra de apunte")
+            elif obj_type == "combo":
+                summary_parts.append("Compra de combo")
+            else:
+                summary_parts.append("Compra")
+            if title:
+                summary_parts.append(f"— {title}")
+            summary = " ".join(summary_parts)
+
+            items.append({
+                "kind": "purchase",
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "status": p.status,
+                "buyer": {"email": p.buyer_email, "name": getattr(buyer, "name", None)},
+                "seller": {"id": p.seller_id, "name": getattr(seller, "name", None), "email": getattr(seller, "email", None)},
+                "object": {"type": obj_type, "id": (p.note_id or p.combo_id), "title": title},
+                "money": {
+                    "gross_cents": int(p.gross_cents or 0),
+                    "platform_fee_cents": int(p.platform_fee_cents or 0),
+                    "mp_fee_cents": int(p.mp_fee_cents or 0),
+                    "seller_net_cents": int(p.seller_net_cents or 0),
+                },
+                "summary": summary,
+            })
+
+        # Free downloads
+        dq = select(DownloadLog).where(DownloadLog.was_free == True).order_by(DownloadLog.created_at.desc()).limit(200)
+        if dt_from:
+            dq = dq.where(DownloadLog.created_at >= dt_from)
+        if dt_to:
+            dq = dq.where(DownloadLog.created_at < dt_to)
+        dls = s.execute(dq).scalars().all()
+        user_ids = {d.user_id for d in dls if d.user_id}
+        note_ids2 = {d.note_id for d in dls if d.note_id}
+        combo_ids2 = {d.combo_id for d in dls if d.combo_id}
+        users = {}
+        if user_ids:
+            for u in s.execute(select(User).where(User.id.in_(user_ids))).scalars().all():
+                users[u.id] = u
+        notes2 = {}
+        if note_ids2:
+            for n in s.execute(select(Note).where(Note.id.in_(note_ids2))).scalars().all():
+                notes2[n.id] = n
+        combos2 = {}
+        if combo_ids2:
+            for c in s.execute(select(Combo).where(Combo.id.in_(combo_ids2))).scalars().all():
+                combos2[c.id] = c
+
+        for d in dls:
+            u = users.get(d.user_id)
+            obj = None
+            obj_type = None
+            seller = None
+            if d.note_id:
+                obj = notes2.get(d.note_id)
+                obj_type = "note"
+                seller = users.get(getattr(obj, "seller_id", None)) if obj else None
+            elif d.combo_id:
+                obj = combos2.get(d.combo_id)
+                obj_type = "combo"
+                seller = users.get(getattr(obj, "seller_id", None)) if obj else None
+            title = (obj.title if obj else None)
+            summary = f"Descarga gratuita" + (f" — {title}" if title else "")
+            items.append({
+                "kind": "free_download",
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+                "status": "free",
+                "buyer": {"email": getattr(u, "email", None), "name": getattr(u, "name", None), "id": d.user_id},
+                "seller": {"id": getattr(seller, "id", None), "name": getattr(seller, "name", None), "email": getattr(seller, "email", None)},
+                "object": {"type": obj_type, "id": (d.note_id or d.combo_id), "title": title},
+                "money": {"gross_cents": 0, "platform_fee_cents": 0, "mp_fee_cents": 0, "seller_net_cents": 0},
+                "summary": summary,
+            })
+
+    # sort by created_at desc
+    def _key(it):
+        return it.get("created_at") or ""
+    items.sort(key=_key, reverse=True)
+
+    # additional text filter over titles / names (client side is ok, but we can do a bit here)
+    if q:
+        def match(it):
+            hay = " ".join([
+                (it.get("summary") or ""),
+                (it.get("buyer") or {}).get("email") or "",
+                (it.get("buyer") or {}).get("name") or "",
+                (it.get("seller") or {}).get("email") or "",
+                (it.get("seller") or {}).get("name") or "",
+                (it.get("object") or {}).get("title") or "",
+            ]).lower()
+            return q in hay
+        items = [it for it in items if match(it)]
+
+    return jsonify({"items": items[:400]})
+
+
+@app.get("/admin/api/stats")
+@admin_required
+def admin_api_stats_summary():
+    """KPIs y series básicas para el dashboard de estadísticas."""
+    days = request.args.get("days", "30")
+    try:
+        days_i = max(1, min(365, int(days)))
+    except Exception:
+        days_i = 30
+
+    since = datetime.utcnow() - timedelta(days=days_i)
+
+    with Session() as s:
+        # Totales
+        total_users = s.execute(select(func.count(User.id))).scalar_one() or 0
+        total_notes = s.execute(select(func.count(Note.id))).scalar_one() or 0
+        total_combos = s.execute(select(func.count(Combo.id))).scalar_one() or 0
+
+        # Periodo
+        new_users = s.execute(select(func.count(User.id)).where(User.created_at >= since)).scalar_one() or 0
+
+        purchases_notes = s.execute(select(func.count(Purchase.id)).where(Purchase.created_at >= since, Purchase.status == "approved")).scalar_one() or 0
+        purchases_combos = s.execute(select(func.count(ComboPurchase.id)).where(ComboPurchase.created_at >= since, ComboPurchase.status == "approved")).scalar_one() or 0
+
+        amount_notes = s.execute(select(func.coalesce(func.sum(Purchase.amount_cents), 0)).where(Purchase.created_at >= since, Purchase.status == "approved")).scalar_one() or 0
+        amount_combos = s.execute(select(func.coalesce(func.sum(ComboPurchase.amount_cents), 0)).where(ComboPurchase.created_at >= since, ComboPurchase.status == "approved")).scalar_one() or 0
+
+        free_downloads = s.execute(select(func.count(DownloadLog.id)).where(DownloadLog.created_at >= since, DownloadLog.is_free == True)).scalar_one() or 0
+
+        # Analytics events (page views)
+        pageviews = s.execute(select(func.count(AnalyticsEvent.id)).where(AnalyticsEvent.created_at >= since, AnalyticsEvent.event == "page_view")).scalar_one() or 0
+
+        # Top sellers (ventas)
+        top_sellers = []
+        try:
+            rows = s.execute(
+                select(Note.seller_id, func.count(Purchase.id).label("cnt"), func.coalesce(func.sum(Purchase.amount_cents), 0).label("sum"))
+                .join(Purchase, Purchase.note_id == Note.id)
+                .where(Purchase.status == "approved", Purchase.created_at >= since)
+                .group_by(Note.seller_id)
+                .order_by(func.count(Purchase.id).desc())
+                .limit(8)
+            ).all()
+            # attach names
+            seller_ids = [int(r[0]) for r in rows if r[0] is not None]
+            sellers = {u.id: u for u in s.execute(select(User).where(User.id.in_(seller_ids))).scalars().all()}
+            for sid, cnt, sm in rows:
+                u = sellers.get(int(sid))
+                top_sellers.append({
+                    "seller_id": int(sid),
+                    "seller_name": (getattr(u, "name", None) or f"Usuario #{sid}"),
+                    "sales_count": int(cnt or 0),
+                    "sales_amount_cents": int(sm or 0),
+                })
+        except Exception:
+            top_sellers = []
+
+    purchases_total = int(purchases_notes) + int(purchases_combos)
+    amount_total_cents = int(amount_notes) + int(amount_combos)
+
+    return jsonify({
+        "range_days": days_i,
+        "totals": {
+            "users": int(total_users),
+            "notes": int(total_notes),
+            "combos": int(total_combos),
+        },
+        "period": {
+            "since": since.isoformat(),
+            "new_users": int(new_users),
+            "pageviews": int(pageviews),
+            "purchases": int(purchases_total),
+            "sales_amount_cents": int(amount_total_cents),
+            "free_downloads": int(free_downloads),
+        },
+        "top_sellers": top_sellers,
+    })
+
+
+### (el endpoint /admin/api/movements está definido más arriba; evitamos duplicados)
+
+
 # Admin HUB - moderación (apuntes + combos)
 @app.get("/admin/api/moderation")
 @login_required
@@ -4825,6 +5451,7 @@ def combo_create():
                 Note.deleted_at.is_(None),
                 Note.is_active == True,
                 Note.moderation_status == "approved",
+                    Note.is_archived == False,
             )
             .order_by(Note.created_at.desc())
         ).scalars().all()
@@ -4855,6 +5482,7 @@ def combo_create():
                     Note.deleted_at.is_(None),
                     Note.is_active == True,
                     Note.moderation_status == "approved",
+                    Note.is_archived == False,
                 )
             ).scalars().all()
 
@@ -4920,6 +5548,7 @@ def combo_edit(combo_id: int):
                 Note.deleted_at.is_(None),
                 Note.is_active == True,
                 Note.moderation_status == "approved",
+                    Note.is_archived == False,
             )
             .order_by(Note.created_at.desc())
         ).scalars().all()
@@ -4949,6 +5578,7 @@ def combo_edit(combo_id: int):
                     Note.deleted_at.is_(None),
                     Note.is_active == True,
                     Note.moderation_status == "approved",
+                    Note.is_archived == False,
                 )
             ).scalars().all()
             if len(chosen) < 2:
@@ -5122,6 +5752,24 @@ def combo_detail(combo_id: int):
             if combo.moderation_status != "approved" and not (is_owner or is_admin):
                 abort(404)
 
+        # ARCHIVED_VISIBILITY_COMBO: oculto para nuevos usuarios, pero accesible para quienes ya lo compraron/descargaron.
+        if getattr(combo, 'is_archived', False) and not (is_owner or is_admin):
+            has_access = False
+            try:
+                if getattr(current_user, 'is_authenticated', False):
+                    if int(getattr(combo, 'price_cents', 0) or 0) <= 0:
+                        has_access = s.execute(
+                            select(DownloadLog.id).where(DownloadLog.user_id == current_user.id, DownloadLog.combo_id == combo.id)
+                        ).scalar_one_or_none() is not None
+                    else:
+                        has_access = s.execute(
+                            select(Purchase.id).where(Purchase.user_id == current_user.id, Purchase.combo_id == combo.id, Purchase.status == 'approved')
+                        ).scalar_one_or_none() is not None
+            except Exception:
+                has_access = False
+            if not has_access:
+                abort(404)
+
         note_ids = (
             s.execute(select(ComboNote.note_id).where(ComboNote.combo_id == combo.id))
             .scalars()
@@ -5168,6 +5816,18 @@ def combo_detail(combo_id: int):
                     can_download = bool(has_cp2)
                 except Exception:
                     can_download = False
+
+    # Analytics: vista de combo
+    try:
+        log_analytics_event(
+            event="page_view",
+            user_id=(current_user.id if current_user.is_authenticated else None),
+            path=request.path,
+            combo_id=int(combo_id),
+            meta={"page": "combo_detail", "price_cents": int(getattr(combo, "price_cents", 0) or 0)},
+        )
+    except Exception:
+        pass
 
     return render_template(
         "combo_detail.html",

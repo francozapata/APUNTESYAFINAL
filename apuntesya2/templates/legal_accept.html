@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container" style="max-width:900px;margin:40px auto 80px auto;">
+  <h1 style="margin-bottom:16px;">Aceptar Términos y Políticas</h1>
+  <p style="color:#555;margin-bottom:18px;">
+    Para seguir usando ApuntesYa necesitamos que aceptes los documentos legales vigentes.
+  </p>
+
+  <div style="background:#fafbff;border:1px solid #e5e7f5;border-radius:16px;padding:16px 16px;">
+    <ul style="color:#555;margin:0;padding-left:18px;">
+      <li style="margin-bottom:8px;">📄 <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Términos y Condiciones</a></li>
+      <li style="margin-bottom:8px;">🔒 <a href="{{ url_for('privacy') }}" target="_blank" rel="noopener">Política de Privacidad</a></li>
+      <li>🛡️ <a href="{{ url_for('security') }}" target="_blank" rel="noopener">Política de Seguridad</a></li>
+    </ul>
+  </div>
+
+  <form method="POST" action="{{ url_for('legal_accept_post', next=request.args.get('next') or request.full_path) }}" style="margin-top:18px;">
+    <input type="hidden" name="next" value="{{ request.args.get('next') or url_for('index') }}">
+
+    <label style="display:flex;align-items:flex-start;gap:10px;color:#444;">
+      <input type="checkbox" name="accept" value="1" required style="margin-top:4px;">
+      <span>
+        Leí y acepto los <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Términos y Condiciones</a>,
+        la <a href="{{ url_for('privacy') }}" target="_blank" rel="noopener">Política de Privacidad</a> y la
+        <a href="{{ url_for('security') }}" target="_blank" rel="noopener">Política de Seguridad</a>.
+      </span>
+    </label>
+
+    <button class="btn" style="margin-top:14px;">✅ Aceptar y continuar</button>
+    <div class="muted" style="margin-top:10px;">Versión legal: <b>{{ legal_version }}</b></div>
+  </form>
+</div>
+{% endblock %}
