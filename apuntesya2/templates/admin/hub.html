@@ -296,6 +296,15 @@
         <div class="admin-header">
             <h2>Administrar ApuntesYa</h2>
             <p>Buscá y gestioná usuarios, apuntes y archivos desde un solo lugar.</p>
+
+            {% if current_user.is_superadmin %}
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                <a class="btn ghost" href="{{ url_for('admin_manage_admins') }}">👑 Administradores</a>
+                <a class="btn ghost" href="{{ url_for('admin_maintenance') }}">🛠️ Mantenimiento</a>
+                <a class="btn ghost" href="{{ url_for('admin_audit_log') }}">🧾 Auditoría</a>
+                <a class="btn ghost" href="{{ url_for('admin_tools') }}">🧰 Herramientas</a>
+            </div>
+            {% endif %}
         </div>
 
         <div class="tabs">
@@ -305,6 +314,7 @@
             <button id="tabModeration" class="tab" type="button">🛡️ <span>Moderador</span></button>
             <button id="tabTickets" class="tab" type="button">🧾 <span>Gestiones</span></button>
             <button id="tabStats" class="tab" type="button">📈 <span>Estadísticas</span></button>
+            <button id="tabAnalytics" class="tab" type="button">📊 <span>Eventos</span></button>
         </div>
 
         <!-- BUSCADOR -->
@@ -345,9 +355,27 @@
                     <input id="movFrom" class="input" type="date" style="width:auto;min-width:170px;" />
                     <input id="movTo" class="input" type="date" style="width:auto;min-width:170px;" />
                     <button id="movRefresh" type="button" class="btn ghost">Buscar</button>
+                    <a id="movExport" class="btn ghost" href="#" role="button">⬇️ CSV</a>
                 </div>
             </div>
             <div id="movementsPane"></div>
+        </div>
+
+        <div id="analyticsPane" style="display:none;margin-top:14px;">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                <span class="muted" style="font-weight:700;">Rango:</span>
+                <select id="analyticsDays" class="input" style="width:auto;min-width:160px;">
+                    <option value="7">Últimos 7 días</option>
+                    <option value="30" selected>Últimos 30 días</option>
+                    <option value="90">Últimos 90 días</option>
+                    <option value="365">Últimos 12 meses</option>
+                </select>
+                <button id="analyticsRefresh" type="button" class="btn ghost">🔄 Actualizar</button>
+                <a id="analyticsExport" class="btn ghost" href="#" role="button">⬇️ CSV</a>
+            </div>
+
+            <div id="analyticsKpis" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;"></div>
+            <div id="analyticsFunnels" style="margin-top:12px;"></div>
         </div>
     </div>
 </div>
@@ -378,19 +406,27 @@
         const tabModeration = document.getElementById('tabModeration');
         const tabTickets = document.getElementById('tabTickets');
         const tabStats = document.getElementById('tabStats');
+        const tabAnalytics = document.getElementById('tabAnalytics');
         const searchBox = document.getElementById('searchBox');
         const usersPane = document.getElementById('usersPane');
         const contentPane = document.getElementById('contentPane');
         const moderationPane = document.getElementById('moderationPane');
         const ticketsPane = document.getElementById('ticketsPane');
         const statsPane = document.getElementById('statsPane');
+        const analyticsPane = document.getElementById('analyticsPane');
         const statsKpis = document.getElementById('statsKpis');
         const statsDays = document.getElementById('statsDays');
         const statsRefresh = document.getElementById('statsRefresh');
+        const analyticsKpis = document.getElementById('analyticsKpis');
+        const analyticsFunnels = document.getElementById('analyticsFunnels');
+        const analyticsDays = document.getElementById('analyticsDays');
+        const analyticsRefresh = document.getElementById('analyticsRefresh');
+        const analyticsExport = document.getElementById('analyticsExport');
         const movementsPane = document.getElementById('movementsPane');
         const movFrom = document.getElementById('movFrom');
         const movTo = document.getElementById('movTo');
         const movRefresh = document.getElementById('movRefresh');
+        const movExport = document.getElementById('movExport');
         const moderationList = document.getElementById('moderationList');
 
         const modStatusPendingAi = document.getElementById('modStatusPendingAi');
@@ -398,7 +434,7 @@
         const modStatusApproved = document.getElementById('modStatusApproved');
         const modStatusRejected = document.getElementById('modStatusRejected');
 
-        let activeTab = 'users'; // 'users' | 'content' | 'moderation' | 'tickets' | 'stats' | 'stats'
+        let activeTab = 'users'; // 'users' | 'content' | 'moderation' | 'tickets' | 'stats' | 'analytics'
         let moderationStatus = 'pending_manual';
         let timer = null;
 
@@ -409,12 +445,14 @@
             tabModeration.classList.toggle('active', tab === 'moderation');
             tabTickets.classList.toggle('active', tab === 'tickets');
             if (tabStats) tabStats.classList.toggle('active', tab === 'stats');
+            if (tabAnalytics) tabAnalytics.classList.toggle('active', tab === 'analytics');
 
             usersPane.style.display = tab === 'users' ? '' : 'none';
             contentPane.style.display = tab === 'content' ? '' : 'none';
             moderationPane.style.display = tab === 'moderation' ? '' : 'none';
             ticketsPane.style.display = tab === 'tickets' ? '' : 'none';
             if (statsPane) statsPane.style.display = tab === 'stats' ? '' : 'none';
+            if (analyticsPane) analyticsPane.style.display = tab === 'analytics' ? '' : 'none';
 
             searchBox.placeholder =
                 tab === 'users'
@@ -425,6 +463,8 @@
                             ? 'Buscar gestión por número (AY-...)'
                             : (tab === 'stats'
                                 ? 'Buscar movimiento (comprador/vendedor/título)'
+                                : (tab === 'analytics'
+                                    ? 'Buscar (no aplica en eventos)'
                                 : 'Buscar por título o vendedor')));
 
             load();
@@ -435,6 +475,7 @@
         tabModeration.addEventListener('click', () => sw('moderation'));
         tabTickets.addEventListener('click', () => sw('tickets'));
         if (tabStats) tabStats.addEventListener('click', () => sw('stats'));
+        if (tabAnalytics) tabAnalytics.addEventListener('click', () => sw('analytics'));
 
         if (statsRefresh) statsRefresh.addEventListener('click', () => load());
         if (movRefresh) movRefresh.addEventListener('click', () => load());
@@ -504,8 +545,17 @@
                 const from = encodeURIComponent(movFrom.value || '');
                 const to = encodeURIComponent(movTo.value || '');
                 const rm = await fetch(`/admin/api/movements?q=${q}&from=${from}&to=${to}`);
+                if (movExport) movExport.href = `/admin/export/movements.csv?q=${q}&from=${from}&to=${to}`;
                 const jm = await rm.json();
                 renderMovements(jm.items || []);
+            } else if (activeTab === 'analytics') {
+                analyticsKpis.innerHTML = '<div class="muted">Cargando eventos…</div>';
+                analyticsFunnels.innerHTML = '';
+                const days = encodeURIComponent(analyticsDays.value || '30');
+                if (analyticsExport) analyticsExport.href = `/admin/export/events.csv?days=${days}`;
+                const r = await fetch(`/admin/api/analytics?days=${days}`);
+                const js = await r.json();
+                renderAnalytics(js);
             } else {
                 moderationList.innerHTML = '<div class="muted">Cargando…</div>';
                 const r = await fetch(`/admin/api/moderation?status=${encodeURIComponent(moderationStatus)}&q=${q}`);
@@ -518,6 +568,10 @@
         if (statsRefresh) statsRefresh.addEventListener('click', load);
         if (movRefresh) movRefresh.addEventListener('click', load);
         if (statsDays) statsDays.addEventListener('change', load);
+        if (analyticsDays) analyticsDays.addEventListener('change', load);
+        if (analyticsRefresh) analyticsRefresh.addEventListener('click', load);
+        if (movExport) movExport.addEventListener('click', (e) => { if (!movExport.href || movExport.href.endsWith('#')) { e.preventDefault(); load(); } });
+        if (analyticsExport) analyticsExport.addEventListener('click', (e) => { if (!analyticsExport.href || analyticsExport.href.endsWith('#')) { e.preventDefault(); load(); } });
         if (movFrom) movFrom.addEventListener('change', () => { if (activeTab === 'stats') load(); });
         if (movTo) movTo.addEventListener('change', () => { if (activeTab === 'stats') load(); });
 
@@ -535,7 +589,11 @@
                 ['Combos (total)', k.combos_total],
                 ['Compras (últ. ' + (data.range_days || 30) + ' días)', k.purchases_range],
                 ['Ingresos brutos (últ. ' + (data.range_days || 30) + ' días)', fmtMoney(k.revenue_gross_range_cents)],
+                ['Comisión ApuntesYa (últ. ' + (data.range_days || 30) + ' días)', fmtMoney(k.revenue_ay_range_cents)],
+                ['Comisión MP (últ. ' + (data.range_days || 30) + ' días)', fmtMoney(k.revenue_mp_range_cents)],
+                ['Pago a vendedores (últ. ' + (data.range_days || 30) + ' días)', fmtMoney(k.revenue_seller_range_cents)],
                 ['Descargas gratis (últ. ' + (data.range_days || 30) + ' días)', k.free_downloads_range],
+                ['Descargas pagas (últ. ' + (data.range_days || 30) + ' días)', k.paid_downloads_range],
                 ['Pageviews (últ. ' + (data.range_days || 30) + ' días)', k.pageviews_range],
                 ['Conversión aprox.', (k.conversion_rate_pct || 0) + '%'],
             ];
@@ -550,6 +608,64 @@
                     </div>
                   </div>
                 `).join('')}
+              </div>
+            `;
+        }
+
+        function renderAnalytics(data) {
+            const totals = data.totals || {};
+            const f = data.funnels || {};
+            const rn = data.range_days || 30;
+
+            const cards = [
+                ['Pageviews (últ. ' + rn + ' días)', totals.page_view || 0],
+                ['Vistas de apuntes (últ. ' + rn + ' días)', totals.note_view || 0],
+                ['Vistas de combos (últ. ' + rn + ' días)', totals.combo_view || 0],
+                ['Intentos de compra (últ. ' + rn + ' días)', totals.buy_intent || 0],
+                ['Checkouts iniciados (últ. ' + rn + ' días)', totals.checkout_start || 0],
+                ['Compras aprobadas (últ. ' + rn + ' días)', totals.purchase_approved || 0],
+            ];
+
+            analyticsKpis.innerHTML = `
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+                ${cards.map(([t, v]) => `
+                  <div class="row-card" style="margin-top:0;align-items:flex-start;">
+                    <div class="row-main">
+                      <div class="muted" style="font-weight:800;">${escapeHtml(t)}</div>
+                      <div style="font-size:18px;font-weight:900;margin-top:6px;">${escapeHtml(String(v ?? 0))}</div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+
+            const fn = f.notes || {};
+            const fc = f.combos || {};
+            analyticsFunnels.innerHTML = `
+              <div class="row-card" style="margin-top:0;align-items:flex-start;">
+                <div class="row-main">
+                  <strong>Embudo (apuntes)</strong>
+                  <span class="muted">Vista → intento compra → checkout → aprobado</span>
+                  <div style="margin-top:8px;font-size:13px;">
+                    👀 ${fn.views || 0} → 🛒 ${fn.buy_intents || 0} → 💳 ${fn.checkout_starts || 0} → ✅ ${fn.approved || 0}
+                  </div>
+                  <div class="muted" style="margin-top:6px;">
+                    Conversión: vista→intento <b>${fn.view_to_buy_pct || 0}%</b> · intento→checkout <b>${fn.buy_to_checkout_pct || 0}%</b> · checkout→aprobado <b>${fn.checkout_to_approved_pct || 0}%</b>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row-card" style="margin-top:10px;align-items:flex-start;">
+                <div class="row-main">
+                  <strong>Embudo (combos)</strong>
+                  <span class="muted">Vista → intento compra → checkout → aprobado</span>
+                  <div style="margin-top:8px;font-size:13px;">
+                    👀 ${fc.views || 0} → 🛒 ${fc.buy_intents || 0} → 💳 ${fc.checkout_starts || 0} → ✅ ${fc.approved || 0}
+                  </div>
+                  <div class="muted" style="margin-top:6px;">
+                    Conversión: vista→intento <b>${fc.view_to_buy_pct || 0}%</b> · intento→checkout <b>${fc.buy_to_checkout_pct || 0}%</b> · checkout→aprobado <b>${fc.checkout_to_approved_pct || 0}%</b>
+                  </div>
+                </div>
               </div>
             `;
         }

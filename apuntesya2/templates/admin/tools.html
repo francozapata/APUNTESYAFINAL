@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .shell{max-width:980px;margin:32px auto;padding:0 16px;}
+  .card{background:#fff;border:1px solid #e5e7f5;border-radius:18px;padding:18px 18px;box-shadow:0 12px 30px rgba(15,23,42,0.06)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;}
+  .panel{border:1px solid #e5e7f5;border-radius:16px;padding:14px;background:#fafbff}
+  .title{margin:0;font-size:20px;font-weight:900;color:#111827}
+  .sub{margin:6px 0 0;color:#6b7280;font-size:13px;line-height:1.4}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:999px;border:1px solid #dfe4ff;background:#4478ff;color:#fff;font-weight:800;font-size:13px;text-decoration:none}
+  .btn.ghost{background:#f3f6ff;color:#334}
+  .btn.danger{background:#ef4444;border-color:#ef4444}
+  .btn:hover{filter:brightness(0.98)}
+  .inp{padding:10px 12px;border-radius:12px;border:1px solid #e5e7f5;background:#fff;font-size:13px;width:100%;}
+  .muted{color:#6b7280;font-size:12px}
+  @media (max-width: 860px){ .row{grid-template-columns:1fr;} }
+</style>
+
+<div class="shell">
+  <div class="card">
+    <h1 class="title">🧰 Herramientas (Superadmin)</h1>
+    <p class="sub">Acciones sensibles y exportaciones. Todo queda registrado en auditoría.</p>
+
+    <div class="row">
+      <div class="panel">
+        <h3 style="margin:0 0 8px;font-size:14px;font-weight:900;color:#111827">⬇️ Exportar CSV</h3>
+        <p class="muted" style="margin:0 0 10px;">Para exportar con filtros (fecha/búsqueda), usá el panel Admin → Estadísticas/Eventos y tocá “CSV”.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn ghost" href="/admin/export/movements.csv" target="_blank" rel="noopener">Movimientos</a>
+          <a class="btn ghost" href="/admin/export/events.csv?days=30" target="_blank" rel="noopener">Eventos (30 días)</a>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin:0 0 8px;font-size:14px;font-weight:900;color:#111827">🛠️ Estado del sitio</h3>
+        <p class="muted" style="margin:0 0 10px;">Modo mantenimiento actual: <b>{{ 'ACTIVO' if maintenance_on else 'apagado' }}</b></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn ghost" href="{{ url_for('admin_maintenance') }}">Ir a Mantenimiento</a>
+          <a class="btn ghost" href="{{ url_for('admin_audit_log') }}">Ver Auditoría</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:12px;border-color:#fee2e2;background:#fff1f2;">
+      <h3 style="margin:0 0 8px;font-size:14px;font-weight:900;color:#7f1d1d">🔥 Reset de plataforma</h3>
+      <p class="muted" style="margin:0 0 10px;color:#7f1d1d;">Borra histórico (compras, descargas, eventos, estadísticas, apuntes/combos, usuarios normales). <b>No elimina superadmins</b>.</p>
+
+      <form method="post" action="{{ url_for('admin_reset_platform') }}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1;min-width:240px;">
+          <label class="muted" style="display:block;margin-bottom:6px;color:#7f1d1d;">Escribí <b>RESET</b> para confirmar</label>
+          <input class="inp" name="confirm" placeholder="RESET" autocomplete="off" />
+        </div>
+        <button class="btn danger" type="submit">Ejecutar reset</button>
+      </form>
+
+      <div class="muted" style="margin-top:10px;color:#7f1d1d;">Tip: si estás por lanzar de nuevo, podés resetear para arrancar “limpio”.</div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

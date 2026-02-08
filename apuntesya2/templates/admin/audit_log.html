@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .shell{max-width:980px;margin:32px auto;padding:0 16px;}
+  .card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:22px 20px;box-shadow:0 10px 30px rgba(15,23,42,.05)}
+  .title{margin:0;font-size:20px;font-weight:900;color:#111827}
+  .sub{margin:6px 0 0;color:#6b7280;font-size:13px}
+  .btn{padding:8px 14px;border-radius:999px;border:1px solid #dfe4ff;background:#f3f6ff;color:#334;font-weight:700;font-size:12px;text-decoration:none}
+  .row{display:grid;grid-template-columns: 170px 1fr 140px;gap:10px;padding:12px 14px;border:1px solid #e5e7f5;border-radius:14px;background:#fafbff;margin-top:10px}
+  .code{font-weight:900;color:#111827}
+  .meta{font-size:12px;color:#6b7280}
+  .action{font-weight:800;color:#111827}
+  @media(max-width:760px){.row{grid-template-columns:1fr;}}
+</style>
+
+<div class="shell">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div>
+        <h2 class="title">🧾 Auditoría (admin)</h2>
+        <p class="sub">Registro de acciones sensibles. Solo superadmin.</p>
+      </div>
+      <a class="btn" href="{{ url_for('admin_hub') }}">⬅️ Volver</a>
+    </div>
+
+    {% for e in events %}
+      <div class="row">
+        <div>
+          <div class="code">{{ e.code }}</div>
+          <div class="meta">{{ e.created_at.strftime('%d/%m/%Y %H:%M') if e.created_at else '' }}</div>
+        </div>
+        <div>
+          <div class="action">{{ e.action }}</div>
+          <div class="meta">
+            Actor: {{ e.actor_user_id if e.actor_user_id else '-' }} · Target: {{ e.target_type or '-' }} {{ e.target_id or '' }}
+          </div>
+          {% if e.meta %}
+          <pre style="margin:8px 0 0;white-space:pre-wrap;font-size:12px;color:#334;background:#fff;border:1px solid #eef0ff;border-radius:12px;padding:10px">{{ e.meta | tojson(indent=2) }}</pre>
+          {% endif %}
+        </div>
+        <div class="meta" style="text-align:right">
+          id {{ e.id }}
+        </div>
+      </div>
+    {% else %}
+      <p class="meta" style="margin-top:12px">Sin auditoría todavía.</p>
+    {% endfor %}
+
+  </div>
+</div>
+
+{% endblock %}

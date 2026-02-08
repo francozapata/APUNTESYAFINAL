@@ -4,7 +4,7 @@ The app runs on both SQLite (local) and Postgres (Supabase). We therefore use
 SQLAlchemy's generic JSON type instead of dialect-specific ones.
 """
 
-from datetime import datetime
+from datetime import datetime, date
 
 from flask_login import UserMixin
 from sqlalchemy import (
@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     DateTime,
+    Date,
     JSON,
     Text,
     ForeignKey,
@@ -50,6 +51,10 @@ class User(Base, UserMixin):
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False)
     suspended_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Roles: 'user' | 'admin' | 'superadmin'
+    # We keep `is_admin` for backwards compatibility with existing templates
+    # and legacy code paths.
+    role: Mapped[str] = mapped_column(String(20), default="user", nullable=False, index=True)
     deleted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -87,6 +92,34 @@ class User(Base, UserMixin):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    # Convenience helpers (do not rely on these for security without DB refresh)
+    @property
+    def is_superadmin(self) -> bool:
+        try:
+            return (getattr(self, "role", "user") or "user").lower() == "superadmin"
+        except Exception:
+            return False
+
+    @property
+    def is_staff(self) -> bool:
+        try:
+            r = (getattr(self, "role", "user") or "user").lower()
+            return r in ("admin", "superadmin") or bool(getattr(self, "is_admin", False))
+        except Exception:
+            return bool(getattr(self, "is_admin", False))
+
+
+class SiteSetting(Base):
+    """Single-row-ish key/value settings for runtime toggles.
+
+    Used for superadmin maintenance mode and future critical settings.
+    """
+
+    __tablename__ = "site_settings"
+
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=True)
 
 
 class Note(Base):
@@ -248,6 +281,26 @@ class Purchase(Base):
     mp_fee_cents: Mapped[int] = mapped_column(Integer, default=0)
     seller_net_cents: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # A5: evitar doble conteo en stats (webhooks pueden repetirse)
+    stats_counted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class DailyStat(Base):
+    """Agregados diarios para A5 (estadísticas rápidas y estables)."""
+
+    __tablename__ = "stats_daily"
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+
+    gross_income_cents: Mapped[int] = mapped_column(Integer, default=0)
+    ay_commission_cents: Mapped[int] = mapped_column(Integer, default=0)
+    mp_fee_cents: Mapped[int] = mapped_column(Integer, default=0)
+    seller_income_cents: Mapped[int] = mapped_column(Integer, default=0)
+
+    sales_count: Mapped[int] = mapped_column(Integer, default=0)
+    free_downloads: Mapped[int] = mapped_column(Integer, default=0)
+    paid_downloads: Mapped[int] = mapped_column(Integer, default=0)
 
 class ComboPurchase(Base):
     __tablename__ = "combo_purchases"

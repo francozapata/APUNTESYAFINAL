@@ -51,6 +51,8 @@ from firebase_admin import credentials, auth as fb_auth
 from apuntesya2.models import (
     Base,
     User,
+    SiteSetting,
+    DailyStat,
     Note,
     Purchase,
     University,
@@ -262,6 +264,9 @@ def _ensure_schema(engine):
         if insp.has_table('users'):
             cols = {c['name'] for c in insp.get_columns('users')}
             add_cols = []
+            # roles (user/admin/superadmin)
+            if 'role' not in cols:
+                add_cols.append("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user'")
             if 'contact_email' not in cols:
                 add_cols.append("ALTER TABLE users ADD COLUMN contact_email VARCHAR(255)")
             if 'contact_whatsapp' not in cols:
@@ -281,6 +286,14 @@ def _ensure_schema(engine):
                     conn.execute(text(stmt))
                 except Exception:
                     pass
+
+            # Backfill role from legacy is_admin flag
+            try:
+                cols2 = {c['name'] for c in insp.get_columns('users')}
+                if 'role' in cols2:
+                    conn.execute(text("UPDATE users SET role='admin' WHERE (role IS NULL OR role='' OR role='user') AND is_admin=1"))
+            except Exception:
+                pass
 
         # notes: moderation + preview metadata
         if insp.has_table('notes'):
@@ -326,11 +339,80 @@ def _ensure_schema(engine):
         # New tables: reviews unique/constraint already in model; download_logs
         # create_all already handled table creation, but some DBs might have been created earlier.
 
+        # site_settings: maintenance mode toggle (superadmin only)
+        try:
+            if not insp.has_table('site_settings'):
+                conn.execute(text("CREATE TABLE IF NOT EXISTS site_settings (key VARCHAR(60) PRIMARY KEY, value TEXT)"))
+            conn.execute(text("INSERT INTO site_settings(key,value) VALUES ('maintenance_mode','0') ON CONFLICT (key) DO NOTHING"))
+        except Exception:
+            # SQLite doesn't support ON CONFLICT in older versions the same way; ignore.
+            try:
+                conn.execute(text("INSERT OR IGNORE INTO site_settings(key,value) VALUES ('maintenance_mode','0')"))
+            except Exception:
+                pass
+
 
 try:
     _ensure_schema(engine)
 except Exception as e:
     print('[schema] WARNING:', e)
+
+
+# -----------------------------------------------------------------------------
+# A6) Analytics: pageviews + funnel events
+# -----------------------------------------------------------------------------
+
+
+def _should_track_page_view() -> bool:
+    """Return True if this request should be logged as a page view.
+
+    We only track *public* HTML GET requests (no static, no admin, no webhooks).
+    """
+    try:
+        if request.method != "GET":
+            return False
+        path = (request.path or "/").strip() or "/"
+        # Ignore noisy paths
+        if path.startswith("/static"):
+            return False
+        if path.startswith("/admin"):
+            return False
+        if path.startswith("/api"):
+            return False
+        if path.startswith("/health"):
+            return False
+        if path.startswith("/mp/") or path.startswith("/webhooks/"):
+            return False
+        # Ignore assets
+        if re.search(r"\.(css|js|png|jpg|jpeg|gif|svg|webp|ico|woff2?)$", path, re.I):
+            return False
+        return True
+    except Exception:
+        return False
+
+
+@app.after_request
+def _track_page_view(resp):
+    """Best-effort page view logging.
+
+    This runs after the response to avoid slowing down requests.
+    """
+    try:
+        if not resp:
+            return resp
+        if resp.status_code >= 400:
+            return resp
+        ctype = (resp.headers.get("Content-Type") or "").lower()
+        if "text/html" not in ctype:
+            return resp
+        if not _should_track_page_view():
+            return resp
+
+        uid = int(current_user.id) if getattr(current_user, "is_authenticated", False) else None
+        log_analytics_event(event="page_view", user_id=uid, path=(request.path or None))
+    except Exception:
+        pass
+    return resp
 
 Session = scoped_session(sessionmaker(bind=engine, autoflush=False, expire_on_commit=False))
 
@@ -381,16 +463,161 @@ def _enforce_user_suspension():
     except Exception:
         return None
 
-# Decorador simple para admin (única definición)
-def admin_required(fn):
+
+def _get_setting(key: str, default: str = "") -> str:
+    try:
+        with Session() as s:
+            row = s.get(SiteSetting, key)
+            if row and getattr(row, "value", None) is not None:
+                return str(row.value)
+    except Exception:
+        pass
+    return default
+
+
+def _set_setting(key: str, value: str):
+    with Session() as s:
+        row = s.get(SiteSetting, key)
+        if not row:
+            row = SiteSetting(key=key, value=value)
+            s.add(row)
+        else:
+            row.value = value
+        s.commit()
+
+
+@app.before_request
+def _bootstrap_superadmin_and_maintenance():
+    """1) Bootstrap SUPERADMIN_EMAILS; 2) Enforce maintenance mode."""
+    try:
+        # ---- bootstrap roles (best-effort) ----
+        if getattr(current_user, "is_authenticated", False):
+            emails = _parse_superadmin_emails()
+            try:
+                cu_email = (getattr(current_user, "email", "") or "").lower().strip()
+            except Exception:
+                cu_email = ""
+
+            with Session() as s:
+                dbu = s.get(User, int(current_user.id))
+                if dbu:
+                    # Promote to superadmin if email matches env
+                    if cu_email and cu_email in emails and getattr(dbu, "role", "user") != "superadmin":
+                        dbu.role = "superadmin"
+                        dbu.is_admin = True
+                        s.commit()
+                        _audit("promote_superadmin_env", target_type="user", target_id=dbu.id, meta={"email": cu_email})
+                    # Keep legacy is_admin in sync for staff
+                    if _user_role(dbu) in ("admin", "superadmin") and not bool(getattr(dbu, "is_admin", False)):
+                        dbu.is_admin = True
+                        s.commit()
+
+        # ---- maintenance mode ----
+        mm = (_get_setting("maintenance_mode", "0") or "0").strip()
+        maintenance_on = mm in ("1", "true", "True", "yes", "on")
+        if not maintenance_on:
+            return None
+
+        # superadmin bypass
+        if getattr(current_user, "is_authenticated", False) and _is_superadmin(current_user):
+            return None
+
+        # allowlist essential endpoints
+        allowed = {
+            "login",
+            "logout",
+            "auth_session_login",
+            "complete_profile",
+            "complete_profile_post",
+            "static",
+            "health",
+        }
+        if (request.endpoint or "") in allowed:
+            return None
+
+        # show maintenance page
+        return render_template("maintenance.html"), 503
+    except Exception:
+        return None
+
+def _parse_superadmin_emails() -> set[str]:
+    raw = (os.getenv("SUPERADMIN_EMAILS") or "").strip()
+    if not raw:
+        return set()
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+
+
+def _user_role(u) -> str:
+    try:
+        r = (getattr(u, "role", None) or "").strip().lower()
+        if r:
+            return r
+    except Exception:
+        pass
+    # Backward compat
+    if bool(getattr(u, "is_admin", False)):
+        return "admin"
+    return "user"
+
+
+def _is_superadmin(u) -> bool:
+    return _user_role(u) == "superadmin"
+
+
+def _is_staff(u) -> bool:
+    return _user_role(u) in ("admin", "superadmin")
+
+
+def _audit(action: str, target_type: str | None = None, target_id: int | None = None, meta: dict | None = None):
+    """Write an AuditEvent (best-effort, never breaks request)."""
+    try:
+        # Code format: AY-YYYYMMDD-000123 (id is the sequence)
+        with Session() as s:
+            ae = AuditEvent(
+                code="PENDING",
+                actor_user_id=(current_user.id if getattr(current_user, "is_authenticated", False) else None),
+                action=action,
+                target_type=target_type,
+                target_id=target_id,
+                meta=meta or {},
+            )
+            s.add(ae)
+            s.flush()
+            ae.code = f"AY-{datetime.utcnow().strftime('%Y%m%d')}-{ae.id:06d}"
+            s.commit()
+    except Exception:
+        pass
+
+
+def staff_required(fn):
+    """Admin OR Superadmin."""
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if not current_user.is_authenticated:
             return redirect(url_for("login"))
-        if not getattr(current_user, "is_admin", False) or getattr(current_user, "is_blocked", False):
+        if getattr(current_user, "is_blocked", False):
+            abort(403)
+        if not _is_staff(current_user):
             abort(403)
         return fn(*args, **kwargs)
     return wrapper
+
+
+def superadmin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for("login"))
+        if getattr(current_user, "is_blocked", False):
+            abort(403)
+        if not _is_superadmin(current_user):
+            abort(403)
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+# Backward-compatible name used across the codebase
+admin_required = staff_required
 
 # -----------------------------------------------------------------------------
 # Config MP / Comisiones / Contacto
@@ -1084,6 +1311,82 @@ def log_analytics_event(
         with Session() as s:
             s.add(ev)
             s.commit()
+    except Exception:
+        pass
+
+
+# -----------------------
+# A5) Stats diarios (agregados)
+# -----------------------
+
+def _stats_daily_get_or_create(session_db, day_date):
+    """Return DailyStat row for a given date, creating it if missing."""
+    row = session_db.get(DailyStat, day_date)
+    if row:
+        return row
+    row = DailyStat(day=day_date)
+    session_db.add(row)
+    # flush to ensure it exists for subsequent updates in same txn
+    try:
+        session_db.flush()
+    except Exception:
+        pass
+    return row
+
+
+def stats_daily_add_purchase(session_db, p: Purchase):
+    """Add an approved purchase into daily stats once (idempotent via p.stats_counted)."""
+    try:
+        if not p or (p.status or "").lower() != "approved":
+            return
+        if bool(getattr(p, "stats_counted", False)):
+            return
+
+        # determine breakdown (fallback for older rows)
+        gross = int(getattr(p, "gross_cents", 0) or 0)
+        if gross <= 0:
+            gross = int(getattr(p, "amount_cents", 0) or 0)
+
+        ay_fee = int(getattr(p, "platform_fee_cents", 0) or 0)
+        mp_fee = int(getattr(p, "mp_fee_cents", 0) or 0)
+        seller_net = int(getattr(p, "seller_net_cents", 0) or 0)
+
+        # Fallback if seller_net missing but note exists
+        if seller_net <= 0 and getattr(p, "note_id", None):
+            try:
+                n = session_db.get(Note, int(p.note_id))
+                seller_net = int(getattr(n, "seller_net_cents", 0) or 0)
+            except Exception:
+                seller_net = seller_net
+
+        # If ay_fee missing, derive it as remainder after mp + seller
+        if ay_fee <= 0 and gross > 0:
+            ay_fee = max(0, gross - mp_fee - seller_net)
+
+        day = (getattr(p, "created_at", None) or datetime.utcnow()).date()
+        ds = _stats_daily_get_or_create(session_db, day)
+
+        ds.gross_income_cents = int(ds.gross_income_cents or 0) + gross
+        ds.ay_commission_cents = int(ds.ay_commission_cents or 0) + ay_fee
+        ds.mp_fee_cents = int(ds.mp_fee_cents or 0) + mp_fee
+        ds.seller_income_cents = int(ds.seller_income_cents or 0) + seller_net
+        ds.sales_count = int(ds.sales_count or 0) + 1
+
+        p.stats_counted = True
+    except Exception:
+        # never block purchase flow
+        pass
+
+
+def stats_daily_add_download(session_db, *, is_free: bool, created_at_dt=None):
+    """Add one download into daily stats (free vs paid)."""
+    try:
+        day = (created_at_dt or datetime.utcnow()).date()
+        ds = _stats_daily_get_or_create(session_db, day)
+        if is_free:
+            ds.free_downloads = int(ds.free_downloads or 0) + 1
+        else:
+            ds.paid_downloads = int(ds.paid_downloads or 0) + 1
     except Exception:
         pass
 
@@ -2548,6 +2851,13 @@ def note_detail(note_id):
         if not note or not note.is_active:
             abort(404)
 
+        # A6 analytics: note view (best-effort, no personal data)
+        try:
+            uid = int(current_user.id) if getattr(current_user, "is_authenticated", False) else None
+            log_analytics_event(event="note_view", user_id=uid, path=request.path, note_id=int(note_id))
+        except Exception:
+            pass
+
         # Hide non-approved notes from the public (seller/admin can still view)
         if getattr(note, "moderation_status", "approved") != "approved":
             if not current_user.is_authenticated:
@@ -2980,6 +3290,11 @@ def download_note(note_id):
                     was_free=is_free,
                 )
             )
+            # A5 stats
+            try:
+                stats_daily_add_download(s, is_free=bool(is_free))
+            except Exception:
+                pass
             s.commit()
 
             # Analytics
@@ -3092,6 +3407,11 @@ def download_combo(combo_id):
                     was_free=is_free,
                 )
             )
+            # A5 stats
+            try:
+                stats_daily_add_download(s, is_free=bool(is_free))
+            except Exception:
+                pass
             s.commit()
 
             # Analytics
@@ -3363,6 +3683,17 @@ def account_delete():
 @app.route("/buy/<int:note_id>")
 @login_required
 def buy_note(note_id):
+    # A6 analytics: intent to buy (best-effort)
+    try:
+        log_analytics_event(
+            event="buy_intent",
+            user_id=int(current_user.id) if getattr(current_user, "is_authenticated", False) else None,
+            path=request.path,
+            note_id=int(note_id),
+            meta={"source": "buy_route"},
+        )
+    except Exception:
+        pass
     with Session() as s:
         note = s.get(Note, note_id)
         if not note or not note.is_active:
@@ -3447,6 +3778,21 @@ def buy_note(note_id):
                     p2.preference_id = pref.get("id") or pref.get("preference_id")
                     s2.commit()
             init_point = pref.get("init_point") or pref.get("sandbox_init_point")
+
+            # A6 analytics: checkout started (redirect to MP)
+            try:
+                log_analytics_event(
+                    event="checkout_start",
+                    user_id=int(current_user.id) if getattr(current_user, "is_authenticated", False) else None,
+                    path=request.path,
+                    note_id=int(note.id) if note else int(note_id),
+                    meta={
+                        "purchase_id": int(p.id),
+                        "preference_id": (pref.get("id") or pref.get("preference_id")),
+                    },
+                )
+            except Exception:
+                pass
             return redirect(init_point)
         except Exception as e:
             flash(f"Error al crear preferencia en Mercado Pago: {e}")
@@ -3700,6 +4046,12 @@ def _upsert_purchase_from_payment(pay: dict):
                     p.payment_id = payment_id
                     if status:
                         p.status = status
+                    # A5 stats (idempotent)
+                    try:
+                        if (status or "").lower() == "approved":
+                            stats_daily_add_purchase(s, p)
+                    except Exception:
+                        pass
                     s.commit()
                     # Analytics (best-effort)
                     try:
@@ -3732,6 +4084,18 @@ def _upsert_purchase_from_payment(pay: dict):
                     if status:
                         cp.status = status
                     s.commit()
+
+                    # A6 analytics: combo purchase approved
+                    try:
+                        if (status or "").lower() == "approved":
+                            log_analytics_event(
+                                event="purchase_approved",
+                                user_id=int(cp.buyer_id) if cp.buyer_id else None,
+                                combo_id=int(cp.combo_id) if cp.combo_id else None,
+                                meta={"amount_cents": int(getattr(cp, "amount_cents", 0) or 0), "payment_id": payment_id},
+                            )
+                    except Exception:
+                        pass
 
                     # -------------------------------------------------
                     # Mirror en tabla purchases para que el admin (stats/movements)
@@ -3774,6 +4138,21 @@ def _upsert_purchase_from_payment(pay: dict):
                                         seller_net_cents=seller_net_cents,
                                     )
                                 )
+                                # A5 stats (best-effort, idempotent)
+                                try:
+                                    # flush to get object and mark counted
+                                    s.flush()
+                                    created_p = s.execute(
+                                        select(Purchase).where(
+                                            Purchase.payment_id == payment_id,
+                                            Purchase.combo_id == cp.combo_id,
+                                            Purchase.buyer_id == cp.buyer_id,
+                                        ).limit(1)
+                                    ).scalars().first()
+                                    if created_p:
+                                        stats_daily_add_purchase(s, created_p)
+                                except Exception:
+                                    pass
                                 s.commit()
                     except Exception:
                         pass
@@ -4085,10 +4464,155 @@ def help_commissions():
 # -----------------------------------------------------------------------------
 @app.get("/admin/hub")
 @login_required
-@admin_required
+@staff_required
 def admin_hub():
     from datetime import datetime
     return render_template("admin/hub.html", today_str=datetime.utcnow().strftime('%Y-%m-%d'))
+
+
+# -----------------------------------------------------------------------------
+# SUPERADMIN: Administradores + mantenimiento + auditoría
+# -----------------------------------------------------------------------------
+
+@app.route("/admin/admins", methods=["GET", "POST"])
+@login_required
+@superadmin_required
+def admin_manage_admins():
+    """Promote/demote admins/superadmins by email."""
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        role = (request.form.get("role") or "").strip().lower()
+        if role not in ("user", "admin", "superadmin"):
+            flash("Rol inválido.", "danger")
+            return redirect(url_for("admin_manage_admins"))
+        if not email:
+            flash("Ingresá un email.", "warning")
+            return redirect(url_for("admin_manage_admins"))
+
+        with Session() as s:
+            u = s.execute(select(User).where(func.lower(User.email) == email)).scalar_one_or_none()
+            if not u:
+                flash("No existe un usuario con ese email. Primero debe iniciar sesión al menos una vez.", "warning")
+                return redirect(url_for("admin_manage_admins"))
+
+            # Safety: never remove last superadmin
+            if u.id == current_user.id and role != "superadmin":
+                flash("No podés quitarte el rol de superadmin a vos mismo.", "danger")
+                return redirect(url_for("admin_manage_admins"))
+
+            if role != "superadmin":
+                super_count = s.execute(select(func.count(User.id)).where(User.role == "superadmin")).scalar_one() or 0
+                if _user_role(u) == "superadmin" and super_count <= 1:
+                    flash("Debe existir al menos 1 superadmin.", "danger")
+                    return redirect(url_for("admin_manage_admins"))
+
+            old_role = _user_role(u)
+            u.role = role
+            u.is_admin = (role in ("admin", "superadmin"))
+            s.commit()
+
+            _audit("set_role", target_type="user", target_id=u.id, meta={"from": old_role, "to": role, "email": email})
+            flash(f"Rol actualizado: {email} → {role}", "success")
+
+        return redirect(url_for("admin_manage_admins"))
+
+    with Session() as s:
+        superadmins = s.execute(select(User).where(User.role == "superadmin").order_by(User.id.asc())).scalars().all()
+        admins = s.execute(select(User).where(User.role == "admin").order_by(User.id.asc())).scalars().all()
+    return render_template("admin/manage_admins.html", superadmins=superadmins, admins=admins)
+
+
+@app.get("/admin/maintenance")
+@login_required
+@superadmin_required
+def admin_maintenance():
+    mm = (_get_setting("maintenance_mode", "0") or "0").strip()
+    maintenance_on = mm in ("1", "true", "True", "yes", "on")
+    return render_template("admin/maintenance.html", maintenance_on=maintenance_on)
+
+
+@app.post("/admin/maintenance/toggle")
+@login_required
+@superadmin_required
+def admin_toggle_maintenance():
+    mode = (request.form.get("mode") or "0").strip()
+    mode_norm = "1" if mode in ("1", "true", "True", "yes", "on") else "0"
+    _set_setting("maintenance_mode", mode_norm)
+    _audit("toggle_maintenance", target_type="site", target_id=None, meta={"mode": mode_norm})
+    flash("Modo mantenimiento actualizado.", "success")
+    return redirect(url_for("admin_maintenance"))
+
+
+@app.get("/admin/audit")
+@login_required
+@superadmin_required
+def admin_audit_log():
+    with Session() as s:
+        events = s.execute(select(AuditEvent).order_by(desc(AuditEvent.id)).limit(100)).scalars().all()
+    return render_template("admin/audit_log.html", events=events)
+
+
+@app.get("/admin/tools")
+@login_required
+@superadmin_required
+def admin_tools():
+    """Herramientas de mantenimiento (A7)."""
+    mm = (_get_setting("maintenance_mode", "0") or "0").strip()
+    maintenance_on = mm in ("1", "true", "True", "yes", "on")
+    return render_template("admin/tools.html", maintenance_on=maintenance_on)
+
+
+@app.post("/admin/reset")
+@login_required
+@superadmin_required
+def admin_reset_platform():
+    """Reset de plataforma (borra histórico) sin eliminar superadmins."""
+    confirm = (request.form.get("confirm") or "").strip().upper()
+    if confirm != "RESET":
+        flash("Para confirmar, escribí RESET.", "danger")
+        return redirect(url_for("admin_tools"))
+
+    tables_to_clear = [
+        "purchases",
+        "combo_purchases",
+        "download_logs",
+        "analytics_events",
+        "stats_daily",
+        "reviews",
+        "notifications",
+        "webhook_events",
+        "admin_actions",
+        "audit_events",
+        "combo_notes",
+        "combos",
+        "notes",
+    ]
+
+    cleared = []
+    with Session() as s:
+        from sqlalchemy import text as sqltext
+        for t in tables_to_clear:
+            try:
+                s.execute(sqltext(f"DELETE FROM {t}"))
+                cleared.append(t)
+            except Exception:
+                # tabla puede no existir en algunos entornos / versiones
+                s.rollback()
+        # borrar usuarios NO superadmin
+        try:
+            s.execute(sqltext("DELETE FROM users WHERE COALESCE(role,'user') <> 'superadmin'"))
+        except Exception:
+            s.rollback()
+        # asegurar is_admin para superadmins
+        try:
+            s.execute(sqltext("UPDATE users SET is_admin = TRUE WHERE COALESCE(role,'user') = 'superadmin'"))
+        except Exception:
+            s.rollback()
+        s.commit()
+
+    _audit("reset_platform", target_type="site", target_id=None, meta={"cleared": cleared})
+    flash("Reset realizado. Se borró el histórico (se mantuvieron superadmins).", "success")
+    return redirect(url_for("admin_tools"))
 
 # Admin HUB - usuarios
 @app.route("/admin/api/users", methods=["GET", "POST"], endpoint="admin_api_users_list")
@@ -4714,70 +5238,111 @@ def admin_api_tickets():
 @login_required
 @admin_required
 def admin_api_stats():
-    # KPIs principales + series para el dashboard de admin.
+    """KPIs + series para el dashboard admin.
+
+    A5: preferimos `stats_daily` (rápido/estable). Si todavía no hay filas,
+    hacemos fallback a consultas directas.
+    """
+
     days = 30
     try:
         days = max(7, min(int(request.args.get("days", "30")), 365))
     except Exception:
         days = 30
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since_dt = datetime.utcnow() - timedelta(days=days)
+    since_day = (datetime.utcnow() - timedelta(days=days - 1)).date()
+    today_day = datetime.utcnow().date()
 
     with Session() as s:
         # Totales
-        total_users = s.execute(select(func.count(User.id))).scalar_one()
-        total_notes = s.execute(select(func.count(Note.id))).scalar_one()
-        total_combos = s.execute(select(func.count(Combo.id))).scalar_one()
+        total_users = int(s.execute(select(func.count(User.id))).scalar_one() or 0)
+        total_notes = int(s.execute(select(func.count(Note.id))).scalar_one() or 0)
+        total_combos = int(s.execute(select(func.count(Combo.id))).scalar_one() or 0)
+        users_range = 0
+        try:
+            users_range = int(s.execute(select(func.count(User.id)).where(User.created_at >= since_dt)).scalar_one() or 0)
+        except Exception:
+            users_range = 0
 
-        # Compras aprobadas
-        approved_q = select(func.count(Purchase.id), func.coalesce(func.sum(Purchase.gross_cents), 0),
-                            func.coalesce(func.sum(Purchase.platform_fee_cents), 0),
-                            func.coalesce(func.sum(Purchase.mp_fee_cents), 0),
-                            func.coalesce(func.sum(Purchase.seller_net_cents), 0)).where(Purchase.status == "approved")
-        purchases_count, gross_cents, platform_cents, mp_cents, seller_cents = s.execute(approved_q).one()
+        # Days list
+        days_list = []
+        cur = since_day
+        for _ in range(days):
+            days_list.append(cur.isoformat())
+            cur = cur + timedelta(days=1)
 
-        # Descargas gratuitas
-        free_downloads = s.execute(select(func.count(DownloadLog.id)).where(DownloadLog.was_free == True)).scalar_one()
+        # ---- A5: stats_daily ----
+        stats_rows = s.execute(
+            select(DailyStat).where(DailyStat.day >= since_day, DailyStat.day <= today_day).order_by(DailyStat.day)
+        ).scalars().all()
 
-        # Series diarias (UTC)
+        st_map = {r.day.isoformat(): r for r in stats_rows}
+
+        # Sums over range
+        gross_range = sum(int(getattr(r, "gross_income_cents", 0) or 0) for r in stats_rows)
+        ay_range = sum(int(getattr(r, "ay_commission_cents", 0) or 0) for r in stats_rows)
+        mp_range = sum(int(getattr(r, "mp_fee_cents", 0) or 0) for r in stats_rows)
+        seller_range = sum(int(getattr(r, "seller_income_cents", 0) or 0) for r in stats_rows)
+        sales_range = sum(int(getattr(r, "sales_count", 0) or 0) for r in stats_rows)
+        free_dl_range = sum(int(getattr(r, "free_downloads", 0) or 0) for r in stats_rows)
+        paid_dl_range = sum(int(getattr(r, "paid_downloads", 0) or 0) for r in stats_rows)
+
+        # If stats table is empty (first deploy), fallback to historical queries
+        if not stats_rows:
+            try:
+                sales_range = int(
+                    s.execute(select(func.count(Purchase.id)).where(Purchase.status == "approved", Purchase.created_at >= since_dt)).scalar_one() or 0
+                )
+                gross_range = int(
+                    s.execute(select(func.coalesce(func.sum(Purchase.gross_cents), 0)).where(Purchase.status == "approved", Purchase.created_at >= since_dt)).scalar_one() or 0
+                )
+                ay_range = int(
+                    s.execute(select(func.coalesce(func.sum(Purchase.platform_fee_cents), 0)).where(Purchase.status == "approved", Purchase.created_at >= since_dt)).scalar_one() or 0
+                )
+                mp_range = int(
+                    s.execute(select(func.coalesce(func.sum(Purchase.mp_fee_cents), 0)).where(Purchase.status == "approved", Purchase.created_at >= since_dt)).scalar_one() or 0
+                )
+                seller_range = int(
+                    s.execute(select(func.coalesce(func.sum(Purchase.seller_net_cents), 0)).where(Purchase.status == "approved", Purchase.created_at >= since_dt)).scalar_one() or 0
+                )
+                free_dl_range = int(
+                    s.execute(select(func.count(DownloadLog.id)).where(DownloadLog.created_at >= since_dt, DownloadLog.was_free == True)).scalar_one() or 0
+                )
+                paid_dl_range = int(
+                    s.execute(select(func.count(DownloadLog.id)).where(DownloadLog.created_at >= since_dt, DownloadLog.was_free == False)).scalar_one() or 0
+                )
+            except Exception:
+                pass
+
+        # ---- Series (A5 stats) ----
+        purchases_series = []
+        free_dl_series = []
+        paid_dl_series = []
+        for d in days_list:
+            r = st_map.get(d)
+            purchases_series.append(int(getattr(r, "sales_count", 0) or 0) if r else 0)
+            free_dl_series.append(int(getattr(r, "free_downloads", 0) or 0) if r else 0)
+            paid_dl_series.append(int(getattr(r, "paid_downloads", 0) or 0) if r else 0)
+
+        # Page views series (no A5 table yet; keep query)
         def _day_expr(col):
             return func.date_trunc("day", col)
 
-        # purchases series
-        purch_rows = s.execute(
-            select(_day_expr(Purchase.created_at).label("d"), func.count(Purchase.id).label("c"))
-            .where(Purchase.status == "approved", Purchase.created_at >= since)
-            .group_by("d").order_by("d")
-        ).all()
-        purch_map = {r.d.date().isoformat(): int(r.c) for r in purch_rows}
-
-        # downloads series (free)
-        dl_rows = s.execute(
-            select(_day_expr(DownloadLog.created_at).label("d"), func.count(DownloadLog.id).label("c"))
-            .where(DownloadLog.was_free == True, DownloadLog.created_at >= since)
-            .group_by("d").order_by("d")
-        ).all()
-        dl_map = {r.d.date().isoformat(): int(r.c) for r in dl_rows}
-
-        # page views series
         pv_rows = s.execute(
             select(_day_expr(AnalyticsEvent.created_at).label("d"), func.count(AnalyticsEvent.id).label("c"))
-            .where(AnalyticsEvent.event == "page_view", AnalyticsEvent.created_at >= since)
+            .where(AnalyticsEvent.event == "page_view", AnalyticsEvent.created_at >= since_dt)
             .group_by("d").order_by("d")
         ).all()
         pv_map = {r.d.date().isoformat(): int(r.c) for r in pv_rows}
-
-        # generate days list
-        days_list = []
-        cur = (datetime.utcnow() - timedelta(days=days-1)).date()
-        for i in range(days):
-            days_list.append((cur + timedelta(days=i)).isoformat())
+        page_views_series = [pv_map.get(d, 0) for d in days_list]
 
         series = {
             "days": days_list,
-            "purchases": [purch_map.get(d, 0) for d in days_list],
-            "free_downloads": [dl_map.get(d, 0) for d in days_list],
-            "page_views": [pv_map.get(d, 0) for d in days_list],
+            "purchases": purchases_series,
+            "free_downloads": free_dl_series,
+            "paid_downloads": paid_dl_series,
+            "page_views": page_views_series,
         }
 
         # Top sellers (approved purchases)
@@ -4837,24 +5402,223 @@ def admin_api_stats():
             "combos": [{"id": r.combo_id, "title": combo_title.get(r.combo_id) or f"Combo #{r.combo_id}", "purchases": int(r.cnt)} for r in top_combos],
         }
 
+    # Backwards compatible response: keep old keys AND add `kpis` used by admin UI.
     return jsonify({
         "ok": True,
+        "range_days": int(days),
+        "kpis": {
+            "users_total": int(total_users),
+            "users_range": int(users_range),
+            "notes_total": int(total_notes),
+            "combos_total": int(total_combos),
+
+            "purchases_range": int(sales_range),
+            "revenue_gross_range_cents": int(gross_range),
+            "revenue_ay_range_cents": int(ay_range),
+            "revenue_mp_range_cents": int(mp_range),
+            "revenue_seller_range_cents": int(seller_range),
+            "free_downloads_range": int(free_dl_range),
+            "paid_downloads_range": int(paid_dl_range),
+            "pageviews_range": int(sum(page_views_series or [])),
+            "conversion_rate_pct": int(round((sales_range / max(1, sum(page_views_series or []))) * 100.0)),
+        },
+
+        # legacy blocks (kept)
         "totals": {
-            "users": int(total_users or 0),
-            "notes": int(total_notes or 0),
-            "combos": int(total_combos or 0),
-            "purchases": int(purchases_count or 0),
-            "free_downloads": int(free_downloads or 0),
+            "users": int(total_users),
+            "notes": int(total_notes),
+            "combos": int(total_combos),
         },
         "money": {
-            "gross_cents": int(gross_cents or 0),
-            "platform_fee_cents": int(platform_cents or 0),
-            "mp_fee_cents": int(mp_cents or 0),
-            "seller_net_cents": int(seller_cents or 0),
+            "gross_cents": int(gross_range),
+            "platform_fee_cents": int(ay_range),
+            "mp_fee_cents": int(mp_range),
+            "seller_net_cents": int(seller_range),
         },
         "series": series,
         "top_sellers": top_sellers,
         "top_content": top_content,
+    })
+
+
+@app.get("/admin/api/analytics")
+@login_required
+@admin_required
+def admin_api_analytics():
+    """A6 analytics dashboard: pageviews + funnel (note + combo).
+
+    Returns daily series and totals for the last N days.
+    """
+    days = 30
+    try:
+        days = max(7, min(int(request.args.get("days", "30")), 365))
+    except Exception:
+        days = 30
+
+    since_dt = datetime.utcnow() - timedelta(days=days)
+    since_day = (datetime.utcnow() - timedelta(days=days - 1)).date()
+    today_day = datetime.utcnow().date()
+
+    # Days list (ISO)
+    days_list = []
+    cur = since_day
+    for _ in range(days):
+        days_list.append(cur.isoformat())
+        cur = cur + timedelta(days=1)
+
+    with Session() as s:
+        # Dialect-safe "day" extractor
+        def _day_expr(col):
+            try:
+                if engine.dialect.name.startswith("postgres"):
+                    return func.date_trunc("day", col)
+            except Exception:
+                pass
+            return func.date(col)
+
+        # Aggregate per day & event
+        rows = s.execute(
+            select(
+                _day_expr(AnalyticsEvent.created_at).label("d"),
+                AnalyticsEvent.event.label("e"),
+                func.count(AnalyticsEvent.id).label("c"),
+            )
+            .where(AnalyticsEvent.created_at >= since_dt)
+            .group_by("d", "e")
+            .order_by("d")
+        ).all()
+
+        # Normalize map: day_iso -> event -> count
+        m = {}
+        for r in rows:
+            try:
+                d = r.d.date().isoformat() if hasattr(r.d, "date") else str(r.d)
+            except Exception:
+                d = str(r.d)
+            m.setdefault(d, {})[str(r.e)] = int(r.c)
+
+        def series_for(event_name: str):
+            return [int(m.get(d, {}).get(event_name, 0)) for d in days_list]
+
+        series = {
+            "days": days_list,
+            "page_view": series_for("page_view"),
+            "note_view": series_for("note_view"),
+            "combo_view": series_for("combo_view"),
+            "buy_intent": series_for("buy_intent"),
+            "checkout_start": series_for("checkout_start"),
+            "purchase_approved": series_for("purchase_approved"),
+        }
+
+        totals = {k: int(sum(v)) for k, v in series.items() if k != "days"}
+
+        # Funnel breakdown NOTE-only (by presence of note_id)
+        note_view_cnt = int(
+            s.execute(
+                select(func.count(AnalyticsEvent.id)).where(
+                    AnalyticsEvent.event == "note_view",
+                    AnalyticsEvent.created_at >= since_dt,
+                )
+            ).scalar_one() or 0
+        )
+        note_buy_cnt = int(
+            s.execute(
+                select(func.count(AnalyticsEvent.id)).where(
+                    AnalyticsEvent.event == "buy_intent",
+                    AnalyticsEvent.note_id.isnot(None),
+                    AnalyticsEvent.created_at >= since_dt,
+                )
+            ).scalar_one() or 0
+        )
+        note_checkout_cnt = int(
+            s.execute(
+                select(func.count(AnalyticsEvent.id)).where(
+                    AnalyticsEvent.event == "checkout_start",
+                    AnalyticsEvent.note_id.isnot(None),
+                    AnalyticsEvent.created_at >= since_dt,
+                )
+            ).scalar_one() or 0
+        )
+        note_approved_cnt = int(
+            s.execute(
+                select(func.count(AnalyticsEvent.id)).where(
+                    AnalyticsEvent.event == "purchase_approved",
+                    AnalyticsEvent.note_id.isnot(None),
+                    AnalyticsEvent.created_at >= since_dt,
+                )
+            ).scalar_one() or 0
+        )
+
+        # Funnel breakdown COMBO-only
+        combo_view_cnt = int(
+            s.execute(
+                select(func.count(AnalyticsEvent.id)).where(
+                    AnalyticsEvent.event == "combo_view",
+                    AnalyticsEvent.created_at >= since_dt,
+                )
+            ).scalar_one() or 0
+        )
+        combo_buy_cnt = int(
+            s.execute(
+                select(func.count(AnalyticsEvent.id)).where(
+                    AnalyticsEvent.event == "buy_intent",
+                    AnalyticsEvent.combo_id.isnot(None),
+                    AnalyticsEvent.created_at >= since_dt,
+                )
+            ).scalar_one() or 0
+        )
+        combo_checkout_cnt = int(
+            s.execute(
+                select(func.count(AnalyticsEvent.id)).where(
+                    AnalyticsEvent.event == "checkout_start",
+                    AnalyticsEvent.combo_id.isnot(None),
+                    AnalyticsEvent.created_at >= since_dt,
+                )
+            ).scalar_one() or 0
+        )
+        combo_approved_cnt = int(
+            s.execute(
+                select(func.count(AnalyticsEvent.id)).where(
+                    AnalyticsEvent.event == "purchase_approved",
+                    AnalyticsEvent.combo_id.isnot(None),
+                    AnalyticsEvent.created_at >= since_dt,
+                )
+            ).scalar_one() or 0
+        )
+
+        def pct(a, b):
+            try:
+                return round((float(a) / float(b)) * 100.0, 1) if b else 0.0
+            except Exception:
+                return 0.0
+
+        funnels = {
+            "notes": {
+                "views": note_view_cnt,
+                "buy_intents": note_buy_cnt,
+                "checkout_starts": note_checkout_cnt,
+                "approved": note_approved_cnt,
+                "view_to_buy_pct": pct(note_buy_cnt, note_view_cnt),
+                "buy_to_checkout_pct": pct(note_checkout_cnt, note_buy_cnt),
+                "checkout_to_approved_pct": pct(note_approved_cnt, note_checkout_cnt),
+            },
+            "combos": {
+                "views": combo_view_cnt,
+                "buy_intents": combo_buy_cnt,
+                "checkout_starts": combo_checkout_cnt,
+                "approved": combo_approved_cnt,
+                "view_to_buy_pct": pct(combo_buy_cnt, combo_view_cnt),
+                "buy_to_checkout_pct": pct(combo_checkout_cnt, combo_buy_cnt),
+                "checkout_to_approved_pct": pct(combo_approved_cnt, combo_checkout_cnt),
+            },
+        }
+
+    return jsonify({
+        "ok": True,
+        "range_days": int(days),
+        "series": series,
+        "totals": totals,
+        "funnels": funnels,
     })
 
 
@@ -5025,7 +5789,207 @@ def admin_api_movements():
     return jsonify({"items": items[:400]})
 
 
-@app.get("/admin/api/stats")
+@app.get("/admin/export/movements.csv")
+@login_required
+@admin_required
+def admin_export_movements_csv():
+    """Exporta movimientos (compras + descargas gratis) a CSV.
+
+    Respeta filtros q/from/to (mismo formato que /admin/api/movements).
+    """
+    import csv
+    from io import StringIO
+
+    q = (request.args.get("q") or "").strip().lower()
+    date_from = (request.args.get("from") or "").strip()
+    date_to = (request.args.get("to") or "").strip()
+
+    def _parse_date(s):
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            return None
+
+    dt_from = _parse_date(date_from)
+    dt_to = _parse_date(date_to)
+    if dt_to:
+        dt_to = dt_to + timedelta(days=1)
+
+    rows = []
+    with Session() as s:
+        pq = select(Purchase).order_by(Purchase.created_at.desc()).limit(5000)
+        if dt_from:
+            pq = pq.where(Purchase.created_at >= dt_from)
+        if dt_to:
+            pq = pq.where(Purchase.created_at < dt_to)
+        if q:
+            pq = pq.where(func.lower(Purchase.buyer_email).like(f"%{q}%"))
+        purchases = s.execute(pq).scalars().all()
+
+        # preload sellers, notes, combos
+        seller_ids = {p.seller_id for p in purchases if p.seller_id}
+        note_ids = {p.note_id for p in purchases if p.note_id}
+        combo_ids = {p.combo_id for p in purchases if p.combo_id}
+        sellers = {}
+        if seller_ids:
+            for u in s.execute(select(User).where(User.id.in_(seller_ids))).scalars().all():
+                sellers[u.id] = u
+        notes = {}
+        if note_ids:
+            for n in s.execute(select(Note).where(Note.id.in_(note_ids))).scalars().all():
+                notes[n.id] = n
+        combos = {}
+        if combo_ids:
+            for c in s.execute(select(Combo).where(Combo.id.in_(combo_ids))).scalars().all():
+                combos[c.id] = c
+
+        for p in purchases:
+            obj_type = 'note' if p.note_id else ('combo' if p.combo_id else '')
+            title = None
+            if p.note_id and p.note_id in notes:
+                title = notes[p.note_id].title
+            if p.combo_id and p.combo_id in combos:
+                title = combos[p.combo_id].title
+            seller = sellers.get(p.seller_id)
+            rows.append({
+                'kind': 'purchase',
+                'created_at': p.created_at.isoformat() if p.created_at else '',
+                'status': p.status or '',
+                'buyer_email': p.buyer_email or '',
+                'seller_email': getattr(seller, 'email', '') or '',
+                'object_type': obj_type,
+                'object_id': p.note_id or p.combo_id or '',
+                'object_title': title or '',
+                'gross_cents': int(p.gross_cents or 0),
+                'ay_fee_cents': int(p.platform_fee_cents or 0),
+                'mp_fee_cents': int(p.mp_fee_cents or 0),
+                'seller_net_cents': int(p.seller_net_cents or 0),
+                'payment_id': p.payment_id or '',
+            })
+
+        dq = select(DownloadLog).where(DownloadLog.was_free == True).order_by(DownloadLog.created_at.desc()).limit(5000)
+        if dt_from:
+            dq = dq.where(DownloadLog.created_at >= dt_from)
+        if dt_to:
+            dq = dq.where(DownloadLog.created_at < dt_to)
+        dls = s.execute(dq).scalars().all()
+
+        user_ids = {d.user_id for d in dls if d.user_id}
+        note_ids2 = {d.note_id for d in dls if d.note_id}
+        combo_ids2 = {d.combo_id for d in dls if d.combo_id}
+        users = {}
+        if user_ids:
+            for u in s.execute(select(User).where(User.id.in_(user_ids))).scalars().all():
+                users[u.id] = u
+        notes2 = {}
+        if note_ids2:
+            for n in s.execute(select(Note).where(Note.id.in_(note_ids2))).scalars().all():
+                notes2[n.id] = n
+        combos2 = {}
+        if combo_ids2:
+            for c in s.execute(select(Combo).where(Combo.id.in_(combo_ids2))).scalars().all():
+                combos2[c.id] = c
+
+        for d in dls:
+            u = users.get(d.user_id)
+            obj_type = 'note' if d.note_id else ('combo' if d.combo_id else '')
+            title = None
+            if d.note_id and d.note_id in notes2:
+                title = notes2[d.note_id].title
+            if d.combo_id and d.combo_id in combos2:
+                title = combos2[d.combo_id].title
+            rows.append({
+                'kind': 'free_download',
+                'created_at': d.created_at.isoformat() if d.created_at else '',
+                'status': 'free',
+                'buyer_email': getattr(u, 'email', '') or '',
+                'seller_email': '',
+                'object_type': obj_type,
+                'object_id': d.note_id or d.combo_id or '',
+                'object_title': title or '',
+                'gross_cents': 0,
+                'ay_fee_cents': 0,
+                'mp_fee_cents': 0,
+                'seller_net_cents': 0,
+                'payment_id': '',
+            })
+
+    # Text filter across some columns if q is provided
+    if q:
+        def match(r):
+            hay = ' '.join([r.get('buyer_email',''), r.get('seller_email',''), r.get('object_title',''), r.get('object_type',''), r.get('status','')]).lower()
+            return q in hay
+        rows = [r for r in rows if match(r)]
+
+    rows.sort(key=lambda r: r.get('created_at',''), reverse=True)
+
+    out = StringIO()
+    w = csv.writer(out)
+    w.writerow(['kind','created_at','status','buyer_email','seller_email','object_type','object_id','object_title','gross','ay_fee','mp_fee','seller_net','payment_id'])
+    for r in rows:
+        w.writerow([
+            r['kind'], r['created_at'], r['status'], r['buyer_email'], r['seller_email'],
+            r['object_type'], r['object_id'], r['object_title'],
+            int(r['gross_cents']), int(r['ay_fee_cents']), int(r['mp_fee_cents']), int(r['seller_net_cents']),
+            r['payment_id'],
+        ])
+
+    resp = make_response(out.getvalue())
+    resp.headers['Content-Type'] = 'text/csv; charset=utf-8'
+    resp.headers['Content-Disposition'] = 'attachment; filename="apuntesya_movimientos.csv"'
+    return resp
+
+
+@app.get("/admin/export/events.csv")
+@login_required
+@admin_required
+def admin_export_events_csv():
+    """Exporta eventos analytics a CSV.
+
+    Respeta filtros: days (rango), event (tipo)
+    """
+    import csv
+    from io import StringIO
+
+    days = request.args.get('days', '30')
+    try:
+        days_i = max(1, min(365, int(days)))
+    except Exception:
+        days_i = 30
+    event = (request.args.get('event') or '').strip()
+    since = datetime.utcnow() - timedelta(days=days_i)
+
+    with Session() as s:
+        q = select(AnalyticsEvent).where(AnalyticsEvent.created_at >= since)
+        if event:
+            q = q.where(AnalyticsEvent.event == event)
+        q = q.order_by(AnalyticsEvent.created_at.desc()).limit(20000)
+        evs = s.execute(q).scalars().all()
+
+    out = StringIO()
+    w = csv.writer(out)
+    w.writerow(['created_at','event','user_id','note_id','combo_id','path','referrer','ip','user_agent','meta'])
+    for e in evs:
+        w.writerow([
+            e.created_at.isoformat() if e.created_at else '',
+            e.event or '',
+            e.user_id or '',
+            e.note_id or '',
+            e.combo_id or '',
+            e.path or '',
+            e.referrer or '',
+            e.ip or '',
+            e.user_agent or '',
+            (json.dumps(e.meta, ensure_ascii=False) if getattr(e,'meta',None) else ''),
+        ])
+
+    resp = make_response(out.getvalue())
+    resp.headers['Content-Type'] = 'text/csv; charset=utf-8'
+    resp.headers['Content-Disposition'] = 'attachment; filename="apuntesya_eventos.csv"'
+    return resp
+
+
+@app.get("/admin/api/stats_legacy")
 @admin_required
 def admin_api_stats_summary():
     """KPIs y series básicas para el dashboard de estadísticas."""
@@ -5639,6 +6603,17 @@ from sqlalchemy.orm import joinedload
 @app.route("/combos/<int:combo_id>/buy", methods=["GET","POST"])
 @login_required
 def buy_combo(combo_id):
+    # A6 analytics: intent to buy combo (best-effort)
+    try:
+        log_analytics_event(
+            event="buy_intent",
+            user_id=int(current_user.id) if getattr(current_user, "is_authenticated", False) else None,
+            path=request.path,
+            combo_id=int(combo_id),
+            meta={"source": "buy_combo_route"},
+        )
+    except Exception:
+        pass
     with Session() as s:
         combo = s.get(Combo, combo_id)
         if not combo or (hasattr(combo, "is_active") and combo.is_active is False):
@@ -5709,6 +6684,21 @@ def buy_combo(combo_id):
                     s2.commit()
 
             init_point = pref.get("init_point") or pref.get("sandbox_init_point")
+
+            # A6 analytics: checkout started (combo)
+            try:
+                log_analytics_event(
+                    event="checkout_start",
+                    user_id=int(current_user.id) if getattr(current_user, "is_authenticated", False) else None,
+                    path=request.path,
+                    combo_id=int(combo.id) if combo else int(combo_id),
+                    meta={
+                        "combo_purchase_id": int(cp.id),
+                        "preference_id": (pref.get("id") or pref.get("preference_id")),
+                    },
+                )
+            except Exception:
+                pass
             return redirect(init_point)
 
         except Exception as e:
@@ -5736,6 +6726,12 @@ def combo_detail(combo_id: int):
             .scalars()
             .first()
         )
+        # A6 analytics: combo view
+        try:
+            uid = int(current_user.id) if getattr(current_user, "is_authenticated", False) else None
+            log_analytics_event(event="combo_view", user_id=uid, path=request.path, combo_id=int(combo_id))
+        except Exception:
+            pass
 
         if not combo:
             abort(404)

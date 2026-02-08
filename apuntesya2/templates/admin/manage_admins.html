@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .shell{max-width:980px;margin:32px auto;padding:0 16px;}
+  .card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:22px 20px;box-shadow:0 10px 30px rgba(15,23,42,.05)}
+  .hrow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+  .title{margin:0;font-size:20px;font-weight:900;color:#111827}
+  .sub{margin:6px 0 0;color:#6b7280;font-size:13px}
+  .btn{padding:8px 14px;border:0;border-radius:999px;background:#4478ff;color:#fff;font-weight:700;font-size:12px;cursor:pointer;text-decoration:none}
+  .btn.ghost{background:#f3f6ff;color:#334;border:1px solid #dfe4ff}
+  .btn.danger{background:#ef4444}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(68,120,255,.25)}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e5e7f5;border-radius:14px;background:#fafbff;margin-top:10px;flex-wrap:wrap}
+  .meta{font-size:12px;color:#6b7280}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid #dfe4ff;background:#f3f6ff;font-weight:800;font-size:12px;color:#334}
+  .badge.super{border-color:#f5c542;background:#fff7e6}
+  .badge.admin{border-color:#bfd0ff}
+  .form{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .input{flex:1;min-width:240px;padding:10px 12px;border-radius:999px;border:1px solid #d9d9e3;font-size:14px}
+</style>
+
+<div class="shell">
+  <div class="card">
+    <div class="hrow">
+      <div>
+        <h2 class="title">👑 Administradores</h2>
+        <p class="sub">Solo superadmin. Usá el email para promover/quitar permisos. Siempre debe existir al menos 1 superadmin.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn ghost" href="{{ url_for('admin_hub') }}">⬅️ Volver</a>
+      </div>
+    </div>
+
+    <form method="post" class="form">
+      <input class="input" name="email" placeholder="Email del usuario (ej: alguien@gmail.com)" required>
+      <select name="role" class="input" style="flex:0 0 200px;min-width:200px">
+        <option value="admin">Hacer admin</option>
+        <option value="user">Quitar admin (volver a user)</option>
+        <option value="superadmin">Hacer superadmin</option>
+      </select>
+      <button class="btn" type="submit">Aplicar</button>
+    </form>
+
+    <div style="margin-top:14px">
+      <div class="meta">Superadmins</div>
+      {% for u in superadmins %}
+      <div class="row">
+        <div>
+          <strong>{{ u.name }}</strong>
+          <div class="meta">{{ u.email }} · id {{ u.id }}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span class="badge super">👑 superadmin</span>
+        </div>
+      </div>
+      {% else %}
+      <p class="meta">No hay superadmins (esto no debería pasar).</p>
+      {% endfor %}
+    </div>
+
+    <div style="margin-top:16px">
+      <div class="meta">Admins</div>
+      {% for u in admins %}
+      <div class="row">
+        <div>
+          <strong>{{ u.name }}</strong>
+          <div class="meta">{{ u.email }} · id {{ u.id }}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span class="badge admin">🛡️ admin</span>
+        </div>
+      </div>
+      {% else %}
+      <p class="meta">Aún no hay admins.</p>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
