@@ -414,8 +414,8 @@ def _track_page_view(resp):
         pass
     return resp
 
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 Session = scoped_session(sessionmaker(bind=engine, autoflush=False, expire_on_commit=False))
-
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
@@ -1308,7 +1308,7 @@ def log_analytics_event(
             referrer=(request.headers.get("Referer") or "")[:255] or None,
             meta=meta or None,
         )
-        with Session() as s:
+        with SessionLocal() as s:
             s.add(ev)
             s.commit()
     except Exception:
@@ -2909,7 +2909,7 @@ def note_detail(note_id):
                 ).scalar_one_or_none()
                 can_download = p is not None
 
-        # Downloads metric
+        # Downloads metric (best-effort)
         try:
             dl = s.execute(
                 select(func.count(DownloadLog.id)).where(DownloadLog.note_id == note.id)
@@ -3015,33 +3015,33 @@ def note_detail(note_id):
         if base_price > 0:
             buyer_price = round(base_price * GROSS_MULTIPLIER, 2)
 
-    # Analytics: vista de apunte
-    try:
-        log_analytics_event(
-            event="page_view",
-            user_id=(current_user.id if current_user.is_authenticated else None),
-            path=request.path,
-            note_id=int(note_id),
-            meta={"page": "note_detail", "price_cents": int(getattr(note, "price_cents", 0) or 0)},
-        )
-    except Exception:
-        pass
+        # Analytics: vista de apunte (NO usar objetos fuera de la sesión)
+        try:
+            log_analytics_event(
+                event="page_view",
+                user_id=(current_user.id if current_user.is_authenticated else None),
+                path=request.path,
+                note_id=int(note_id),
+                meta={"page": "note_detail", "price_cents": int(getattr(note, "price_cents", 0) or 0)},
+            )
+        except Exception:
+            pass
 
-    return render_template(
-        "note_detail.html",
-        note=note,
-        can_download=can_download,
-        reviews=reviews,
-        avg_rating=avg_rating,
-        can_review=can_review,
-        already_reviewed=already_reviewed,
-        seller=seller,
-        seller_verified=seller_verified,
-        seller_contacts=seller_contacts,
-        base_price=base_price,
-        buyer_price=buyer_price,
-        paid=(paid_param == "1"),
-    )
+        return render_template(
+            "note_detail.html",
+            note=note,
+            can_download=can_download,
+            reviews=reviews,
+            avg_rating=avg_rating,
+            can_review=can_review,
+            already_reviewed=already_reviewed,
+            seller=seller,
+            seller_verified=seller_verified,
+            seller_contacts=seller_contacts,
+            base_price=base_price,
+            buyer_price=buyer_price,
+            paid=(paid_param == "1"),
+        )
 
 
 @app.route("/seller/<int:seller_id>")
