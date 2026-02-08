@@ -248,47 +248,110 @@
 
 
     /* Stats */
-    .kpi-grid{
-        display:grid;
-        grid-template-columns: repeat(4, minmax(0,1fr));
-        gap:10px;
-        margin-top:14px;
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 14px;
     }
-    .kpi{
-        background:#fafbff;
-        border:1px solid #e5e7f5;
-        border-radius:16px;
-        padding:12px 14px;
-        box-shadow:0 6px 18px rgba(15,23,42,0.05);
+
+    .kpi {
+        background: #fafbff;
+        border: 1px solid #e5e7f5;
+        border-radius: 16px;
+        padding: 12px 14px;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
     }
-    .kpi .lbl{ color:#6b7280; font-size:12px; font-weight:700; }
-    .kpi .val{ margin-top:6px; font-size:18px; font-weight:900; color:#111827; }
-    .kpi .sub{ margin-top:4px; color:#6b7280; font-size:12px; }
-    .mini-grid{
-        display:grid;
+
+    .kpi .lbl {
+        color: #6b7280;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .kpi .val {
+        margin-top: 6px;
+        font-size: 18px;
+        font-weight: 900;
+        color: #111827;
+    }
+
+    .kpi .sub {
+        margin-top: 4px;
+        color: #6b7280;
+        font-size: 12px;
+    }
+
+    .mini-grid {
+        display: grid;
         grid-template-columns: 1.2fr 0.8fr;
-        gap:12px;
-        margin-top:12px;
-    }
-    .panel{
-        background:#ffffff;
-        border:1px solid #e5e7f5;
-        border-radius:16px;
-        padding:14px;
-        box-shadow:0 6px 18px rgba(15,23,42,0.05);
-    }
-    .panel h3{ margin:0 0 10px; font-size:14px; font-weight:900; color:#111827; }
-    .barrow{ display:flex; align-items:center; gap:10px; margin:8px 0; }
-    .barrow .name{ flex:1; min-width:0; font-size:13px; color:#111827; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .bar{ flex:2; height:10px; background:#eef2ff; border-radius:999px; overflow:hidden; border:1px solid #e5e7f5; }
-    .bar > div{ height:100%; background:#4478ff; border-radius:999px; }
-    .barrow .num{ width:70px; text-align:right; font-size:12px; color:#6b7280; }
-
-    @media (max-width: 860px){
-        .kpi-grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
-        .mini-grid{ grid-template-columns: 1fr; }
+        gap: 12px;
+        margin-top: 12px;
     }
 
+    .panel {
+        background: #ffffff;
+        border: 1px solid #e5e7f5;
+        border-radius: 16px;
+        padding: 14px;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+    }
+
+    .panel h3 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        font-weight: 900;
+        color: #111827;
+    }
+
+    .barrow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 8px 0;
+    }
+
+    .barrow .name {
+        flex: 1;
+        min-width: 0;
+        font-size: 13px;
+        color: #111827;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .bar {
+        flex: 2;
+        height: 10px;
+        background: #eef2ff;
+        border-radius: 999px;
+        overflow: hidden;
+        border: 1px solid #e5e7f5;
+    }
+
+    .bar>div {
+        height: 100%;
+        background: #4478ff;
+        border-radius: 999px;
+    }
+
+    .barrow .num {
+        width: 70px;
+        text-align: right;
+        font-size: 12px;
+        color: #6b7280;
+    }
+
+    @media (max-width: 860px) {
+        .kpi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .mini-grid {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 
 <div class="admin-shell">
@@ -349,7 +412,8 @@
             <div class="row-card" style="margin-top:14px;">
                 <div class="row-main">
                     <strong>Movimientos (compras + descargas)</strong>
-                    <span class="muted">Filtrá por fecha, vendedor, comprador o título. Para buscar por número AY-..., usá la pestaña Gestiones.</span>
+                    <span class="muted">Filtrá por fecha, vendedor, comprador o título. Para buscar por número AY-...,
+                        usá la pestaña Gestiones.</span>
                 </div>
                 <div class="right" style="gap:6px;">
                     <input id="movFrom" class="input" type="date" style="width:auto;min-width:170px;" />
@@ -465,7 +529,7 @@
                                 ? 'Buscar movimiento (comprador/vendedor/título)'
                                 : (tab === 'analytics'
                                     ? 'Buscar (no aplica en eventos)'
-                                : 'Buscar por título o vendedor')));
+                                    : 'Buscar por título o vendedor'))));
 
             load();
         }
