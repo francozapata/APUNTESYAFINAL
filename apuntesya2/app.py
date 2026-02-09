@@ -1,6 +1,7 @@
 # apuntesya2/app.py
 
 import os
+import uuid
 import secrets
 import math
 import json
@@ -112,10 +113,10 @@ app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["ENV"] = os.getenv("FLASK_ENV", "production")
 
-# --- Security: upload size limit (25 MB) -------------------------------------
+# --- Security: upload size limit (100 MB) -------------------------------------
 # Prevent abuse / accidental huge uploads. Adjust via MAX_UPLOAD_MB env.
 try:
-    _max_mb = int(os.getenv("MAX_UPLOAD_MB", "25"))
+    _max_mb = int(os.getenv("MAX_UPLOAD_MB", "100"))
 except Exception:
     _max_mb = 25
 app.config["MAX_CONTENT_LENGTH"] = _max_mb * 1024 * 1024
@@ -141,8 +142,29 @@ def _rate_limit(key: str, limit: int, window_sec: int) -> bool:
 
 @app.before_request
 def _security_rate_limits():
+    # Rate limit sensitive endpoints (per-process)
+    path = request.path or ""
+
+    # Allow GET by default, but limit heavy / enumeratable endpoints
+    method = request.method
+
+    ip = (request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+          or request.headers.get("X-Real-IP")
+          or request.remote_addr
+          or "unknown")
+
+    # Downloads: limit GET to reduce scraping / enumeration
+    if method == "GET":
+        if path.startswith("/download/"):
+            if not _rate_limit(f"dl:{ip}", 60, 60):
+                return ("Too Many Requests", 429)
+        if path.startswith("/combos/") and path.endswith("/download"):
+            if not _rate_limit(f"dlc:{ip}", 30, 60):
+                return ("Too Many Requests", 429)
+        return None
+
     # Only limit POSTs to sensitive endpoints
-    if request.method != "POST":
+    if method != "POST":
         return None
 
     path = request.path or ""
@@ -3358,6 +3380,9 @@ def download_note(note_id):
             allowed = bool(has_purchase)
 
         if not allowed:
+            # Anti-enumeration: do not reveal if a paid note exists
+            if not (is_admin or is_owner):
+                abort(404)
             flash("No tenés acceso a este archivo.", "danger")
             return redirect(url_for("note_detail", note_id=note.id))
 
@@ -3416,6 +3441,22 @@ def download_note(note_id):
     if not note_file_path:
         flash("No se encontró el archivo asociado a este apunte.", "danger")
         return redirect(url_for("note_detail", note_id=note_id))
+
+    
+# --- Path traversal hardening (local files) ---
+# note_file_path should be a simple filename stored by our upload pipeline.
+if note_file_path and ("/" in note_file_path or "\\" in note_file_path or ".." in note_file_path):
+    app.logger.warning("Blocked suspicious file_path: %r", note_file_path)
+    abort(404)
+
+# Ensure file exists before sending
+try:
+    full_path = os.path.join(app.config["UPLOAD_FOLDER"], note_file_path)
+    if not os.path.exists(full_path):
+        flash("El archivo no está disponible en este momento.", "danger")
+        return redirect(url_for("note_detail", note_id=note_id))
+except Exception:
+    pass
 
     return send_from_directory(app.config["UPLOAD_FOLDER"], note_file_path, as_attachment=True)
 
@@ -3534,8 +3575,14 @@ def download_combo(combo_id):
                 if gcs_bucket and "/" in fp:
                     data = gcs_download_bytes(fp)
                 else:
-                    # local file
-                    local_path = os.path.join(app.config["UPLOAD_FOLDER"], fp)
+    # local file
+    # --- Combo path traversal hardening ---
+    if ("/" in fp) or ("\\" in fp) or (".." in fp):
+        app.logger.warning("Blocked suspicious combo file_path: %r", fp)
+        continue
+    local_path = os.path.join(app.config["UPLOAD_FOLDER"], fp)
+    if not os.path.exists(local_path):
+        continue
                     with open(local_path, "rb") as f:
                         data = f.read()
                 if data:
@@ -6939,6 +6986,35 @@ def maintenance_mode():
 
     return render_template("maintenance.html"), 503
 
+
+# =========================
+# Error pages (404/403/429/500)
+# =========================
+from werkzeug.exceptions import HTTPException
+
+@app.errorhandler(404)
+def _err_404(e):
+    return render_template("errors/404.html"), 404
+
+@app.errorhandler(403)
+def _err_403(e):
+    return render_template("errors/403.html"), 403
+
+@app.errorhandler(429)
+def _err_429(e):
+    # Flask-Limiter raises 429
+    return render_template("errors/429.html"), 429
+
+@app.errorhandler(500)
+def _err_500(e):
+    error_id = str(uuid.uuid4())[:8]
+    try:
+        app.logger.exception("500 error_id=%s path=%s", error_id, request.path)
+    except Exception:
+        pass
+    return render_template("errors/500.html", error_id=error_id), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True)
 
@@ -6950,7 +7026,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
-    flash("El archivo supera el tamaño máximo permitido (100 MB).", "danger")
+    flash(f"El archivo supera el tamaño máximo permitido ({_max_mb} MB).", "danger")
     return redirect(request.referrer or url_for("upload_note"))
 
 @app.errorhandler(CSRFError)

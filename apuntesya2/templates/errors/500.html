@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .err-shell{max-width:980px;margin:32px auto;padding:0 16px;}
+  .err-card{background:#fff;border:1px solid rgba(15,23,42,.08);border-radius:18px;
+            box-shadow:0 12px 30px rgba(15,23,42,.08);padding:22px;}
+  .err-title{font-size:26px;margin:0 0 6px 0;}
+  .err-sub{color:rgba(15,23,42,.72);margin:0 0 14px 0;line-height:1.4}
+  .err-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+  .err-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;
+           border:1px solid rgba(15,23,42,.12);text-decoration:none}
+  .err-btn.primary{border-color:rgba(37,99,235,.25)}
+  .err-meta{margin-top:10px;font-size:13px;color:rgba(15,23,42,.55)}
+  .err-code{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+</style>
+
+<div class="err-shell">
+  <div class="err-card">
+    <h1 class="err-title">Ups, algo salió mal</h1>
+    <p class="err-sub">Ocurrió un error inesperado. Si el problema continúa, avisános.</p>
+    <div class="err-actions">
+      <a class="err-btn primary" href="{{ url_for('index') }}">🏠 Volver al inicio</a>
+      <a class="err-btn" href="{{ request.referrer or url_for('index') }}">↩️ Volver</a>
+    </div>
+    {% if error_id %}
+      <div class="err-meta">Código de error: <span class="err-code">{{ error_id }}</span></div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
