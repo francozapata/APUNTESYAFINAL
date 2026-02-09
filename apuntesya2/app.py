@@ -7035,3 +7035,16 @@ def handle_csrf_error(e):
     flash("Tu sesión expiró o el formulario es inválido. Probá de nuevo.", "danger")
     return redirect(request.referrer or url_for("index"))
 
+
+
+@app.route("/terminos")
+def terminos():
+    return render_template("legal/terminos.html")
+
+@app.route("/privacidad")
+def privacidad():
+    return render_template("legal/privacidad.html")
+
+@app.route("/seguridad")
+def seguridad():
+    return render_template("legal/seguridad.html")
