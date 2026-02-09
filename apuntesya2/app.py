@@ -4385,7 +4385,7 @@ except Exception:
 # -----------------------------------------------------------------------------
 # Términos
 # -----------------------------------------------------------------------------
-@app.route("/terms")
+@app.route("/terminos")
 def terms():
     return render_template("terms.html")
 
@@ -7046,5 +7046,8 @@ def privacidad():
     return render_template("legal/privacidad.html")
 
 @app.route("/seguridad")
-def seguridad():
-    return render_template("legal/seguridad.html")
+def politica_seguridad():
+    return render_template("politica_seguridad.html")
+
+
+

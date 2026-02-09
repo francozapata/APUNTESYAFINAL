@@ -421,7 +421,8 @@
             {% if nav_notifications and nav_notifications|length > 0 %}
             <div class="notif-dd-list">
               {% for n in nav_notifications %}
-              <a href="{{ url_for('notification_open', notif_id=n.id) }}" class="notif-item {% if not n.is_read %}unread{% endif %}" style="text-decoration:none;">
+              <a href="{{ url_for('notification_open', notif_id=n.id) }}"
+                class="notif-item {% if not n.is_read %}unread{% endif %}" style="text-decoration:none;">
                 <div class="notif-title">{{ n.title }}</div>
                 {% if n.body %}<div class="notif-body">{{ n.body }}</div>{% endif %}
                 <div class="notif-meta">{{ n.created_at.strftime('%d/%m/%Y %H:%M') if n.created_at else '' }}</div>
@@ -456,7 +457,9 @@
   <div class="footer">
     Hecho con ♥ — Comisión total: {{ TOTAL_FEE_PERCENT }}% ({{ APY_FEE_PERCENT }}% plataforma + {{ MP_FEE_PERCENT }}%
     procesamiento)
-    <a class="btn ghost" href="{{ url_for('terms') }}">Términos y condiciones</a>
+    <a class="btn ghost" href="{{ url_for('terminos') }}">Términos y condiciones</a>
+    <a class="btn ghost" href="{{ url_for('seguridad') }}">Políticas de seguridad</a>
+
   </div>
 
   <!-- Contact Widget: button, overlay, and panel -->
