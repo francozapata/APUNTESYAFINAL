@@ -4383,11 +4383,24 @@ except Exception:
     pass
 
 # -----------------------------------------------------------------------------
-# Términos
+# Términos y condiciones, politicas de privacidad y seguridad
 # -----------------------------------------------------------------------------
-@app.route("/terminos")
+@app.route("/terms", endpoint="terms")
 def terms():
-    return render_template("terms.html")
+    return render_template("terms.html")  # o el template que ya uses
+
+@app.route("/terminos")
+def terminos_redirect():
+    return redirect(url_for("terms"))
+
+@app.route("/privacidad", endpoint="privacidad")
+def politica_privacidad():
+    return render_template("politica_privacidad.html")
+
+
+@app.route("/seguridad", endpoint="seguridad")
+def politica_seguridad():
+    return render_template("politica_seguridad.html")
 
 # -----------------------------------------------------------------------------
 # Reportar apunte
@@ -7034,20 +7047,3 @@ def handle_csrf_error(e):
     # CSRF failures should show a friendly message instead of "no pasa nada"
     flash("Tu sesión expiró o el formulario es inválido. Probá de nuevo.", "danger")
     return redirect(request.referrer or url_for("index"))
-
-
-
-@app.route("/terminos")
-def terminos():
-    return render_template("legal/terminos.html")
-
-@app.route("/privacidad")
-def privacidad():
-    return render_template("legal/privacidad.html")
-
-@app.route("/seguridad")
-def politica_seguridad():
-    return render_template("politica_seguridad.html")
-
-
-
