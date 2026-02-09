@@ -4387,17 +4387,21 @@ except Exception:
 # -----------------------------------------------------------------------------
 @app.route("/terms", endpoint="terms")
 def terms():
-    return render_template("terms.html")  # o el template que ya uses
+    return render_template("terms.html")  # <-- tu TyC existente
 
+# Alias en español (opcional, recomendado)
 @app.route("/terminos")
 def terminos_redirect():
     return redirect(url_for("terms"))
 
+
+# Privacidad
 @app.route("/privacidad", endpoint="privacidad")
 def politica_privacidad():
     return render_template("politica_privacidad.html")
 
 
+# Seguridad
 @app.route("/seguridad", endpoint="seguridad")
 def politica_seguridad():
     return render_template("politica_seguridad.html")
