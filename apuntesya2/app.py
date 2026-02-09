@@ -6941,3 +6941,26 @@ def maintenance_mode():
 if __name__ == "__main__":
     app.run(debug=True)
 
+
+
+# =========================
+# Login bridge + Error handlers (Security 1.1)
+# =========================
+from werkzeug.exceptions import RequestEntityTooLarge
+
+@app.route("/login")
+def login_bridge():
+    try:
+        return redirect(url_for("login_google"))
+    except Exception:
+        return redirect(url_for("index"))
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_file_too_large(e):
+    flash("El archivo supera el tamaño máximo permitido (100 MB).", "danger")
+    return redirect(request.referrer or url_for("upload_note"))
+
+@app.errorhandler(400)
+def handle_bad_request(e):
+    flash("Error de validación del formulario. Intentá nuevamente.", "danger")
+    return redirect(request.referrer or url_for("upload_note"))
