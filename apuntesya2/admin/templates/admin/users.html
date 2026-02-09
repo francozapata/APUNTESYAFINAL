@@ -15,6 +15,7 @@
       <td>
         {% if u.is_active %}
         <form method="post" action="{{ url_for('admin.deactivate_user', user_id=u.id) }}" onsubmit="return confirm('¿Desactivar usuario?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="reason" value="Acción manual desde panel." />
           <button class="btn btn-warning">Desactivar</button>
         </form>

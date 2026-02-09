@@ -212,6 +212,7 @@
     </div>
 
     <form method="post" action="{{ url_for('upload_note') }}" enctype="multipart/form-data" id="uploadForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="upload-grid">
         <!-- COLUMNA IZQUIERDA: campos principales -->
         <div class="upload-main">

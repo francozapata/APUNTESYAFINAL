@@ -22,6 +22,7 @@
       <td>{{ n.created_at }}</td>
       <td>
         <form method="post" action="{{ url_for('admin.hard_delete_note', note_id=n.id) }}" onsubmit="return confirm('Eliminar permanentemente? Esta acción NO se puede deshacer.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="reason" value="admin_manual_delete"/>
           <button class="btn btn-danger btn-sm" type="submit">Eliminar permanentemente</button>
         </form>

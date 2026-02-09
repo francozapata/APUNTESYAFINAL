@@ -142,6 +142,7 @@
                   <a class="btn-mini" href="{{ url_for('note_detail', note_id=n.id) }}">👁 Ver</a>
                   <a class="btn-mini primary" href="{{ url_for('seller_edit_note_get', note_id=n.id) }}">✏️ Editar</a>
                   <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button class="btn-mini danger" type="submit" onclick="return confirm('¿Eliminar este apunte?');">🗑 Eliminar</button>
                   </form>
                 </div>
@@ -173,6 +174,7 @@
                   <a class="btn-mini" href="{{ url_for('combo_detail', combo_id=c.id) }}">👁 Ver</a>
                   <a class="btn-mini primary" href="{{ url_for('combo_edit', combo_id=c.id) }}">✏️ Editar</a>
                   <form method="post" action="{{ url_for('combo_delete', combo_id=c.id) }}" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button class="btn-mini danger" type="submit" onclick="return confirm('¿Eliminar este combo?');">🗑 Eliminar</button>
                   </form>
                 </div>

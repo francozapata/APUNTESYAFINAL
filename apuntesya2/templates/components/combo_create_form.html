@@ -230,6 +230,7 @@
     </div>
 
     <form method="post" action="{{ url_for('create_combo') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="combo-grid">
         <!-- COLUMNA IZQUIERDA -->
         <div class="combo-main">

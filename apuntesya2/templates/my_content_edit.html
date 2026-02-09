@@ -115,6 +115,7 @@
                 <a href="{{ url_for('seller_edit_note_get', note_id=n.id) }}" class="btn-pill ghost">Editar</a>
                 <form method="post" action="{{ url_for('seller_delete_note', note_id=n.id) }}" style="display:inline"
                       onsubmit="return confirm('¿Eliminar este apunte? Se despublicará y se borrará el archivo asociado.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="btn-pill danger" style="border:0;">Eliminar</button>
                 </form>
               </div>
@@ -161,6 +162,7 @@
                 <a class="btn-pill ghost" href="{{ url_for('combo_edit', combo_id=c.id) }}">Editar</a>
                 <form method="post" action="{{ url_for('combo_delete', combo_id=c.id) }}" style="display:inline"
                       onsubmit="return confirm('¿Eliminar este combo? Se despublicará.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="btn-pill danger" style="border:0;">Eliminar</button>
                 </form>
               </div>

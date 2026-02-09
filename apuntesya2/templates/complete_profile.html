@@ -8,6 +8,7 @@
 
     <form action="{{ url_for('update_academics_post') if mode == 'update' else url_for('complete_profile') }}"
         method="post" id="complete-profile-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <!-- Universidad -->
         <label for="cp-uni">Universidad</label>

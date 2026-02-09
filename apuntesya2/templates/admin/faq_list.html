@@ -32,6 +32,7 @@
       <td class="text-end">
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_faq.edit_faq', faq_id=f.id) }}">Editar</a>
         <form class="d-inline" method="post" action="{{ url_for('admin_faq.delete_faq', faq_id=f.id) }}" onsubmit="return confirm('¿Eliminar FAQ?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-sm btn-outline-danger">Eliminar</button>
         </form>
       </td>

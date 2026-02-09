@@ -20,6 +20,7 @@
     <div class="meta" style="margin-bottom:12px">Al editar el combo, vuelve a <b>revisión manual</b>.</div>
 
     <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="grid">
         <div>
           <label>Título</label>

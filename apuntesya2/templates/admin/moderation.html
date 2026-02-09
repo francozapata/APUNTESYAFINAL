@@ -75,9 +75,11 @@
           </div>
           <div style="display:flex;gap:8px;align-items:flex-start;">
             <form method="post" action="/admin/moderation/combo/{{ c.id }}/approve">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" style="padding:10px 12px;border-radius:12px;border:1px solid #d1fae5;background:#ecfdf5;font-weight:800;">Aprobar</button>
             </form>
             <form method="post" action="/admin/moderation/combo/{{ c.id }}/reject">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="reason" value="Denegado por moderación manual.">
               <button type="submit" style="padding:10px 12px;border-radius:12px;border:1px solid #fee2e2;background:#fef2f2;font-weight:800;">Rechazar</button>
             </form>

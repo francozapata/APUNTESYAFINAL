@@ -46,6 +46,7 @@
       <p class="muted" style="margin:0 0 10px;color:#7f1d1d;">Borra histórico (compras, descargas, eventos, estadísticas, apuntes/combos, usuarios normales). <b>No elimina superadmins</b>.</p>
 
       <form method="post" action="{{ url_for('admin_reset_platform') }}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div style="flex:1;min-width:240px;">
           <label class="muted" style="display:block;margin-bottom:6px;color:#7f1d1d;">Escribí <b>RESET</b> para confirmar</label>
           <input class="inp" name="confirm" placeholder="RESET" autocomplete="off" />

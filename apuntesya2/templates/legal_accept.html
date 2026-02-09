@@ -15,6 +15,7 @@
   </div>
 
   <form method="POST" action="{{ url_for('legal_accept_post', next=request.args.get('next') or request.full_path) }}" style="margin-top:18px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="next" value="{{ request.args.get('next') or url_for('index') }}">
 
     <label style="display:flex;align-items:flex-start;gap:10px;color:#444;">

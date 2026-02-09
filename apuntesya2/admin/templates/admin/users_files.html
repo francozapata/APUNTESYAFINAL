@@ -43,6 +43,7 @@
           <td>
             <form action="{{ url_for('admin.delete_user_file', note_id=n.id) }}" method="post"
               onsubmit="return confirm('¿Borrar este archivo (soft delete)?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="reason" value="admin_users_files_delete" />
               {% if n.is_reported is defined and n.is_reported %}
               <input type="hidden" name="force" value="1" />

@@ -28,6 +28,7 @@ warnings.filterwarnings(
 )
 
 from dotenv import load_dotenv
+from flask_wtf.csrf import CSRFProtect
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
     send_from_directory, abort, jsonify, session
@@ -110,6 +111,75 @@ app.config["SECRET_KEY"] = SECRET_KEY_ENV or _load_or_create_secret_key(SECRET_K
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["ENV"] = os.getenv("FLASK_ENV", "production")
+
+# --- Security: upload size limit (25 MB) -------------------------------------
+# Prevent abuse / accidental huge uploads. Adjust via MAX_UPLOAD_MB env.
+try:
+    _max_mb = int(os.getenv("MAX_UPLOAD_MB", "25"))
+except Exception:
+    _max_mb = 25
+app.config["MAX_CONTENT_LENGTH"] = _max_mb * 1024 * 1024
+
+# --- Security: CSRF protection ----------------------------------------------
+csrf = CSRFProtect(app)
+
+# --- Security: simple rate limiting (per-process) ---------------------------
+# NOTE: With multiple gunicorn workers this is per-worker, still useful as a first layer.
+_RATE_BUCKET = {}  # (key)-> [timestamps]
+def _rate_limit(key: str, limit: int, window_sec: int) -> bool:
+    """Return True if allowed, False if rate limited."""
+    now = datetime.utcnow().timestamp()
+    bucket = _RATE_BUCKET.get(key, [])
+    # keep only within window
+    bucket = [t for t in bucket if now - t < window_sec]
+    if len(bucket) >= limit:
+        _RATE_BUCKET[key] = bucket
+        return False
+    bucket.append(now)
+    _RATE_BUCKET[key] = bucket
+    return True
+
+@app.before_request
+def _security_rate_limits():
+    # Only limit POSTs to sensitive endpoints
+    if request.method != "POST":
+        return None
+
+    path = request.path or ""
+    ip = (request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+          or request.headers.get("X-Real-IP")
+          or request.remote_addr
+          or "unknown")
+    # Tight limits for auth / uploads
+    rules = [
+        ("/login", 20, 300),                 # 20 per 5 min
+        ("/register", 10, 300),              # 10 per 5 min
+        ("/upload", 20, 600),                # 20 per 10 min
+        ("/profile/upload_image", 20, 600),  # 20 per 10 min
+        ("/profile/change_password", 10, 600),
+    ]
+    for prefix, limit, window in rules:
+        if path.startswith(prefix):
+            if not _rate_limit(f"{prefix}:{ip}", limit, window):
+                return ("Demasiadas solicitudes. Probá de nuevo en unos minutos.", 429)
+            break
+    return None
+
+@app.after_request
+def _security_headers(resp):
+    # Basic hardening headers (safe defaults that shouldn't break templates)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    # HSTS (Render serves HTTPS). Only set if request is https to avoid local dev issues.
+    try:
+        if request.is_secure:
+            resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    except Exception:
+        pass
+    return resp
+
 
 # -----------------------------------------------------------------------------
 # Firebase Admin (única inicialización)
@@ -2730,6 +2800,19 @@ def upload_note():
         local_pdf_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
         file.save(local_pdf_path)
 
+        # Security: verify PDF magic header
+        try:
+            with open(local_pdf_path, "rb") as _fp:
+                if _fp.read(4) != b"%PDF":
+                    try:
+                        os.remove(local_pdf_path)
+                    except Exception:
+                        pass
+                    flash("PDF inválido.", "danger")
+                    return redirect(url_for("upload_note"))
+        except Exception:
+            pass
+
         if gcs_bucket:
             # Guardamos en GCS bajo notes/<seller_id>/<archivo>
             blob_name = f"notes/{current_user.id}/{unique_name}"
@@ -4244,6 +4327,12 @@ def mp_webhook():
 
 app.add_url_rule("/webhooks/mercadopago", view_func=mp_webhook, methods=["POST"], endpoint="mp_webhook")
 app.add_url_rule("/mp/webhook",            view_func=mp_webhook, methods=["POST", "GET"], endpoint="mp_webhook_legacy")
+
+# CSRF must be disabled for external callbacks
+try:
+    csrf.exempt(mp_webhook)
+except Exception:
+    pass
 
 # -----------------------------------------------------------------------------
 # Términos
@@ -6834,6 +6923,20 @@ def combo_detail(combo_id: int):
         buyer_price=buyer_price,
     )
 
+@app.before_request
+def maintenance_mode():
+    if os.getenv("MAINTENANCE_MODE", "false").lower() != "true":
+        return None
+
+    # Dejar health libre (Render)
+    if request.path == "/health":
+        return None
+
+    # Dejar archivos estáticos libres (imagen, css)
+    if request.path.startswith("/static/"):
+        return None
+
+    return render_template("maintenance.html"), 503
 
 if __name__ == "__main__":
     app.run(debug=True)

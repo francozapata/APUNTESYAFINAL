@@ -377,6 +377,7 @@
 
           {% if can_review %}
           <form method="post" action="{{ url_for('submit_review', note_id=note.id) }}" class="review-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label class="muted">Tu calificación:</label><br>
             <select name="rating" required class="review-rating">
               <option value="">Elegir…</option>

@@ -71,6 +71,7 @@
         {% endif %}
 
         <form method="post" action="{{ url_for('upload_profile_image') }}" enctype="multipart/form-data" style="margin-top:10px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input id="pf-file" type="file" name="file" accept="image/*" style="display:none" onchange="this.form.submit()">
           <button type="button" class="btn-pill" onclick="document.getElementById('pf-file').click()">📸 Cambiar foto</button>
         </form>
@@ -99,6 +100,7 @@
         <div class="profile-right-box" style="margin-top:10px;">
           <h4>Mis datos de contacto (visible en mi perfil de vendedor)</h4>
           <form method="post" action="{{ url_for('profile_update_contact') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div style="display:grid;grid-template-columns:1fr;gap:10px;">
               <div>
                 <div class="profile-contact-label">Teléfono / WhatsApp</div>
@@ -181,6 +183,7 @@
             <p class="mp-status"><span class="mp-status-dot"></span><span>Cuenta de Mercado Pago conectada</span></p>
             <p class="muted" style="margin-top:6px;">Los pagos de tus ventas se acreditan en esta cuenta.</p>
             <form method="POST" action="{{ url_for('disconnect_mp_post') }}" style="margin-top:10px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn-pill ghost" type="submit" onclick="return confirm('¿Desvincular tu cuenta de Mercado Pago?');">
                 Desvincular Mercado Pago
               </button>
@@ -197,11 +200,13 @@
           {% if current_user.is_suspended %}
             <p class="muted" style="margin-bottom:6px;">Tu cuenta está <b>suspendida</b>. Solo podés usar tu perfil hasta reactivarla.</p>
             <form method="POST" action="{{ url_for('account_reactivate') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn-pill" type="submit">Reactivar cuenta</button>
             </form>
           {% else %}
             <p class="muted" style="margin-bottom:6px;">Podés suspender tu cuenta para pausar toda actividad dentro de la plataforma.</p>
             <form method="POST" action="{{ url_for('account_suspend') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn-pill ghost" type="submit" onclick="return confirm('¿Suspender tu cuenta? Podrás reactivarla desde tu perfil.');">
                 Suspender cuenta
               </button>
@@ -214,6 +219,7 @@
             Tus apuntes/combos quedan disponibles <b>solo para quienes ya los compraron/descargaron</b>.
           </p>
           <form method="POST" action="{{ url_for('account_delete') }}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input name="confirm" placeholder="Escribí ELIMINAR" style="padding:10px 12px;border:1px solid #e5e7f5;border-radius:12px;min-width:180px;" />
             <button class="btn-pill" type="submit" style="background:#ef4444;border-color:#ef4444;" onclick="return confirm('¿Eliminar cuenta definitivamente? Esta acción no se puede deshacer.');">
               Eliminar cuenta

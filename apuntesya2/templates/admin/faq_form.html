@@ -3,6 +3,7 @@
 {% block content %}
 <h1 class="h4">{{ 'Editar' if faq else 'Nueva' }} FAQ</h1>
 <form method="post" class="mt-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
     <label class="form-label">Pregunta</label>
     <input name="question" class="form-control" value="{{ faq.question if faq else '' }}" required maxlength="255">

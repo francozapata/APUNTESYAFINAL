@@ -33,6 +33,7 @@
     </div>
 
     <form method="post" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input class="input" name="email" placeholder="Email del usuario (ej: alguien@gmail.com)" required>
       <select name="role" class="input" style="flex:0 0 200px;min-width:200px">
         <option value="admin">Hacer admin</option>
