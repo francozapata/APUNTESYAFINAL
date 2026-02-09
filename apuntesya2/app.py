@@ -6962,5 +6962,7 @@ def handle_file_too_large(e):
 
 @app.errorhandler(400)
 def handle_bad_request(e):
+    if request.path.startswith("/login/google"):
+        return e
     flash("Error de validación del formulario. Intentá nuevamente.", "danger")
     return redirect(request.referrer or url_for("upload_note"))
