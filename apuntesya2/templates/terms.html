@@ -1,14 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container" style="max-width:900px;margin:40px auto 80px auto;">
-  <h1 style="margin-bottom:16px;">Términos y Condiciones (<a href="/terminos">ver</a>) · <a href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a> de Uso</h1>
+  <h1 style="margin-bottom:16px;">Términos y Condiciones (<a href="/terminos">ver</a>) · <a
+      href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a> de Uso</h1>
   <p style="color:#555;margin-bottom:24px;">
-    Estos Términos y Condiciones (<a href="/terminos">ver</a>) · <a href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a> regulan el acceso y uso de la plataforma <strong>ApuntesYa</strong>
+    Estos Términos y Condiciones (<a href="/terminos">ver</a>) · <a href="/privacidad">Privacidad</a> · <a
+      href="/seguridad">Seguridad</a> regulan el acceso y uso de la plataforma <strong>ApuntesYa</strong>
     (en adelante, la “Plataforma”), a través de la cual las personas usuarias pueden comprar y vender
     apuntes y materiales de estudio.
   </p>
   <p style="color:#555;margin-bottom:24px;">
-    Al registrarte, iniciar sesión o utilizar la Plataforma, aceptás estos Términos y Condiciones (<a href="/terminos">ver</a>) · <a href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a>.
+    Al registrarte, iniciar sesión o utilizar la Plataforma, aceptás estos Términos y Condiciones (<a
+      href="/terminos">ver</a>) · <a href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a>.
     Si no estás de acuerdo con alguno de los puntos, te recomendamos no utilizar el servicio.
   </p>
 
@@ -181,13 +184,16 @@
   </p>
   <ul style="color:#555;">
     <li>Incurran en conductas fraudulentas o ilegales.</li>
-    <li>Infrinjan reiteradamente estos Términos y Condiciones (<a href="/terminos">ver</a>) · <a href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a>.</li>
+    <li>Infrinjan reiteradamente estos Términos y Condiciones (<a href="/terminos">ver</a>) · <a
+        href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a>.</li>
     <li>Publiquen contenidos prohibidos o que generen riesgos para otros usuarios o para la Plataforma.</li>
   </ul>
 
   <h2>11. Modificaciones a los Términos</h2>
   <p style="color:#555;">
-    ApuntesYa podrá actualizar estos Términos y Condiciones (<a href="/terminos">ver</a>) · <a href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a> en cualquier momento, por ejemplo, para reflejar cambios
+    ApuntesYa podrá actualizar estos Términos y Condiciones (<a href="/terminos">ver</a>) · <a
+      href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a> en cualquier momento, por ejemplo, para
+    reflejar cambios
     en el servicio, en la normativa vigente o en la forma de operar de la Plataforma.
   </p>
   <p style="color:#555;">
@@ -198,14 +204,16 @@
 
   <h2>12. Contacto</h2>
   <p style="color:#555;">
-    Si tenés dudas o comentarios sobre estos Términos y Condiciones (<a href="/terminos">ver</a>) · <a href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a>, podés contactarte a través de los medios
+    Si tenés dudas o comentarios sobre estos Términos y Condiciones (<a href="/terminos">ver</a>) · <a
+      href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a>, podés contactarte a través de los medios
     de contacto indicados en la Plataforma (por ejemplo, sección de ayuda o canales publicados en la web).
   </p>
 
   <hr style="margin:32px 0;">
 
   <p style="color:#555;">
-    Podés volver al {% if current_user.is_authenticated %}<a href="{{ url_for("index") }}">inicio</a>{% else %}<a href="{{ url_for("login") }}">inicio de sesión</a>{% endif %}.
+    Podés volver al {% if current_user.is_authenticated %}<a href="{{ url_for('index') }}">inicio</a>{% else %}<a
+      href="{{ url_for('login') }}">inicio de sesión</a>{% endif %}.
   </p>
 </div>
 {% endblock %}
