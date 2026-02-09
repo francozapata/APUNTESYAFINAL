@@ -79,6 +79,17 @@
       <div>
         <h1 class="profile-name">{{ current_user.name or "Usuario sin nombre" }}</h1>
         <p class="profile-email">{{ current_user.email }}</p>
+        {% if current_user.legal_version_accepted %}
+          <p class="profile-email" style="margin-top:6px;font-size:12px;color:#6b7280;">
+            ✅ TyC aceptados — versión <b>{{ current_user.legal_version_accepted }}</b>
+            {% if current_user.legal_accepted_at %} · {{ current_user.legal_accepted_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+          </p>
+        {% else %}
+          <p class="profile-email" style="margin-top:6px;font-size:12px;color:#6b7280;">
+            ⚠️ Aún no aceptaste los TyC y políticas.
+          </p>
+        {% endif %}
+
         <div class="profile-chip">
           Mi perfil en ApuntesYa
           {% if current_user.mp_user_id %} · Modo vendedor activo {% else %} · Modo vendedor pendiente {% endif %}

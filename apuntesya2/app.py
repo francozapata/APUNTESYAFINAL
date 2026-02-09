@@ -68,6 +68,7 @@ from apuntesya2.models import (
     ComboNote,
     ComboPurchase,
     AuditEvent,
+    LegalAcceptanceAudit,
     AnalyticsEvent,
 )
 
@@ -112,6 +113,14 @@ app.config["SECRET_KEY"] = SECRET_KEY_ENV or _load_or_create_secret_key(SECRET_K
 app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["ENV"] = os.getenv("FLASK_ENV", "production")
+
+# -----------------------------------------------------------------------------
+# Legal versions (TyC + Privacidad + Seguridad)
+#
+# Bump LEGAL_VERSION whenever you update any of the legal documents.
+# Users will be prompted to accept again.
+# -----------------------------------------------------------------------------
+app.config["LEGAL_VERSION"] = os.getenv("LEGAL_VERSION", "2026-02-09")
 
 # --- Security: upload size limit (100 MB) -------------------------------------
 # Prevent abuse / accidental huge uploads. Adjust via MAX_UPLOAD_MB env.
@@ -271,6 +280,22 @@ def fees_ctx():
         except Exception:
             return 0.0
     return dict(MP_FEE_IMMEDIATE_TOTAL_PCT=MP_FEE_IMMEDIATE_TOTAL_PCT, mp_fee_estimate=mp_fee_estimate)
+
+
+@app.context_processor
+def legal_ctx():
+    """Expose legal acceptance state to templates (navbar banner, etc.)."""
+    try:
+        ver = (app.config.get("LEGAL_VERSION") or "").strip()
+    except Exception:
+        ver = ""
+    needs = False
+    try:
+        if getattr(current_user, "is_authenticated", False):
+            needs = _user_needs_legal_accept(int(current_user.id))
+    except Exception:
+        needs = False
+    return dict(LEGAL_VERSION=ver, legal_version=ver, legal_needs_accept=needs)
 
 # -----------------------------------------------------------------------------
 # Paths (Render usa /tmp; local usa ./data)
@@ -436,10 +461,12 @@ def _ensure_schema(engine):
             if not insp.has_table('site_settings'):
                 conn.execute(text("CREATE TABLE IF NOT EXISTS site_settings (key VARCHAR(60) PRIMARY KEY, value TEXT)"))
             conn.execute(text("INSERT INTO site_settings(key,value) VALUES ('maintenance_mode','0') ON CONFLICT (key) DO NOTHING"))
+            conn.execute(text("INSERT INTO site_settings(key,value) VALUES ('sales_enabled','1') ON CONFLICT (key) DO NOTHING"))
         except Exception:
             # SQLite doesn't support ON CONFLICT in older versions the same way; ignore.
             try:
                 conn.execute(text("INSERT OR IGNORE INTO site_settings(key,value) VALUES ('maintenance_mode','0')"))
+                conn.execute(text("INSERT OR IGNORE INTO site_settings(key,value) VALUES ('sales_enabled','1')"))
             except Exception:
                 pass
 
@@ -552,6 +579,65 @@ def _enforce_user_suspension():
 
         flash("Tu cuenta está suspendida. Solo podés acceder a tu perfil hasta reactivarla.", "warning")
         return redirect(url_for("profile"))
+    except Exception:
+        return None
+
+
+# -----------------------------------------------------------------------------
+# Legal acceptance enforcement
+# -----------------------------------------------------------------------------
+def _user_needs_legal_accept(user_id: int) -> bool:
+    """True if the user must accept the current LEGAL_VERSION."""
+    try:
+        cur_ver = (app.config.get("LEGAL_VERSION") or "").strip()
+        if not cur_ver:
+            return False
+        with Session() as s:
+            u = s.get(User, int(user_id))
+            if not u:
+                return False
+            accepted = (getattr(u, "legal_version_accepted", None) or "").strip()
+            return accepted != cur_ver
+    except Exception:
+        return False
+
+
+@app.before_request
+def _enforce_legal_acceptance():
+    """If legal docs were updated, require the user to re-accept."""
+    try:
+        if not getattr(current_user, "is_authenticated", False):
+            return None
+
+        if not _user_needs_legal_accept(int(current_user.id)):
+            return None
+
+        ep = (request.endpoint or "")
+        allowed = {
+            # legal flow
+            "legal_accept",
+            "legal_accept_post",
+            # legal docs
+            "terms",
+            "terminos_redirect",
+            "privacidad",
+            "seguridad",
+            "privacy",
+            "security",
+            # account basics
+            "logout",
+            "static",
+        }
+
+        # allow auth/session endpoints so they can log in
+        if ep.startswith("auth_"):
+            return None
+
+        if ep in allowed:
+            return None
+
+        # Keep "next" so they return to where they were.
+        return redirect(url_for("legal_accept", next=request.full_path))
     except Exception:
         return None
 
@@ -2003,6 +2089,9 @@ def auth_session_login():
                     }, 403
 
                 login_user(u)
+                # If legal docs were updated, force re-acceptance
+                if _user_needs_legal_accept(int(u.id)):
+                    return {"ok": True, "next": url_for("legal_accept")}, 200
                 return {"ok": True, "next": url_for("index")}, 200
 
 
@@ -2048,6 +2137,8 @@ def complete_profile_post():
         if exists:
             login_user(exists)
             session.pop("pending_google", None)
+            if _user_needs_legal_accept(int(exists.id)):
+                return redirect(url_for("legal_accept"))
             return redirect(url_for("index"))
 
         u = User(
@@ -2065,7 +2156,8 @@ def complete_profile_post():
         login_user(u)
 
     session.pop("pending_google", None)
-    return redirect(url_for("index"))
+    # First-time users must accept legal docs
+    return redirect(url_for("legal_accept"))
 
 
 # -----------------------------------------------------------------------------
@@ -3811,7 +3903,7 @@ def account_delete():
 # -----------------------------------------------------------------------------
 # Comprar
 # -----------------------------------------------------------------------------
-@app.route("/buy/<int:note_id>")
+@app.route("/buy/<int:note_id>", methods=["GET","POST"])
 @login_required
 def buy_note(note_id):
     # A6 analytics: intent to buy (best-effort)
@@ -3821,10 +3913,17 @@ def buy_note(note_id):
             user_id=int(current_user.id) if getattr(current_user, "is_authenticated", False) else None,
             path=request.path,
             note_id=int(note_id),
-            meta={"source": "buy_route"},
+            meta={"source": "buy_note_route"},
         )
     except Exception:
         pass
+
+    # Kill-switch (ventas)
+    se = (_get_setting("sales_enabled", "1") or "1").strip()
+    sales_enabled = se in ("1", "true", "True", "yes", "on")
+    if not sales_enabled and not (_is_superadmin(current_user) if getattr(current_user, "is_authenticated", False) else False):
+        flash("⚠️ Las ventas están pausadas por mantenimiento. Probá de nuevo más tarde.", "warning")
+        return redirect(url_for("note_detail", note_id=note_id))
     with Session() as s:
         note = s.get(Note, note_id)
         if not note or not note.is_active:
@@ -3851,6 +3950,24 @@ def buy_note(note_id):
             mp_fee_cents = int(round(gross_cents * (float(MP_FEE_IMMEDIATE_TOTAL_PCT) / 100.0)))
         except Exception:
             mp_fee_cents = 0
+
+        # Checkout confirmation (UX + legal)
+        if request.method == "GET":
+            gross_ars = money_1_decimal(cents_to_amount(gross_cents))
+            return render_template(
+                "checkout_note.html",
+                note=note,
+                seller=seller,
+                gross_cents=gross_cents,
+                gross_ars=gross_ars,
+                legal_version=(app.config.get("LEGAL_VERSION") or "").strip(),
+            )
+
+        # On POST we require explicit acknowledgement
+        if request.method == "POST":
+            if request.form.get("ack") != "1":
+                flash("Antes de pagar, tenés que confirmar la compra y aceptar la política de reembolso.", "warning")
+                return redirect(url_for("buy_note", note_id=note.id))
         # Platform fee = lo que queda para ApuntesYa (sin MP) luego de que el vendedor reciba su neto
         try:
             platform_fee_cents = max(0, gross_cents - mp_fee_cents - int(net_cents or 0))
@@ -4385,6 +4502,56 @@ except Exception:
 # -----------------------------------------------------------------------------
 # Términos y condiciones, politicas de privacidad y seguridad
 # -----------------------------------------------------------------------------
+@app.get("/legal/accept", endpoint="legal_accept")
+@login_required
+def legal_accept():
+    return render_template("legal_accept.html", legal_version=(app.config.get("LEGAL_VERSION") or ""))
+
+
+@app.post("/legal/accept", endpoint="legal_accept_post")
+@login_required
+def legal_accept_post():
+    # checkbox required by template
+    if request.form.get("accept") != "1":
+        flash("Tenés que aceptar los términos y políticas para continuar.", "warning")
+        return redirect(url_for("legal_accept"))
+
+    next_url = (request.form.get("next") or request.args.get("next") or url_for("index"))
+    try:
+        with Session() as s:
+            u = s.get(User, int(current_user.id))
+            if u:
+                u.legal_version_accepted = (app.config.get("LEGAL_VERSION") or "").strip() or None
+                u.legal_accepted_at = datetime.utcnow()
+                # A8: auditoría histórica (best-effort)
+                try:
+                    ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "").split(",")[0].strip() or None
+                except Exception:
+                    ip = None
+                try:
+                    ua = (request.headers.get("User-Agent") or "").strip() or None
+                    if ua and len(ua) > 255:
+                        ua = ua[:255]
+                except Exception:
+                    ua = None
+                try:
+                    ver = (u.legal_version_accepted or "").strip() or (app.config.get("LEGAL_VERSION") or "").strip() or "unknown"
+                    s.add(LegalAcceptanceAudit(user_id=int(u.id), legal_version=ver, accepted_at=datetime.utcnow(), ip=ip, user_agent=ua))
+                except Exception:
+                    pass
+                s.commit()
+                try:
+                    _audit("legal_accept", target_type="user", target_id=int(u.id), meta={"legal_version": u.legal_version_accepted, "ip": ip, "ua": ua})
+                except Exception:
+                    pass
+        flash("✅ Gracias. Términos y políticas aceptados.")
+    except Exception:
+        flash("No pudimos guardar tu aceptación. Probá de nuevo.", "warning")
+        return redirect(url_for("legal_accept"))
+
+    return redirect(next_url)
+
+
 @app.route("/terms", endpoint="terms")
 def terms():
     return render_template("terms.html")  # <-- tu TyC existente
@@ -4400,11 +4567,21 @@ def terminos_redirect():
 def politica_privacidad():
     return render_template("politica_privacidad.html")
 
+# Alias en inglés (para templates antiguos)
+@app.route("/privacy", endpoint="privacy")
+def privacy_redirect():
+    return redirect(url_for("privacidad"))
+
 
 # Seguridad
 @app.route("/seguridad", endpoint="seguridad")
 def politica_seguridad():
     return render_template("politica_seguridad.html")
+
+# Alias en inglés (para templates antiguos)
+@app.route("/security", endpoint="security")
+def security_redirect():
+    return redirect(url_for("seguridad"))
 
 # -----------------------------------------------------------------------------
 # Reportar apunte
@@ -4428,6 +4605,11 @@ def report_note(note_id):
 # -----------------------------------------------------------------------------
 def _norm(s: str) -> str:
     return (s or "").strip()
+
+@app.get("/refunds", endpoint="refund_policy")
+def refund_policy():
+    return render_template("refund_policy.html")
+
 
 @app.get("/api/academics/universities")
 def api_list_universities():
@@ -4682,7 +4864,11 @@ def admin_manage_admins():
 def admin_maintenance():
     mm = (_get_setting("maintenance_mode", "0") or "0").strip()
     maintenance_on = mm in ("1", "true", "True", "yes", "on")
-    return render_template("admin/maintenance.html", maintenance_on=maintenance_on)
+
+    se = (_get_setting("sales_enabled", "1") or "1").strip()
+    sales_enabled = se in ("1", "true", "True", "yes", "on")
+
+    return render_template("admin/maintenance.html", maintenance_on=maintenance_on, sales_enabled=sales_enabled)
 
 
 @app.post("/admin/maintenance/toggle")
@@ -4694,6 +4880,18 @@ def admin_toggle_maintenance():
     _set_setting("maintenance_mode", mode_norm)
     _audit("toggle_maintenance", target_type="site", target_id=None, meta={"mode": mode_norm})
     flash("Modo mantenimiento actualizado.", "success")
+    return redirect(url_for("admin_maintenance"))
+
+
+@app.post("/admin/sales/toggle")
+@login_required
+@superadmin_required
+def admin_toggle_sales():
+    mode = (request.form.get("mode") or "1").strip()
+    mode_norm = "1" if mode in ("1", "true", "True", "yes", "on") else "0"
+    _set_setting("sales_enabled", mode_norm)
+    _audit("toggle_sales", target_type="site", target_id=None, meta={"sales_enabled": mode_norm})
+    flash("Ventas actualizadas.", "success")
     return redirect(url_for("admin_maintenance"))
 
 
@@ -6768,6 +6966,13 @@ def buy_combo(combo_id):
         )
     except Exception:
         pass
+
+    # Kill-switch (ventas)
+    se = (_get_setting("sales_enabled", "1") or "1").strip()
+    sales_enabled = se in ("1", "true", "True", "yes", "on")
+    if not sales_enabled and not (_is_superadmin(current_user) if getattr(current_user, "is_authenticated", False) else False):
+        flash("⚠️ Las ventas están pausadas por mantenimiento. Probá de nuevo más tarde.", "warning")
+        return redirect(url_for("combo_detail", combo_id=combo_id))
     with Session() as s:
         combo = s.get(Combo, combo_id)
         if not combo or (hasattr(combo, "is_active") and combo.is_active is False):
@@ -6794,6 +6999,22 @@ def buy_combo(combo_id):
             return redirect(url_for("combo_detail", combo_id=combo.id))
 
         seller = s.get(User, combo.seller_id)
+
+        if request.method == "GET":
+            gross_ars = money_1_decimal(cents_to_amount(price_cents))
+            return render_template(
+                "checkout_combo.html",
+                combo=combo,
+                seller=seller,
+                gross_cents=int(price_cents),
+                gross_ars=gross_ars,
+                legal_version=(app.config.get("LEGAL_VERSION") or "").strip(),
+            )
+
+        if request.method == "POST":
+            if request.form.get("ack") != "1":
+                flash("Antes de pagar, tenés que confirmar la compra y aceptar la política de reembolso.", "warning")
+                return redirect(url_for("buy_combo", combo_id=combo.id))
 
         cp = ComboPurchase(
             buyer_id=current_user.id,

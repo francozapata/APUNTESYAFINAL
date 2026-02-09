@@ -59,6 +59,16 @@ class User(Base, UserMixin):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    # ---------------------------------------------------------------------
+    # Legal acceptance (TyC + Privacidad + Seguridad)
+    #
+    # We store a single version string representing the current "legal pack".
+    # When terms/policies are updated, bump LEGAL_VERSION and users must accept
+    # again.
+    # ---------------------------------------------------------------------
+    legal_version_accepted: Mapped[str] = mapped_column(String(32), nullable=True, index=True)
+    legal_accepted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
     # Mercado Pago OAuth
     mp_user_id: Mapped[str] = mapped_column(String(64), nullable=True)
     mp_access_token: Mapped[str] = mapped_column(Text, nullable=True)
@@ -347,6 +357,25 @@ class AuditEvent(Base):
     target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     meta: Mapped[dict] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class LegalAcceptanceAudit(Base):
+    """Registro histórico de aceptaciones legales (TyC/Privacidad/Seguridad).
+
+    Se guarda cada vez que un usuario acepta una versión, para poder auditar
+    reclamos y cambios a futuro.
+    """
+    __tablename__ = "legal_acceptance_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    legal_version: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    ip: Mapped[str] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str] = mapped_column(String(255), nullable=True)
+
+    user = relationship("User")
+
 
 
 class AnalyticsEvent(Base):

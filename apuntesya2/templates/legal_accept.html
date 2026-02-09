@@ -8,9 +8,9 @@
 
   <div style="background:#fafbff;border:1px solid #e5e7f5;border-radius:16px;padding:16px 16px;">
     <ul style="color:#555;margin:0;padding-left:18px;">
-      <li style="margin-bottom:8px;">📄 <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Términos y Condiciones (<a href="/terminos">ver</a>) · <a href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a></a></li>
-      <li style="margin-bottom:8px;">🔒 <a href="{{ url_for('privacy') }}" target="_blank" rel="noopener">Política de Privacidad</a></li>
-      <li>🛡️ <a href="{{ url_for('security') }}" target="_blank" rel="noopener">Política de Seguridad</a></li>
+      <li style="margin-bottom:8px;">📄 <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Términos y Condiciones</a></li>
+      <li style="margin-bottom:8px;">🔒 <a href="{{ url_for('privacidad') }}" target="_blank" rel="noopener">Política de Privacidad</a></li>
+      <li>🛡️ <a href="{{ url_for('seguridad') }}" target="_blank" rel="noopener">Política de Seguridad</a></li>
     </ul>
   </div>
 
@@ -21,9 +21,9 @@
     <label style="display:flex;align-items:flex-start;gap:10px;color:#444;">
       <input type="checkbox" name="accept" value="1" required style="margin-top:4px;">
       <span>
-        Leí y acepto los <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Términos y Condiciones (<a href="/terminos">ver</a>) · <a href="/privacidad">Privacidad</a> · <a href="/seguridad">Seguridad</a></a>,
-        la <a href="{{ url_for('privacy') }}" target="_blank" rel="noopener">Política de Privacidad</a> y la
-        <a href="{{ url_for('security') }}" target="_blank" rel="noopener">Política de Seguridad</a>.
+        Leí y acepto los <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Términos y Condiciones</a>,
+        la <a href="{{ url_for('privacidad') }}" target="_blank" rel="noopener">Política de Privacidad</a> y la
+        <a href="{{ url_for('seguridad') }}" target="_blank" rel="noopener">Política de Seguridad</a>.
       </span>
     </label>
 

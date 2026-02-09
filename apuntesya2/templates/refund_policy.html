@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .shell{max-width:980px;margin:32px auto;padding:0 16px}
+  .card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:22px 20px;box-shadow:0 10px 30px rgba(15,23,42,.05)}
+  h1{margin:0 0 10px;font-size:22px;font-weight:1000;color:#111827}
+  p{color:#374151;line-height:1.55;margin:10px 0}
+  ul{color:#374151;line-height:1.55}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid #fde68a;background:#fffbeb;font-weight:900;font-size:12px;color:#334}
+</style>
+<div class="shell">
+  <div class="card">
+    <h1>💸 Política de reembolso</h1>
+    <div class="pill">Producto digital — entrega por descarga</div>
+
+    <p><b>Regla general:</b> no realizamos devoluciones una vez que el archivo fue descargado, ya que se trata de contenido digital.</p>
+
+    <p><b>Excepciones:</b> podemos ayudarte si hay un <b>error técnico comprobable</b>, por ejemplo:</p>
+    <ul>
+      <li>El archivo está corrupto o no se puede abrir.</li>
+      <li>La plataforma no permite descargar luego de acreditado el pago.</li>
+      <li>Se entregó un archivo distinto por un problema del sistema.</li>
+    </ul>
+
+    <p><b>Qué no cubre:</b> no se realizan reembolsos por motivos como “no era lo que esperaba”, “no me sirvió”, “ya lo tenía”, o desacuerdos con el contenido (el contenido es responsabilidad del vendedor).</p>
+
+    <p><b>Cómo solicitar ayuda:</b> contactanos con el ID de compra y una breve descripción del problema. Si corresponde, vamos a resolverlo (re-entrega, reemplazo o gestión del reembolso cuando aplique).</p>
+  </div>
+</div>
+{% endblock %}

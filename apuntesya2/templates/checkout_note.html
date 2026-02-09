@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .shell{max-width:980px;margin:32px auto;padding:0 16px}
+  .card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:22px 20px;box-shadow:0 10px 30px rgba(15,23,42,.05)}
+  .h1{margin:0 0 8px;font-size:22px;font-weight:1000;color:#111827}
+  .sub{margin:0 0 14px;color:#6b7280;font-size:13px}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+  .box{flex:1;min-width:280px;border:1px solid #e5e7f5;border-radius:14px;background:#fafbff;padding:14px}
+  .label{font-size:12px;font-weight:900;color:#334;margin-bottom:6px}
+  .val{font-size:14px;color:#111827;font-weight:800}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid #dfe4ff;background:#f3f6ff;font-weight:900;font-size:12px;color:#334}
+  .warn{border-color:#fde68a;background:#fffbeb}
+  .ok{border-color:#86efac;background:#ecfdf5}
+  .btn{padding:10px 16px;border:0;border-radius:999px;background:#4478ff;color:#fff;font-weight:900;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+  .btn.ghost{background:#f3f6ff;color:#334;border:1px solid #dfe4ff}
+  .btn.danger{background:#ef4444}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(68,120,255,.25)}
+  .check{display:flex;gap:10px;align-items:flex-start;padding:12px 12px;border:1px solid #e5e7f5;border-radius:14px;background:#fff}
+  .check input{margin-top:3px}
+  .small{font-size:12px;color:#6b7280;line-height:1.35}
+  .links a{font-weight:900;text-decoration:none}
+  .links a:hover{text-decoration:underline}
+</style>
+
+<div class="shell">
+  <div class="card">
+    <div class="h1">🧾 Confirmar compra</div>
+    <div class="sub">Vas a pagar con Mercado Pago. Antes, revisá el detalle y confirmá las condiciones.</div>
+
+    <div class="row">
+      <div class="box">
+        <div class="label">Producto</div>
+        <div class="val">{{ note.title }}</div>
+        <div class="small" style="margin-top:6px">Vendedor: <b>{{ seller.name }}</b></div>
+      </div>
+
+      <div class="box">
+        <div class="label">Total a pagar</div>
+        <div class="val">${{ gross_ars }}</div>
+        <div class="small" style="margin-top:6px">El recargo del medio de pago (si existiera) lo informa Mercado Pago antes de confirmar.</div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px" class="pill warn">📌 Entrega digital inmediata: descargás el archivo desde la plataforma una vez acreditado el pago.</div>
+
+    <div style="margin-top:12px" class="box">
+      <div class="label">Política de reembolso</div>
+      <div class="small">
+        No se realizan devoluciones una vez que el archivo fue descargado, salvo error técnico comprobable (por ejemplo, archivo corrupto o entrega fallida).
+        Para solicitar ayuda: usá el botón de contacto o escribinos desde la sección de soporte.
+        <span class="links">(<a href="{{ url_for('refund_policy') }}">ver detalle</a>)</span>
+      </div>
+    </div>
+
+    <div style="margin-top:12px" class="box">
+      <div class="label">Condiciones y políticas</div>
+      <div class="small links">
+        Al continuar, confirmás que leíste y aceptás:
+        <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Términos</a>,
+        <a href="{{ url_for('privacy') }}" target="_blank" rel="noopener">Privacidad</a> y
+        <a href="{{ url_for('security') }}" target="_blank" rel="noopener">Seguridad</a>.
+        (Versión: <b>{{ legal_version or '—' }}</b>)
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('buy_note', note_id=note.id) }}" style="margin-top:14px">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="check">
+        <input type="checkbox" id="ack" name="ack" value="1" required>
+        <label for="ack" class="small">
+          Confirmo que este es un producto digital. Entiendo la política de reembolso y que ApuntesYa funciona como intermediario: el contenido es responsabilidad del vendedor.
+        </label>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+        <a class="btn ghost" href="{{ url_for('note_detail', note_id=note.id) }}">⬅️ Volver</a>
+        <button class="btn" type="submit">💳 Continuar a Mercado Pago</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

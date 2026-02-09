@@ -51,6 +51,32 @@
       </div>
     </div>
 
+
+    <div class="row">
+      <div>
+        <div style="font-weight:900;color:#111827">Ventas (Kill‑switch)</div>
+        <div class="sub" style="margin:6px 0 0">Pausa compras de apuntes/combo sin tirar abajo el sitio.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        {% if sales_enabled %}
+          <span class="badge on">✅ Habilitadas</span>
+          <form method="post" action="{{ url_for('admin_toggle_sales') }}" style="margin:0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="mode" value="0">
+            <button class="btn danger" type="submit">Pausar ventas</button>
+          </form>
+        {% else %}
+          <span class="badge off">⛔ Pausadas</span>
+          <form method="post" action="{{ url_for('admin_toggle_sales') }}" style="margin:0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="mode" value="1">
+            <button class="btn" type="submit">Reanudar ventas</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+
     <div class="muted">
       <b>Tip:</b> antes de hacer cambios grandes, activá mantenimiento. Cuando termines, desactivá.
     </div>

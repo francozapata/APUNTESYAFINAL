@@ -372,6 +372,43 @@
       color: rgba(229, 231, 235, 0.85);
       font-size: 13px;
     }
+
+    /* ---------- LEGAL UPDATE BANNER ---------- */
+    .legal-banner {
+      position: sticky;
+      top: 64px;
+      z-index: 35;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      padding: 10px 16px;
+      background: #fff7ed;
+      border-bottom: 1px solid #fed7aa;
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+    }
+
+    .legal-banner-inner {
+      width: 100%;
+      max-width: 1120px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #7c2d12;
+      font-size: 14px;
+    }
+
+    .legal-banner b { color: #9a3412; }
+
+    .legal-banner .btn {
+      background: #f97316;
+      border-color: #fb923c;
+      color: #fff;
+    }
+
+    .legal-banner .btn:hover {
+      filter: brightness(0.98);
+    }
   </style>
 </head>
 
@@ -442,6 +479,17 @@
     </div>
   </div>
 
+  {% if current_user.is_authenticated and legal_needs_accept %}
+  <div class="legal-banner" role="alert" aria-live="polite">
+    <div class="legal-banner-inner">
+      <div>
+        ⚠️ <b>Actualizamos los Términos y Políticas</b> (versión {{ legal_version }}). Para seguir usando ApuntesYa, necesitás aceptarlos.
+      </div>
+      <a class="btn" href="{{ url_for('legal_accept', next=request.full_path) }}">Revisar y aceptar</a>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="container">
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -460,6 +508,7 @@
     <a class="btn ghost" href="{{ url_for('terms') }}">Términos y condiciones</a>
     <a class="btn ghost" href="{{ url_for('privacidad') }}">Políticas de privacidad</a>
     <a class="btn ghost" href="{{ url_for('seguridad') }}">Políticas de seguridad</a>
+    <a class="btn ghost" href="{{ url_for('refund_policy') }}">Reembolsos</a>
   </div>
 
   <!-- Contact Widget: button, overlay, and panel -->
