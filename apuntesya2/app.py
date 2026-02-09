@@ -3438,27 +3438,27 @@ def download_note(note_id):
             download_name=fname,
         )
 
+
     if not note_file_path:
         flash("No se encontró el archivo asociado a este apunte.", "danger")
         return redirect(url_for("note_detail", note_id=note_id))
 
-    
-# --- Path traversal hardening (local files) ---
-# note_file_path should be a simple filename stored by our upload pipeline.
-if note_file_path and ("/" in note_file_path or "\\" in note_file_path or ".." in note_file_path):
-    app.logger.warning("Blocked suspicious file_path: %r", note_file_path)
-    abort(404)
+    # --- Path traversal hardening (local) ---
+    if ("/" in note_file_path) or ("\\" in note_file_path) or (".." in note_file_path):
+        app.logger.warning("Blocked suspicious file_path: %r", note_file_path)
+        abort(404)
 
-# Ensure file exists before sending
-try:
-    full_path = os.path.join(app.config["UPLOAD_FOLDER"], note_file_path)
-    if not os.path.exists(full_path):
-        flash("El archivo no está disponible en este momento.", "danger")
-        return redirect(url_for("note_detail", note_id=note_id))
-except Exception:
-    pass
+    # Ensure file exists before sending
+    try:
+        full_path = os.path.join(app.config["UPLOAD_FOLDER"], note_file_path)
+        if not os.path.exists(full_path):
+            flash("El archivo no está disponible en este momento.", "danger")
+            return redirect(url_for("note_detail", note_id=note_id))
+    except Exception:
+        pass
 
     return send_from_directory(app.config["UPLOAD_FOLDER"], note_file_path, as_attachment=True)
+
 
 
 @app.route("/combos/<int:combo_id>/download", methods=["GET","POST"])
@@ -3575,14 +3575,14 @@ def download_combo(combo_id):
                 if gcs_bucket and "/" in fp:
                     data = gcs_download_bytes(fp)
                 else:
-    # local file
-    # --- Combo path traversal hardening ---
-    if ("/" in fp) or ("\\" in fp) or (".." in fp):
-        app.logger.warning("Blocked suspicious combo file_path: %r", fp)
-        continue
-    local_path = os.path.join(app.config["UPLOAD_FOLDER"], fp)
-    if not os.path.exists(local_path):
-        continue
+                    # local file
+                    # --- Combo path traversal hardening ---
+                    if ("/" in fp) or ("\\" in fp) or (".." in fp):
+                        app.logger.warning("Blocked suspicious combo file_path: %r", fp)
+                        continue
+                    local_path = os.path.join(app.config["UPLOAD_FOLDER"], fp)
+                    if not os.path.exists(local_path):
+                        continue
                     with open(local_path, "rb") as f:
                         data = f.read()
                 if data:
