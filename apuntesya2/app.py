@@ -28,7 +28,7 @@ warnings.filterwarnings(
 )
 
 from dotenv import load_dotenv
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
     send_from_directory, abort, jsonify, session
@@ -1952,6 +1952,7 @@ def logout():
     logout_user()
     return redirect(url_for("index"))
 
+@csrf.exempt
 @app.post("/auth/session_login")
 def auth_session_login():
     """Valida el ID token y decide si loguea directo o completa perfil."""
@@ -6942,27 +6943,19 @@ if __name__ == "__main__":
     app.run(debug=True)
 
 
-
 # =========================
-# Login bridge + Error handlers (Security 1.1)
+# UX: upload size + CSRF friendly errors
 # =========================
 from werkzeug.exceptions import RequestEntityTooLarge
-
-@app.route("/login")
-def login_bridge():
-    try:
-        return redirect(url_for("login_google"))
-    except Exception:
-        return redirect(url_for("index"))
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
     flash("El archivo supera el tamaño máximo permitido (100 MB).", "danger")
     return redirect(request.referrer or url_for("upload_note"))
 
-@app.errorhandler(400)
-def handle_bad_request(e):
-    if request.path.startswith("/login/google"):
-        return e
-    flash("Error de validación del formulario. Intentá nuevamente.", "danger")
-    return redirect(request.referrer or url_for("upload_note"))
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    # CSRF failures should show a friendly message instead of "no pasa nada"
+    flash("Tu sesión expiró o el formulario es inválido. Probá de nuevo.", "danger")
+    return redirect(request.referrer or url_for("index"))
+
