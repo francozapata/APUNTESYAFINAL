@@ -151,7 +151,7 @@ class Note(Base):
     seller_net_cents: Mapped[int] = mapped_column(Integer, default=0)
 
     # Moderation (AI + manual)
-    moderation_status: Mapped[str] = mapped_column(String(32), default="pending_ai")
+    moderation_status: Mapped[str] = mapped_column(String(32), default="auto_published")
     moderation_reason: Mapped[str] = mapped_column(Text, nullable=True)
 
     # AI decision payload
@@ -221,7 +221,7 @@ class Combo(Base):
     archived_reason: Mapped[str] = mapped_column(Text, nullable=True)
 
     # Moderation fields
-    moderation_status: Mapped[str] = mapped_column(String(32), default="pending_ai")
+    moderation_status: Mapped[str] = mapped_column(String(32), default="auto_published")
     moderation_reason: Mapped[str] = mapped_column(Text, nullable=True)
 
     ai_decision: Mapped[str] = mapped_column(String(16), nullable=True)

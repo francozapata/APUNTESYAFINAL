@@ -30,11 +30,11 @@ def dashboard():
         pending_manual_notes = 0
         pending_manual_combos = 0
         try:
-            pending_manual_notes = s.query(Note).filter(getattr(Note, 'moderation_status') == 'pending_manual', Note.deleted_at.is_(None)).count()
+            pending_manual_notes = s.query(Note).filter(Note.deleted_at.is_(None)).filter(Note.moderation_status.in_(('blocked_review','pending_manual'))).count()
         except Exception:
             pass
         try:
-            pending_manual_combos = s.query(Combo).filter(getattr(Combo, 'moderation_status') == 'pending_manual').count()
+            pending_manual_combos = s.query(Combo).filter(Combo.moderation_status.in_(('blocked_review','pending_manual'))).count()
         except Exception:
             pass
 
@@ -64,7 +64,7 @@ def moderation_queue():
     """List notes & combos pending moderation."""
     _require_admin()
 
-    status = (request.args.get("status") or "pending_manual").strip()
+    status = (request.args.get("status") or "blocked_review").strip()
 
     with Session() as s:
         # ---------- NOTES ----------
@@ -127,7 +127,7 @@ def moderation_approve(note_id: int):
         n = s.get(Note, note_id)
         if not n:
             abort(404)
-        n.moderation_status = "approved"
+        n.moderation_status = "auto_published"
         if hasattr(n, "is_active"):
             n.is_active = True
         n.moderation_reason = None
@@ -139,7 +139,7 @@ def moderation_approve(note_id: int):
                           target_id=n.id, reason=None, ip=request.remote_addr))
         # notify seller
         try:
-            s.add(Notification(user_id=n.seller_id, kind="success", title="Apunte aprobado", body="Tu apunte fue aprobado por moderación manual y ya está publicado."))
+            s.add(Notification(user_id=n.seller_id, kind="success", title="Apunte publicado", body="Tu apunte fue publicado por moderación y ya está disponible."))
         except Exception:
             pass
         s.commit()
@@ -183,12 +183,12 @@ def moderation_combo_approve(combo_id: int):
         c = s.get(Combo, combo_id)
         if not c:
             abort(404)
-        c.moderation_status = "approved"
+        c.moderation_status = "auto_published"
         c.moderation_reason = None
         c.moderated_by_admin_id = current_user.id
         c.moderated_at = datetime.utcnow()
         try:
-            s.add(Notification(user_id=c.seller_id, kind="success", title="Combo aprobado", body="Tu combo fue aprobado y publicado."))
+            s.add(Notification(user_id=c.seller_id, kind="success", title="Combo publicado", body="Tu combo fue publicado por moderación y ya está disponible."))
         except Exception:
             pass
         s.commit()

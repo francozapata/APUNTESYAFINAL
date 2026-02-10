@@ -5,9 +5,9 @@
     <h1 style="margin:0 0 6px;">Moderación</h1>
     <p class="muted" style="margin:0;">Estado actual: <strong>{{ status }}</strong></p>
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
-      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='pending_ai') }}">Pendientes IA</a>
-      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='pending_manual') }}">Revisión manual</a>
-      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='approved') }}">Aprobados</a>
+      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='blocked_review') }}">Revisión requerida</a>
+      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='published_flagged') }}">Publicados (auditables)</a>
+      <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='auto_published') }}">Publicados (auto)</a>
       <a class="btn ghost" href="{{ url_for('admin.moderation_queue', status='rejected') }}">Rechazados</a>
     </div>
   </div>
@@ -51,7 +51,7 @@
               </td>
               <td style="padding:10px;border-bottom:1px solid #f1f1f1;">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '' }}</td>
               <td style="padding:10px;border-bottom:1px solid #f1f1f1;text-align:right;">
-                {% if n.moderation_status != 'approved' %}
+                {% if n.moderation_status not in ['auto_published','approved'] %}
                   <button class="btn primary" onclick="act('approve', {{ n.id }})">Aprobar</button>
                 {% endif %}
                 {% if n.moderation_status != 'rejected' %}

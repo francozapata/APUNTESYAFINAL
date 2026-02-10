@@ -417,7 +417,7 @@ def _ensure_schema(engine):
             cols = {c['name'] for c in insp.get_columns('notes')}
             add_cols = []
             if 'moderation_status' not in cols:
-                add_cols.append("ALTER TABLE notes ADD COLUMN moderation_status VARCHAR(32) DEFAULT 'pending_ai'")
+                add_cols.append("ALTER TABLE notes ADD COLUMN moderation_status VARCHAR(32) DEFAULT 'auto_published'")
             if 'moderation_reason' not in cols:
                 add_cols.append("ALTER TABLE notes ADD COLUMN moderation_reason TEXT")
             # AI moderation payload
@@ -1223,10 +1223,11 @@ def _gemini_moderate_note(text_sample: str, meta: dict) -> dict:
       reasons: list[str]
     """
     if not GEMINI_API_KEY:
+        # Fallback: we prefer publishing with audit instead of blocking everything.
         return {
-            "decision": "review",
+            "risk_level": "medium",
             "confidence": 0.5,
-            "summary": "Gemini no configurado: enviado a revisión manual (hasta 12hs).",
+            "summary": "IA no configurada: publicado con auditoría automática.",
             "reasons": ["missing_gemini_api_key"],
             "quality_score": 0.5,
             "copyright_risk": 0.0,
@@ -1240,7 +1241,7 @@ def _gemini_moderate_note(text_sample: str, meta: dict) -> dict:
         import json as _json
 
         class _ModerationResult(BaseModel):
-            decision: Literal["approve", "review", "deny"]
+            risk_level: Literal["low", "medium", "high"]
             confidence: int = Field(ge=0, le=100)
             summary: str
             reasons: List[str] = []
@@ -1251,10 +1252,12 @@ def _gemini_moderate_note(text_sample: str, meta: dict) -> dict:
         client = genai.Client(api_key=GEMINI_API_KEY)
 
         prompt = f"""
-Sos moderador de un marketplace de apuntes (Argentina). Evaluá el contenido y devolvé una decisión:
-- approve: apunte educativo válido
-- review: dudoso / posible copyright / requiere revisión humana
-- deny: claramente spam/no educativo/ilegal
+Sos moderador de un marketplace de apuntes (Argentina). Tu objetivo es reducir la revisión manual.
+
+Clasificá el apunte en un NIVEL DE RIESGO:
+- low: contenido educativo normal. Publicación automática.
+- medium: dudas leves (calidad baja, texto corto, posible desajuste). Se publica igual pero queda para auditoría.
+- high: señales fuertes de spam/ilegal/copyright evidente/no educativo. Bloquear y requerir revisión humana.
 
 Metadatos del apunte (no confiar al 100%, solo contexto):
 {_json.dumps(meta, ensure_ascii=False)}
@@ -1262,7 +1265,7 @@ Metadatos del apunte (no confiar al 100%, solo contexto):
 Texto extraído (muestra):
 {text_sample}
 
-Devolvé SOLO JSON con los campos: decision, confidence (0-100), summary, reasons, quality_score, copyright_risk, mismatch_risk.
+Devolvé SOLO JSON con los campos: risk_level, confidence (0-100), summary, reasons, quality_score, copyright_risk, mismatch_risk.
 """
 
         resp = client.models.generate_content(
@@ -1276,7 +1279,7 @@ Devolvé SOLO JSON con los campos: decision, confidence (0-100), summary, reason
         parsed = resp.parsed
         # Convert to legacy dict format
         out = {
-            "decision": parsed.decision,
+            "risk_level": parsed.risk_level,
             "confidence": parsed.confidence / 100.0,
             "summary": parsed.summary,
             "reasons": parsed.reasons,
@@ -1287,30 +1290,61 @@ Devolvé SOLO JSON con los campos: decision, confidence (0-100), summary, reason
         return out
 
     except Exception as e:
+        # Fallback: publish with audit (medium risk) instead of forcing manual review.
         return {
-            "decision": "review",
+            "risk_level": "medium",
             "confidence": 0.5,
-            "summary": f"Error Gemini: {type(e).__name__}. Enviado a revisión manual.",
-            "reasons": ["gemini_error"],
+            "summary": f"Error IA ({type(e).__name__}): publicado con auditoría automática.",
+            "reasons": ["ai_error"],
             "quality_score": 0.5,
             "copyright_risk": 0.0,
             "mismatch_risk": 0.0,
         }
 
 def _decision_to_status(ai: dict) -> tuple[str, str]:
-    """Map AI JSON to (moderation_status, reason)."""
-    decision = (ai.get("decision") or "review").lower().strip()
-    conf = float(ai.get("confidence") or 0.0)
-    # extra safety: if decision isn't recognized -> manual
-    if decision not in ("approve", "review", "deny"):
-        decision = "review"
-    if decision == "approve" and conf >= 0.70:
-        return ("approved", None)
-    if decision == "deny" and conf >= 0.70:
-        return ("rejected", (ai.get("summary") or "Rechazado por moderación automática").strip())
-    # default
-    return ("pending_manual", (ai.get("summary") or "Revisión manual requerida").strip())
+    """Map AI JSON to (moderation_status, reason).
 
+    New scheme:
+      - auto_published: visible to everyone
+      - published_flagged: visible, but marked for optional audit
+      - blocked_review: not visible, requires human review
+
+    Backward compatible with old keys/values (approve|review|deny).
+    """
+    risk = (ai.get("risk_level") or ai.get("decision") or "medium").lower().strip()
+    conf = float(ai.get("confidence") or 0.0)
+
+    # Backward-compat mapping
+    if risk in ("approve", "approved", "ok"):
+        risk = "low"
+    elif risk in ("review", "pending", "maybe"):
+        risk = "medium"
+    elif risk in ("deny", "rejected", "block"):
+        risk = "high"
+
+    if risk not in ("low", "medium", "high"):
+        risk = "medium"
+
+    # Only HIGH blocks. Everything else publishes.
+    if risk == "low":
+        return ("auto_published", None)
+    if risk == "high":
+        return ("blocked_review", (ai.get("summary") or "Revisión humana requerida").strip())
+    # medium
+    return ("published_flagged", (ai.get("summary") or "Publicado con auditoría automática").strip())
+
+
+
+
+# Moderation helpers (new + backward compatible)
+PUBLIC_MODERATION_STATUSES = {"approved", "auto_published", "published_flagged"}
+HUMAN_REVIEW_STATUSES = {"pending_manual", "blocked_review"}
+
+def is_public_moderation_status(status: str) -> bool:
+    return (status or "approved") in PUBLIC_MODERATION_STATUSES
+
+def needs_human_review(status: str) -> bool:
+    return (status or "") in HUMAN_REVIEW_STATUSES
 
 def _notify_users(session_db, user_ids: list[int], title: str, body: str, kind: str = "info"):
     """Create in-app notifications for a list of users."""
@@ -1740,7 +1774,7 @@ def index():
             q_notes = q_notes.where(Note.is_active == True)
 
         if hasattr(Note, "moderation_status"):
-            q_notes = q_notes.where(Note.moderation_status == "approved").where(Note.is_archived == False)
+            q_notes = q_notes.where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
 
         if hasattr(Note, "deleted_at"):
             q_notes = q_notes.where(Note.deleted_at.is_(None))
@@ -1753,7 +1787,7 @@ def index():
             .where(
                 Combo.is_active == True,
                 # si tenés moderación en combos:
-                Combo.moderation_status == "approved",
+                Combo.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Combo.is_archived == False,
                 # si existiera deleted_at en Combo:
                 # Combo.deleted_at.is_(None),
@@ -1774,7 +1808,7 @@ def index():
             if hasattr(Note, "is_active"):
                 q_most = q_most.where(Note.is_active == True)
             if hasattr(Note, "moderation_status"):
-                q_most = q_most.where(Note.moderation_status == "approved").where(Note.is_archived == False)
+                q_most = q_most.where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
             if hasattr(Note, "deleted_at"):
                 q_most = q_most.where(Note.deleted_at.is_(None))
 
@@ -1795,7 +1829,7 @@ def index():
             if hasattr(Note, "is_active"):
                 q_best = q_best.where(Note.is_active == True)
             if hasattr(Note, "moderation_status"):
-                q_best = q_best.where(Note.moderation_status == "approved").where(Note.is_archived == False)
+                q_best = q_best.where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
             if hasattr(Note, "deleted_at"):
                 q_best = q_best.where(Note.deleted_at.is_(None))
 
@@ -1842,7 +1876,7 @@ def search_quick():
                 select(Note)
                 .where(
                     Note.is_active == True,
-                    Note.moderation_status == "approved",
+                    Note.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Note.is_archived == False,
                     Note.deleted_at.is_(None),
                     or_(Note.title.ilike(like), Note.description.ilike(like)),
@@ -1860,10 +1894,10 @@ def search_quick():
                 .join(Note, Note.id == ComboNote.note_id)
                 .where(
                     Combo.is_active == True,
-                    Combo.moderation_status == "approved",
+                    Combo.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Combo.is_archived == False,
                     Note.is_active == True,
-                    Note.moderation_status == "approved",
+                    Note.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Note.is_archived == False,
                     Note.deleted_at.is_(None),
                     or_(
@@ -1902,7 +1936,7 @@ def search_advanced():
         # ---------------- Notes ----------------
         notes_stmt = select(Note).where(
             Note.is_active == True,
-            Note.moderation_status == "approved",
+            Note.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Note.is_archived == False,
             Note.deleted_at.is_(None),
         )
@@ -1931,7 +1965,7 @@ def search_advanced():
             combos_stmt = (
                 select(Combo)
                 .where(Combo.is_active == True)  # noqa: E712
-                .where(Combo.moderation_status == 'approved')
+                .where(Combo.moderation_status.in_(("approved","auto_published","published_flagged")))
                 .where(or_(
                     Combo.title.ilike(f"%{q}%"),
                     Combo.description.ilike(f"%{q}%"),
@@ -1947,10 +1981,10 @@ def search_advanced():
             .join(Note, Note.id == ComboNote.note_id)
             .where(
                 Combo.is_active == True,
-                Combo.moderation_status == "approved",
+                Combo.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Combo.is_archived == False,
                 Note.is_active == True,
-                Note.moderation_status == "approved",
+                Note.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Note.is_archived == False,
                 Note.deleted_at.is_(None),
             )
@@ -2010,7 +2044,7 @@ def search():
         # ---- notes
         notes_stmt = (
             select(Note)
-            .where(Note.moderation_status == "approved").where(Note.is_archived == False)
+            .where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
             .where(or_(
                 Note.title.ilike(f"%{q}%"),
                 Note.description.ilike(f"%{q}%"),
@@ -2025,7 +2059,7 @@ def search():
             combos_stmt = (
                 select(Combo)
                 .where(Combo.is_active == True)  # noqa: E712
-                .where(Combo.moderation_status == "approved").where(Combo.is_archived == False)
+                .where(Combo.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Combo.is_archived == False)
                 .where(or_(
                     Combo.title.ilike(f"%{q}%"),
                     Combo.description.ilike(f"%{q}%"),
@@ -2082,10 +2116,28 @@ def auth_session_login():
             if u:
                 # 🚫 Si está bloqueado o inactivo, no lo dejamos entrar
                 if getattr(u, "is_blocked", False) or not getattr(u, "is_active", True):
+                    # Buscar último ticket de suspensión/bloqueo (best-effort)
+                    ticket = None
+                    try:
+                        ticket = s.execute(
+                            select(AuditEvent.code)
+                            .where(AuditEvent.target_type == "user", AuditEvent.target_id == int(u.id),
+                                   AuditEvent.action.in_(["user_suspend"]))
+                            .order_by(desc(AuditEvent.created_at))
+                            .limit(1)
+                        ).scalar_one_or_none()
+                    except Exception:
+                        ticket = None
+
+                    msg = "Tu cuenta está bloqueada. Escribinos a soporte.apuntesya@gmail.com"
+                    if ticket:
+                        msg += f" (Nº de gestión: {ticket})"
+
                     return {
                         "ok": False,
                         "error": "account_blocked",
-                        "message": "Tu cuenta está bloqueada. Escribinos a soporte.apuntesya@gmail.com"
+                        "message": msg,
+                        "ticket": ticket
                     }, 403
 
                 login_user(u)
@@ -2344,7 +2396,7 @@ def my_notes_hub():
         if hasattr(Note, "is_active"):
             q_combo_notes = q_combo_notes.where(Note.is_active == True)
         if hasattr(Note, "moderation_status"):
-            q_combo_notes = q_combo_notes.where(Note.moderation_status == "approved").where(Note.is_archived == False)
+            q_combo_notes = q_combo_notes.where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
 
         combo_notes = s.execute(q_combo_notes.order_by(Note.created_at.desc())).scalars().all()
 
@@ -2956,6 +3008,27 @@ def upload_note():
             s.add(note)
             s.commit()
 
+            # Gestión / auditoría (subida de apunte)
+            try:
+                log_audit_event(
+                    actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
+                    action="note_uploaded",
+                    target_type="note",
+                    target_id=int(note.id),
+                    meta={
+                        "note_id": int(note.id),
+                        "title": title,
+                        "seller_id": int(getattr(current_user, "id", 0) or 0) or None,
+                        "seller_email": getattr(current_user, "email", None),
+                        "university": university,
+                        "faculty": faculty,
+                        "career": career,
+                        "seller_net_cents": int(price_cents or 0),
+                    },
+                )
+            except Exception:
+                pass
+
             # Generate preview images (best-effort)
             try:
                 pages, imgs = generate_note_preview(note, local_pdf_override=local_pdf_path)
@@ -2980,7 +3053,7 @@ def upload_note():
                 ai = _gemini_moderate_note(text_sample=text_sample, meta=meta)
                 status, reason = _decision_to_status(ai)
 
-                note.ai_decision = (ai.get("decision") or None)
+                note.ai_decision = (ai.get("risk_level") or ai.get("decision") or None)
                 note.ai_model = GEMINI_MODEL if GEMINI_API_KEY else None
                 note.ai_summary = (ai.get("summary") or None)
                 note.ai_raw = ai
@@ -2998,19 +3071,53 @@ def upload_note():
 
                 note.moderation_status = status
                 note.moderation_reason = reason
-                if status == "pending_manual":
-                    note.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
-
+                
                 # Notifications
                 admin_ids = [u.id for u in s.execute(select(User).where(User.is_admin == True)).scalars().all()]
-                if status == "approved":
-                    notify_and_email_users(s, [current_user.id], kind="note_approved", title="Apunte aprobado", body="Tu apunte fue aprobado automáticamente y ya está publicado.", email_subject="Tu apunte fue aprobado", email_body="Tu apunte fue aprobado automáticamente y ya está publicado.", dedupe_key_prefix=f"note:{note.id}:approved")
-                elif status == "pending_manual":
-                    notify_and_email_users(s, [current_user.id], kind="note_manual_review", title="Apunte en revisión manual", body="La IA marcó tu apunte para revisión manual. Puede demorar hasta 12hs.", email_subject="Tu apunte requiere revisión", email_body="La IA marcó tu apunte para revisión manual. Puede demorar hasta 12hs.", dedupe_key_prefix=f"note:{note.id}:manual")
-                    notify_and_email_users(s, admin_ids, kind="manual_review_admin", title="Revisión manual requerida", body=f"Hay un apunte pendiente de revisión manual: #{note.id} — {note.title}", email_subject="Apunte pendiente de revisión manual", email_body=f"Hay un apunte pendiente de revisión manual: #{note.id} — {note.title}", dedupe_key_prefix=f"note:{note.id}:admin_manual")
-                elif status == "rejected":
-                    notify_and_email_users(s, [current_user.id], kind="note_rejected", title="Apunte rechazado", body=f"Tu apunte fue rechazado por la moderación automática. Motivo: {reason or 'sin detalle'}", email_subject="Tu apunte fue rechazado", email_body=f"Tu apunte fue rechazado por la moderación automática. Motivo: {reason or 'sin detalle'}", dedupe_key_prefix=f"note:{note.id}:rejected")
-                    notify_and_email_users(s, admin_ids, kind="note_rejected_admin", title="Apunte rechazado por IA", body=f"Rechazo IA: #{note.id} — {note.title}. Motivo: {reason or 'sin detalle'}", email_subject="Apunte rechazado por IA", email_body=f"Rechazo IA: #{note.id} — {note.title}. Motivo: {reason or 'sin detalle'}", dedupe_key_prefix=f"note:{note.id}:admin_rejected")
+                if status in ("auto_published", "approved"):
+                    notify_and_email_users(
+                        s,
+                        [current_user.id],
+                        kind="note_published",
+                        title="Apunte publicado",
+                        body="Tu apunte ya está publicado 🎉",
+                        email_subject="Tu apunte ya está publicado",
+                        email_body="Tu apunte ya está publicado.",
+                        dedupe_key_prefix=f"note:{note.id}:published"
+                    )
+                elif status == "published_flagged":
+                    notify_and_email_users(
+                        s,
+                        [current_user.id],
+                        kind="note_published_flagged",
+                        title="Apunte publicado",
+                        body="Tu apunte ya está publicado. Puede ser revisado de forma aleatoria.",
+                        email_subject="Tu apunte ya está publicado",
+                        email_body="Tu apunte ya está publicado. Puede ser revisado de forma aleatoria.",
+                        dedupe_key_prefix=f"note:{note.id}:flagged"
+                    )
+                elif status in ("blocked_review", "pending_manual"):
+                    note.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
+                    notify_and_email_users(
+                        s,
+                        [current_user.id],
+                        kind="note_manual_review",
+                        title="Apunte en revisión",
+                        body="Tu apunte quedó en revisión. Puede demorar hasta 12hs.",
+                        email_subject="Tu apunte está en revisión",
+                        email_body="Tu apunte quedó en revisión. Puede demorar hasta 12hs.",
+                        dedupe_key_prefix=f"note:{note.id}:manual"
+                    )
+                    notify_and_email_users(
+                        s,
+                        admin_ids,
+                        kind="manual_review_admin",
+                        title="Revisión requerida",
+                        body=f"Hay un apunte para revisar: #{note.id} — {note.title}",
+                        email_subject="Apunte para revisar",
+                        email_body=f"Hay un apunte para revisar: #{note.id} — {note.title}",
+                        dedupe_key_prefix=f"note:{note.id}:admin_manual"
+                    )
 
                 s.commit()
             except Exception as e:
@@ -3019,10 +3126,12 @@ def upload_note():
         # UX message based on status
         msg = "Apunte subido."
         try:
-            if note.moderation_status == "approved":
-                msg += " Fue aprobado automáticamente y ya está publicado."
-            elif note.moderation_status == "pending_manual":
-                msg += " Quedó en revisión manual (puede demorar hasta 12hs)."
+            if note.moderation_status in ("auto_published", "approved"):
+                msg += " Ya está publicado 🎉"
+            elif note.moderation_status == "published_flagged":
+                msg += " Ya está publicado. Puede ser revisado de forma aleatoria."
+            elif note.moderation_status in ("blocked_review", "pending_manual"):
+                msg += " Quedó en revisión (puede demorar hasta 12hs)."
             elif note.moderation_status == "rejected":
                 msg += " Fue rechazado. Revisá el motivo en tu perfil."
             else:
@@ -3056,8 +3165,8 @@ def note_detail(note_id):
         except Exception:
             pass
 
-        # Hide non-approved notes from the public (seller/admin can still view)
-        if getattr(note, "moderation_status", "approved") != "approved":
+        # Hide non-public notes from the public (seller/admin can still view)
+        if not is_public_moderation_status(getattr(note, "moderation_status", "approved")):
             if not current_user.is_authenticated:
                 abort(404)
             if current_user.id != note.seller_id and not getattr(current_user, "is_admin", False):
@@ -3255,7 +3364,7 @@ def seller_profile(seller_id: int):
             .where(
                 Note.seller_id == seller_id,
                 Note.is_active == True,
-                Note.moderation_status == "approved",
+                Note.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Note.is_archived == False,
                 Note.deleted_at.is_(None)
             )
@@ -3498,6 +3607,25 @@ def download_note(note_id):
                 pass
             s.commit()
 
+            # Gestión / auditoría (descarga)
+            try:
+                log_audit_event(
+                    actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
+                    action="note_downloaded",
+                    target_type="note",
+                    target_id=int(note.id),
+                    meta={
+                        "note_id": int(note.id),
+                        "note_title": getattr(note, "title", None),
+                        "seller_id": int(getattr(note, "seller_id", 0) or 0) or None,
+                        "buyer_id": int(getattr(current_user, "id", 0) or 0) or None,
+                        "buyer_email": getattr(current_user, "email", None),
+                        "is_free": bool(is_free),
+                    },
+                )
+            except Exception:
+                pass
+
             # Analytics
             try:
                 log_analytics_event(
@@ -3562,7 +3690,7 @@ def download_combo(combo_id):
         if not combo or (hasattr(combo, "is_active") and combo.is_active is False):
             abort(404)
 
-        if getattr(combo, "moderation_status", "approved") != "approved":
+        if not is_public_moderation_status(getattr(combo, "moderation_status", "approved")):
             # Owner/admin can still download
             is_owner = bool(combo.seller_id == getattr(current_user, "id", None))
             is_admin = bool(getattr(current_user, "is_admin", False))
@@ -3630,6 +3758,26 @@ def download_combo(combo_id):
             except Exception:
                 pass
             s.commit()
+
+            # Gestión / auditoría (descarga de combo)
+            try:
+                log_audit_event(
+                    actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
+                    action="combo_downloaded",
+                    target_type="combo",
+                    target_id=int(combo.id),
+                    meta={
+                        "combo_id": int(combo.id),
+                        "combo_title": getattr(combo, "title", None),
+                        "seller_id": int(getattr(combo, "seller_id", 0) or 0) or None,
+                        "buyer_id": int(getattr(current_user, "id", 0) or 0) or None,
+                        "buyer_email": getattr(current_user, "email", None),
+                        "is_free": bool(is_free),
+                        "note_ids": [int(nid) for (_fp, _t, nid) in note_files if nid is not None],
+                    },
+                )
+            except Exception:
+                pass
 
             # Analytics
             try:
@@ -3928,7 +4076,7 @@ def buy_note(note_id):
         note = s.get(Note, note_id)
         if not note or not note.is_active:
             abort(404)
-        if getattr(note, "moderation_status", "approved") != "approved":
+        if not is_public_moderation_status(getattr(note, "moderation_status", "approved")):
             abort(404)
         if note.seller_id == current_user.id:
             flash("No podés comprar tu propio apunte.")
@@ -3989,6 +4137,30 @@ def buy_note(note_id):
         )
         s.add(p)
         s.commit()
+
+        # Gestión / auditoría (compra iniciada)
+        try:
+            code = log_audit_event(
+                actor_user_id=current_user.id,
+                action="purchase_created",
+                target_type="purchase",
+                target_id=int(p.id),
+                meta={
+                    "purchase_id": int(p.id),
+                    "note_id": int(note.id),
+                    "note_title": getattr(note, "title", None),
+                    "buyer_id": int(current_user.id),
+                    "buyer_email": getattr(current_user, "email", None),
+                    "seller_id": int(getattr(note, "seller_id", 0) or 0) or None,
+                    "amount_cents": int(gross_cents or 0),
+                    "seller_net_cents": int(net_cents or 0),
+                    "mp_fee_cents_est": int(mp_fee_cents or 0),
+                },
+            )
+            # Nota: no mostramos el Nº de gestión al comprador para no confundir;
+            # queda en Gestiones (admin) para auditoría.
+        except Exception:
+            pass
 
         price_ars = float(money_1_decimal(cents_to_amount(buyer_price_cents)))  # final comprador (P), 1 decimal
         # Comisión de la plataforma (se cobra automáticamente vía marketplace_fee)
@@ -4291,9 +4463,32 @@ def _upsert_purchase_from_payment(pay: dict):
             with Session() as s:
                 p = s.get(Purchase, pid)
                 if p:
+                    old_status = (p.status or "").lower() if getattr(p, "status", None) else ""
                     p.payment_id = payment_id
                     if status:
                         p.status = status
+                    new_status = (p.status or "").lower() if getattr(p, "status", None) else ""
+                    # Gestión / auditoría (cambio de estado de pago)
+                    try:
+                        if (status is not None) and (new_status != old_status):
+                            log_audit_event(
+                                actor_user_id=None,
+                                action="purchase_status",
+                                target_type="purchase",
+                                target_id=int(p.id),
+                                meta={
+                                    "purchase_id": int(p.id),
+                                    "note_id": int(p.note_id) if p.note_id else None,
+                                    "buyer_id": int(p.buyer_id) if p.buyer_id else None,
+                                    "seller_id": int(getattr(p, "seller_id", 0) or 0) or None,
+                                    "from": old_status,
+                                    "to": new_status,
+                                    "payment_id": payment_id,
+                                },
+                            )
+                    except Exception:
+                        pass
+
                     # A5 stats (idempotent)
                     try:
                         if (status or "").lower() == "approved":
@@ -4328,9 +4523,30 @@ def _upsert_purchase_from_payment(pay: dict):
             with Session() as s:
                 cp = s.get(ComboPurchase, cp_id)
                 if cp:
+                    old_status = (cp.status or "").lower() if getattr(cp, "status", None) else ""
                     cp.payment_id = payment_id
                     if status:
                         cp.status = status
+                    new_status = (cp.status or "").lower() if getattr(cp, "status", None) else ""
+                    # Gestión / auditoría (cambio de estado de pago combo)
+                    try:
+                        if (status is not None) and (new_status != old_status):
+                            log_audit_event(
+                                actor_user_id=None,
+                                action="combo_purchase_status",
+                                target_type="combo_purchase",
+                                target_id=int(cp.id),
+                                meta={
+                                    "combo_purchase_id": int(cp.id),
+                                    "combo_id": int(cp.combo_id) if getattr(cp, "combo_id", None) else None,
+                                    "buyer_id": int(cp.buyer_id) if getattr(cp, "buyer_id", None) else None,
+                                    "from": old_status,
+                                    "to": new_status,
+                                    "payment_id": payment_id,
+                                },
+                            )
+                    except Exception:
+                        pass
                     s.commit()
 
                     # A6 analytics: combo purchase approved
@@ -4596,9 +4812,27 @@ def report_note(note_id):
         if hasattr(n, "is_reported"):
             n.is_reported = True
             s.commit()
-    flash("Gracias por tu reporte. Un administrador lo revisará.")
-    flash("✅ Pago aprobado, ya podés descargar.")
-    return redirect(url_for("note_detail", note_id=note_id, _anchor='download', paid=1))
+
+    # Gestión / auditoría
+    code = None
+    try:
+        code = log_audit_event(
+            actor_user_id=current_user.id,
+            action="note_reported",
+            target_type="note",
+            target_id=int(note_id),
+            meta={
+                "reporter_user_id": int(current_user.id),
+                "reporter_email": getattr(current_user, "email", None),
+            },
+        )
+    except Exception:
+        code = None
+
+    flash("Gracias por tu reporte. Un administrador lo revisará.", "success")
+    if code:
+        flash(f"Nº de gestión: {code}", "info")
+    return redirect(url_for("note_detail", note_id=note_id))
 
 # -----------------------------------------------------------------------------
 # Taxonomías académicas (dropdowns) + creación "aprendida"
@@ -5131,6 +5365,9 @@ def admin_api_user_detail(user_id):
 @login_required
 @admin_required
 def admin_api_users_block(user_id):
+    data = request.get_json(silent=True) or {}
+    reason = (data.get("reason") or "").strip()
+
     with Session() as s:
         u = s.get(User, user_id)
         if not u:
@@ -5145,13 +5382,33 @@ def admin_api_users_block(user_id):
             u.is_blocked = True
         s.commit()
 
-    return jsonify({"ok": True, "status": "blocked"})
+        # Gestión / auditoría
+        ticket = None
+        try:
+            ticket = log_audit_event(
+                actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
+                action="user_suspend",
+                target_type="user",
+                target_id=int(u.id),
+                meta={
+                    "reason": reason or None,
+                    "target_user_id": int(u.id),
+                    "target_email": getattr(u, "email", None),
+                },
+            )
+        except Exception:
+            ticket = None
+
+    return jsonify({"ok": True, "status": "blocked", "ticket": ticket})
 
 
 @app.post("/admin/api/users/<int:user_id>/unblock")
 @login_required
 @admin_required
 def admin_api_users_unblock(user_id):
+    data = request.get_json(silent=True) or {}
+    reason = (data.get("reason") or "").strip()
+
     with Session() as s:
         u = s.get(User, user_id)
         if not u:
@@ -5162,13 +5419,32 @@ def admin_api_users_unblock(user_id):
             u.is_blocked = False
         s.commit()
 
-    return jsonify({"ok": True, "status": "unblocked"})
+        ticket = None
+        try:
+            ticket = log_audit_event(
+                actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
+                action="user_reactivate",
+                target_type="user",
+                target_id=int(u.id),
+                meta={
+                    "reason": reason or None,
+                    "target_user_id": int(u.id),
+                    "target_email": getattr(u, "email", None),
+                },
+            )
+        except Exception:
+            ticket = None
+
+    return jsonify({"ok": True, "status": "unblocked", "ticket": ticket})
 
 
 @app.post("/admin/api/users/<int:user_id>/delete")
 @login_required
 @admin_required
 def admin_api_users_delete(user_id):
+    data = request.get_json(silent=True) or {}
+    reason = (data.get("reason") or "").strip()
+
     with Session() as s:
         u = s.get(User, user_id)
         if not u:
@@ -5186,13 +5462,29 @@ def admin_api_users_delete(user_id):
         if has_notes or has_purchases:
             return jsonify({"ok": False, "error": "has_related_data"}), 400
 
+        target_email = getattr(u, "email", None)
         s.delete(u)
         s.commit()
 
-    return jsonify({"ok": True, "status": "deleted"})
+        ticket = None
+        try:
+            ticket = log_audit_event(
+                actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
+                action="user_delete",
+                target_type="user",
+                target_id=int(user_id),
+                meta={
+                    "reason": reason or None,
+                    "target_user_id": int(user_id),
+                    "target_email": target_email,
+                },
+            )
+        except Exception:
+            ticket = None
+
+    return jsonify({"ok": True, "status": "deleted", "ticket": ticket})
 
 
-# Admin HUB - apuntes (info general)
 @app.get("/admin/api/notes")
 @login_required
 @admin_required
@@ -5433,30 +5725,117 @@ def admin_api_tickets():
     Devuelve información lista para UI: resumen, labels y links al objeto involucrado.
     """
     q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("from") or "").strip()  # YYYY-MM-DD
+    date_to = (request.args.get("to") or "").strip()      # YYYY-MM-DD
+    category = (request.args.get("category") or "").strip()
+    actor = (request.args.get("actor") or "").strip()     # user|admin|system
+    critical_only = (request.args.get("critical") or "").strip() in ("1", "true", "True", "yes")
+
+    # Limit hard cap (safety)
     limit = request.args.get("limit", type=int) or 200
+    if limit < 1:
+        limit = 50
+    if limit > 2000:
+        limit = 2000
+
 
     def _action_label(action: str) -> str:
         a = (action or "").strip()
         return {
+            "purchase_created": "Compra iniciada",
+            "purchase_status": "Estado de compra actualizado",
+            "combo_purchase_created": "Compra de combo iniciada",
+            "combo_purchase_status": "Estado de compra de combo actualizado",
+            "note_reported": "Apunte reportado",
             "user_suspend": "Cuenta suspendida",
             "user_reactivate": "Cuenta reactivada",
             "user_delete": "Cuenta eliminada",
             "admin_delete_note": "Apunte eliminado por admin",
             "admin_delete_combo": "Combo eliminado por admin",
+            "note_uploaded": "Apunte subido",
+            "note_downloaded": "Descarga de apunte",
+            "combo_downloaded": "Descarga de combo",
         }.get(a, a)
 
     with Session() as s:
+        filters = []
+
+        # Date filters (inclusive)
+        try:
+            if date_from:
+                dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+                filters.append(AuditEvent.created_at >= dt_from)
+        except Exception:
+            pass
+        try:
+            if date_to:
+                dt_to = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+                filters.append(AuditEvent.created_at < dt_to)
+        except Exception:
+            pass
+
+        # Category filters (maps to actions)
+        CATEGORY_ACTIONS = {
+            "transactions": {"purchase_created", "purchase_status", "combo_purchase_created", "combo_purchase_status"},
+            "downloads": {"note_downloaded", "combo_downloaded"},
+            "content": {"note_uploaded", "admin_delete_note", "admin_delete_combo", "user_delete_note", "user_delete_combo", "note_edited", "combo_edited"},
+            "accounts": {"user_suspend", "user_reactivate", "user_delete"},
+            "moderation": {"note_moderation", "combo_moderation", "note_reported"},
+            "system": {"legal_accept"},
+        }
+        if category in CATEGORY_ACTIONS:
+            filters.append(AuditEvent.action.in_(list(CATEGORY_ACTIONS[category])))
+
+        # Critical-only filter
+        CRITICAL_ACTIONS = {
+            "note_reported",
+            "user_suspend",
+            "admin_delete_note",
+            "admin_delete_combo",
+            "user_delete",
+            "note_moderation",
+            "combo_moderation",
+        }
+        if critical_only:
+            filters.append(AuditEvent.action.in_(list(CRITICAL_ACTIONS)))
+
+        # Actor filter (user/admin/system)
+        join_user = False
+        if actor == "system":
+            filters.append(AuditEvent.actor_user_id.is_(None))
+        elif actor in ("admin", "user"):
+            join_user = True  # need User.is_admin to distinguish
+
+        # Search (code/action/meta/target)
         if q:
             like = f"%{q}%"
-            stmt = (
-                select(AuditEvent)
-                .where(AuditEvent.code.ilike(like))
-                .order_by(desc(AuditEvent.created_at))
-                .limit(limit)
-            )
-        else:
-            stmt = select(AuditEvent).order_by(desc(AuditEvent.created_at)).limit(limit)
+            search_filters = [
+                AuditEvent.code.ilike(like),
+                AuditEvent.action.ilike(like),
+                cast(AuditEvent.meta, String).ilike(like),
+                cast(AuditEvent.target_type, String).ilike(like),
+            ]
+            try:
+                if q.isdigit():
+                    search_filters.append(AuditEvent.target_id == int(q))
+                    search_filters.append(AuditEvent.actor_user_id == int(q))
+            except Exception:
+                pass
+            filters.append(or_(*search_filters))
 
+        # Build stmt
+        stmt = select(AuditEvent)
+        if join_user:
+            stmt = stmt.join(User, User.id == AuditEvent.actor_user_id)
+            if actor == "admin":
+                stmt = stmt.where(or_(User.is_admin == True, User.role == "superadmin"))
+            elif actor == "user":
+                stmt = stmt.where(and_(User.is_admin == False, or_(User.role.is_(None), User.role != "superadmin")))
+
+        if filters:
+            stmt = stmt.where(and_(*filters))
+
+        stmt = stmt.order_by(desc(AuditEvent.created_at)).limit(limit)
         events = s.execute(stmt).scalars().all()
 
         # Actors
@@ -5470,6 +5849,9 @@ def admin_api_tickets():
         note_ids = [int(e.target_id) for e in events if (e.target_type == "note" and e.target_id is not None)]
         combo_ids = [int(e.target_id) for e in events if (e.target_type == "combo" and e.target_id is not None)]
         user_ids = [int(e.target_id) for e in events if (e.target_type == "user" and e.target_id is not None)]
+
+        purchase_ids = [int(e.target_id) for e in events if (e.target_type == "purchase" and e.target_id is not None)]
+        combo_purchase_ids = [int(e.target_id) for e in events if (e.target_type == "combo_purchase" and e.target_id is not None)]
 
         notes = {}
         if note_ids:
@@ -5486,16 +5868,69 @@ def admin_api_tickets():
             rows = s.execute(select(User.id, User.name, User.email).where(User.id.in_(user_ids))).all()
             users = {int(r[0]): {"name": r[1], "email": r[2]} for r in rows}
 
+        purchases = {}
+        if purchase_ids:
+            rows = s.execute(
+                select(Purchase.id, Purchase.note_id, Purchase.combo_id, Purchase.buyer_id, Purchase.buyer_email, Purchase.seller_id,
+                       Purchase.amount_cents, Purchase.status, Purchase.created_at)
+                .where(Purchase.id.in_(purchase_ids))
+            ).all()
+            purchases = {
+                int(r[0]): {
+                    "note_id": (int(r[1]) if r[1] is not None else None),
+                    "combo_id": (int(r[2]) if r[2] is not None else None),
+                    "buyer_id": (int(r[3]) if r[3] is not None else None),
+                    "buyer_email": r[4],
+                    "seller_id": (int(r[5]) if r[5] is not None else None),
+                    "amount_cents": int(r[6] or 0),
+                    "status": r[7],
+                    "created_at": (r[8].isoformat() if r[8] else None),
+                }
+                for r in rows
+            }
+
+        combo_purchases = {}
+        if combo_purchase_ids:
+            rows = s.execute(
+                select(ComboPurchase.id, ComboPurchase.combo_id, ComboPurchase.buyer_id, ComboPurchase.amount_cents, ComboPurchase.status, ComboPurchase.created_at)
+                .where(ComboPurchase.id.in_(combo_purchase_ids))
+            ).all()
+            combo_purchases = {
+                int(r[0]): {
+                    "combo_id": (int(r[1]) if r[1] is not None else None),
+                    "buyer_id": (int(r[2]) if r[2] is not None else None),
+                    "amount_cents": int(r[3] or 0),
+                    "status": r[4],
+                    "created_at": (r[5].isoformat() if r[5] else None),
+                }
+                for r in rows
+            }
+
+
         items = []
         for ev in events:
             a = actors.get(int(ev.actor_user_id)) if ev.actor_user_id else None
 
+            # Meta: superadmin ve todo; admin ve solo campos seguros (para evitar exponer datos sensibles)
             meta_pretty = None
+            safe_meta = None
             try:
-                if ev.meta:
-                    meta_pretty = json.dumps(ev.meta, ensure_ascii=False, indent=2)
+                if isinstance(ev.meta, dict) and ev.meta:
+                    if getattr(current_user, "is_superadmin", False):
+                        safe_meta = ev.meta
+                    else:
+                        SAFE_KEYS = {
+                            "note_id","note_title","combo_id","combo_title","title",
+                            "buyer_email","seller_email","buyer_id","seller_id",
+                            "amount_cents","status","from","to","is_free",
+                            "reason","reporter_email","reporter_user_id",
+                            "university","faculty","career",
+                        }
+                        safe_meta = {k: ev.meta.get(k) for k in SAFE_KEYS if k in ev.meta}
+                    meta_pretty = json.dumps(safe_meta, ensure_ascii=False, indent=2)
             except Exception:
                 meta_pretty = None
+                safe_meta = None
 
             # target label + url + compact info
             target_label = None
@@ -5523,11 +5958,77 @@ def admin_api_tickets():
                 target_label = nm + (f" · {em}" if em else "")
                 user_info = target_label
 
+            elif ev.target_type == "purchase" and ev.target_id is not None:
+                pinfo = purchases.get(int(ev.target_id))
+                amt = None
+                try:
+                    amt = cents_to_amount(int((pinfo or {}).get("amount_cents") or 0))
+                except Exception:
+                    amt = None
+                target_label = f"Compra #{int(ev.target_id)}" + (f" · ${money_1_decimal(amt)}" if amt is not None else "")
+                target_url = None
+            elif ev.target_type == "combo_purchase" and ev.target_id is not None:
+                cpinfo = combo_purchases.get(int(ev.target_id))
+                amt = None
+                try:
+                    amt = cents_to_amount(int((cpinfo or {}).get("amount_cents") or 0))
+                except Exception:
+                    amt = None
+                target_label = f"Compra combo #{int(ev.target_id)}" + (f" · ${money_1_decimal(amt)}" if amt is not None else "")
+                target_url = None
+
             action_label = _action_label(ev.action)
 
             # summary short, human-friendly
             summary = None
-            if ev.action == "admin_delete_note":
+            if ev.action == "purchase_created":
+                try:
+                    m = ev.meta or {}
+                    note_title = m.get("note_title") or ""
+                    amt = cents_to_amount(int(m.get("amount_cents") or 0))
+                    summary = f"Compra iniciada por {m.get('buyer_email') or 'comprador'} para el apunte #{m.get('note_id')}" + (f" · {note_title}" if note_title else "") + f" por ${money_1_decimal(amt)}."
+                except Exception:
+                    summary = "Compra iniciada."
+            elif ev.action == "purchase_status":
+                try:
+                    m = ev.meta or {}
+                    summary = f"Estado de compra actualizado: {m.get('from') or '-'} → {m.get('to') or '-'}."
+                except Exception:
+                    summary = "Estado de compra actualizado."
+            elif ev.action == "combo_purchase_created":
+                try:
+                    m = ev.meta or {}
+                    amt = cents_to_amount(int(m.get("amount_cents") or 0))
+                    summary = f"Compra de combo iniciada (combo #{m.get('combo_id')}) por ${money_1_decimal(amt)}."
+                except Exception:
+                    summary = "Compra de combo iniciada."
+            elif ev.action == "combo_purchase_status":
+                try:
+                    m = ev.meta or {}
+                    summary = f"Estado de compra de combo actualizado: {m.get('from') or '-'} → {m.get('to') or '-'}."
+                except Exception:
+                    summary = "Estado de compra de combo actualizado."
+            elif ev.action == "note_uploaded":
+                try:
+                    m = ev.meta or {}
+                    summary = f"Se subió un apunte: #{m.get('note_id')} · {m.get('title') or ''}."
+                except Exception:
+                    summary = "Se subió un apunte."
+            elif ev.action == "note_downloaded":
+                try:
+                    m = ev.meta or {}
+                    summary = f"Descarga de apunte #{m.get('note_id')}" + (" (gratis)." if m.get('is_free') else ".")
+                except Exception:
+                    summary = "Descarga de apunte."
+            elif ev.action == "combo_downloaded":
+                try:
+                    m = ev.meta or {}
+                    summary = f"Descarga de combo #{m.get('combo_id')}" + (" (gratis)." if m.get('is_free') else ".")
+                except Exception:
+                    summary = "Descarga de combo."
+            elif ev.action == "note_reported":
+                summary = "Se recibió un reporte sobre un apunte. Queda en revisión."
+            elif ev.action == "admin_delete_note":
                 reason = None
                 try:
                     reason = (ev.meta or {}).get("reason")
@@ -5551,9 +6052,15 @@ def admin_api_tickets():
             # inline meta (very short)
             meta_inline = None
             try:
-                if isinstance(ev.meta, dict):
-                    if ev.meta.get("reason"):
-                        meta_inline = f"Motivo: {ev.meta.get('reason')}"
+                m = safe_meta if isinstance(safe_meta, dict) else (ev.meta if isinstance(ev.meta, dict) else {})
+                parts = []
+                if m.get("buyer_email"): parts.append(f"Comprador: {m.get('buyer_email')}")
+                if m.get("seller_email"): parts.append(f"Vendedor: {m.get('seller_email')}")
+                if m.get("reason"): parts.append(f"Motivo: {m.get('reason')}")
+                if m.get("from") or m.get("to"):
+                    parts.append(f"Estado: {m.get('from') or '-'} → {m.get('to') or '-'}")
+                if parts:
+                    meta_inline = " · ".join(parts[:3])
             except Exception:
                 meta_inline = None
 
@@ -5580,6 +6087,140 @@ def admin_api_tickets():
             })
 
     return jsonify({"items": items})
+
+
+# Admin HUB - export gestiones (CSV)
+@app.get("/admin/export/tickets.csv")
+@login_required
+@admin_required
+def admin_export_tickets_csv():
+    q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("from") or "").strip()
+    date_to = (request.args.get("to") or "").strip()
+    category = (request.args.get("category") or "").strip()
+    actor = (request.args.get("actor") or "").strip()
+    critical_only = (request.args.get("critical") or "").strip() in ("1", "true", "True", "yes")
+
+    limit = request.args.get("limit", type=int) or 2000
+    if limit < 1:
+        limit = 200
+    if limit > 20000:
+        limit = 20000  # export cap
+
+    # Reuse the API logic by calling the same query builder inline (simplified)
+    with Session() as s:
+        filters = []
+
+        try:
+            if date_from:
+                dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+                filters.append(AuditEvent.created_at >= dt_from)
+        except Exception:
+            pass
+        try:
+            if date_to:
+                dt_to = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+                filters.append(AuditEvent.created_at < dt_to)
+        except Exception:
+            pass
+
+        CATEGORY_ACTIONS = {
+            "transactions": {"purchase_created", "purchase_status", "combo_purchase_created", "combo_purchase_status"},
+            "downloads": {"note_downloaded", "combo_downloaded"},
+            "content": {"note_uploaded", "admin_delete_note", "admin_delete_combo", "user_delete_note", "user_delete_combo", "note_edited", "combo_edited"},
+            "accounts": {"user_suspend", "user_reactivate", "user_delete"},
+            "moderation": {"note_moderation", "combo_moderation", "note_reported"},
+            "system": {"legal_accept"},
+        }
+        if category in CATEGORY_ACTIONS:
+            filters.append(AuditEvent.action.in_(list(CATEGORY_ACTIONS[category])))
+
+        CRITICAL_ACTIONS = {
+            "note_reported",
+            "user_suspend",
+            "admin_delete_note",
+            "admin_delete_combo",
+            "user_delete",
+            "note_moderation",
+            "combo_moderation",
+        }
+        if critical_only:
+            filters.append(AuditEvent.action.in_(list(CRITICAL_ACTIONS)))
+
+        join_user = False
+        if actor == "system":
+            filters.append(AuditEvent.actor_user_id.is_(None))
+        elif actor in ("admin", "user"):
+            join_user = True
+
+        if q:
+            like = f"%{q}%"
+            search_filters = [
+                AuditEvent.code.ilike(like),
+                AuditEvent.action.ilike(like),
+                cast(AuditEvent.meta, String).ilike(like),
+                cast(AuditEvent.target_type, String).ilike(like),
+            ]
+            try:
+                if q.isdigit():
+                    search_filters.append(AuditEvent.target_id == int(q))
+                    search_filters.append(AuditEvent.actor_user_id == int(q))
+            except Exception:
+                pass
+            filters.append(or_(*search_filters))
+
+        stmt = select(AuditEvent)
+        if join_user:
+            stmt = stmt.join(User, User.id == AuditEvent.actor_user_id)
+            if actor == "admin":
+                stmt = stmt.where(or_(User.is_admin == True, User.role == "superadmin"))
+            elif actor == "user":
+                stmt = stmt.where(and_(User.is_admin == False, or_(User.role.is_(None), User.role != "superadmin")))
+
+        if filters:
+            stmt = stmt.where(and_(*filters))
+
+        stmt = stmt.order_by(desc(AuditEvent.created_at)).limit(limit)
+        events = s.execute(stmt).scalars().all()
+
+    import io, csv as _csv
+    output = io.StringIO()
+    w = _csv.writer(output)
+    w.writerow(["code", "created_at", "action", "actor_user_id", "target_type", "target_id", "meta_json"])
+    for ev in events:
+        meta = None
+        try:
+            if isinstance(ev.meta, dict):
+                # admins get safe meta; superadmin gets full
+                if getattr(current_user, "is_superadmin", False):
+                    meta = ev.meta
+                else:
+                    SAFE_KEYS = {
+                        "note_id","note_title","combo_id","combo_title","title",
+                        "buyer_email","seller_email","buyer_id","seller_id",
+                        "amount_cents","status","from","to","is_free",
+                        "reason","reporter_email","reporter_user_id",
+                        "university","faculty","career",
+                    }
+                    meta = {k: ev.meta.get(k) for k in SAFE_KEYS if k in ev.meta}
+        except Exception:
+            meta = None
+
+        w.writerow([
+            ev.code,
+            (ev.created_at.isoformat() if ev.created_at else ""),
+            ev.action,
+            ev.actor_user_id or "",
+            ev.target_type or "",
+            ev.target_id or "",
+            (json.dumps(meta, ensure_ascii=False) if meta else ""),
+        ])
+
+    csv_bytes = output.getvalue().encode("utf-8")
+    resp = make_response(csv_bytes)
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = f'attachment; filename="gestiones_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv"'
+    return resp
 
 
 # -----------------------
@@ -6431,7 +7072,19 @@ def admin_api_moderation():
     """Devuelve apuntes y combos por estado para mostrar en el Hub (sin salir de la pantalla)."""
     status = (request.args.get("status") or "pending_manual").strip()
     q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("from") or "").strip()  # YYYY-MM-DD
+    date_to = (request.args.get("to") or "").strip()      # YYYY-MM-DD
+    category = (request.args.get("category") or "").strip()
+    actor = (request.args.get("actor") or "").strip()     # user|admin|system
+    critical_only = (request.args.get("critical") or "").strip() in ("1", "true", "True", "yes")
+
+    # Limit hard cap (safety)
     limit = request.args.get("limit", type=int) or 200
+    if limit < 1:
+        limit = 50
+    if limit > 2000:
+        limit = 2000
+
 
     with Session() as s:
         # ------- Notes -------
@@ -6766,7 +7419,7 @@ def combo_create():
                 Note.seller_id == current_user.id,
                 Note.deleted_at.is_(None),
                 Note.is_active == True,
-                Note.moderation_status == "approved",
+                Note.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Note.is_archived == False,
             )
             .order_by(Note.created_at.desc())
@@ -6797,7 +7450,7 @@ def combo_create():
                     Note.seller_id == current_user.id,
                     Note.deleted_at.is_(None),
                     Note.is_active == True,
-                    Note.moderation_status == "approved",
+                    Note.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Note.is_archived == False,
                 )
             ).scalars().all()
@@ -6863,7 +7516,7 @@ def combo_edit(combo_id: int):
                 Note.seller_id == current_user.id,
                 Note.deleted_at.is_(None),
                 Note.is_active == True,
-                Note.moderation_status == "approved",
+                Note.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Note.is_archived == False,
             )
             .order_by(Note.created_at.desc())
@@ -6893,7 +7546,7 @@ def combo_edit(combo_id: int):
                     Note.seller_id == current_user.id,
                     Note.deleted_at.is_(None),
                     Note.is_active == True,
-                    Note.moderation_status == "approved",
+                    Note.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Note.is_archived == False,
                 )
             ).scalars().all()
@@ -6978,7 +7631,7 @@ def buy_combo(combo_id):
         if not combo or (hasattr(combo, "is_active") and combo.is_active is False):
             abort(404)
 
-        if getattr(combo, "moderation_status", "approved") != "approved":
+        if not is_public_moderation_status(getattr(combo, "moderation_status", "approved")):
             abort(404)
 
         if combo.seller_id == current_user.id:
@@ -7024,6 +7677,25 @@ def buy_combo(combo_id):
         )
         s.add(cp)
         s.commit()
+
+        # Gestión / auditoría (compra de combo iniciada)
+        try:
+            log_audit_event(
+                actor_user_id=current_user.id,
+                action="combo_purchase_created",
+                target_type="combo_purchase",
+                target_id=int(cp.id),
+                meta={
+                    "combo_purchase_id": int(cp.id),
+                    "combo_id": int(combo.id),
+                    "combo_title": getattr(combo, "title", None),
+                    "buyer_id": int(current_user.id),
+                    "buyer_email": getattr(current_user, "email", None),
+                    "amount_cents": int(price_cents or 0),
+                },
+            )
+        except Exception:
+            pass
 
         price_ars = float(money_1_decimal(cents_to_amount(price_cents)))
         platform_fee_percent = float(APY_RATE)
@@ -7120,7 +7792,7 @@ def combo_detail(combo_id: int):
 
         # Público: solo approved. Dueño/admin pueden ver pending_review.
         if hasattr(combo, "moderation_status"):
-            if combo.moderation_status != "approved" and not (is_owner or is_admin):
+            if not is_public_moderation_status(getattr(combo, "moderation_status", "approved")) and not (is_owner or is_admin):
                 abort(404)
 
         # ARCHIVED_VISIBILITY_COMBO: oculto para nuevos usuarios, pero accesible para quienes ya lo compraron/descargaron.

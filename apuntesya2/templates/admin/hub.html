@@ -382,15 +382,54 @@
 
         <!-- BUSCADOR -->
         <input id="searchBox" class="input" placeholder="Buscar usuario (nombre/email)">
+        <!-- FILTROS GESTIONES (solo Admin) -->
+        <div id="ticketsFilters" class="row-card" style="display:none;margin-top:12px;">
+            <div class="row-main">
+                <strong>Gestiones</strong>
+                <span class="muted">Buscá por AY-..., email, acción, ID o palabras. Usá filtros para acotar.</span>
+            </div>
+            <div class="right" style="gap:6px;flex-wrap:wrap;">
+                <input id="tFrom" class="input" type="date" style="width:auto;min-width:160px;" />
+                <input id="tTo" class="input" type="date" style="width:auto;min-width:160px;" />
+                <select id="tCategory" class="input" style="width:auto;min-width:190px;">
+                    <option value="">Todas</option>
+                    <option value="transactions">💰 Transacciones</option>
+                    <option value="downloads">⬇️ Descargas</option>
+                    <option value="content">📄 Contenido</option>
+                    <option value="accounts">👤 Cuentas</option>
+                    <option value="moderation">🛡️ Moderación</option>
+                    <option value="system">⚙️ Sistema</option>
+                </select>
+                <select id="tActor" class="input" style="width:auto;min-width:160px;">
+                    <option value="">Cualquiera</option>
+                    <option value="user">Usuario</option>
+                    <option value="admin">Admin</option>
+                    <option value="system">Sistema</option>
+                </select>
+                <label class="muted" style="display:flex;align-items:center;gap:6px;padding:0 8px;">
+                    <input id="tCritical" type="checkbox" />
+                    Solo críticas
+                </label>
+                <select id="tLimit" class="input" style="width:auto;min-width:120px;">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200" selected>200</option>
+                    <option value="500">500</option>
+                </select>
+                <button id="tRefresh" type="button" class="btn ghost">Buscar</button>
+                <a id="tExport" class="btn ghost" href="#" role="button">⬇️ CSV</a>
+            </div>
+        </div>
+
 
         <!-- CONTENEDORES -->
         <div id="usersPane" style="margin-top:14px;"></div>
         <div id="contentPane" style="display:none;margin-top:14px;"></div>
         <div id="moderationPane" style="display:none;margin-top:14px;">
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                <button class="btn ghost" id="modStatusPendingAi" type="button">Pendientes IA</button>
-                <button class="btn ghost" id="modStatusPendingManual" type="button">Revisión manual</button>
-                <button class="btn ghost" id="modStatusApproved" type="button">Aprobados</button>
+                <button class="btn ghost" id="modStatusPendingAi" type="button">Revisión requerida</button>
+                <button class="btn ghost" id="modStatusPendingManual" type="button">Publicados (auditables)</button>
+                <button class="btn ghost" id="modStatusApproved" type="button">Publicados (auto)</button>
                 <button class="btn ghost" id="modStatusRejected" type="button">Rechazados</button>
             </div>
             <div id="moderationList"></div>
@@ -476,6 +515,7 @@
         const contentPane = document.getElementById('contentPane');
         const moderationPane = document.getElementById('moderationPane');
         const ticketsPane = document.getElementById('ticketsPane');
+        const ticketsFilters = document.getElementById('ticketsFilters');
         const statsPane = document.getElementById('statsPane');
         const analyticsPane = document.getElementById('analyticsPane');
         const statsKpis = document.getElementById('statsKpis');
@@ -515,6 +555,7 @@
             contentPane.style.display = tab === 'content' ? '' : 'none';
             moderationPane.style.display = tab === 'moderation' ? '' : 'none';
             ticketsPane.style.display = tab === 'tickets' ? '' : 'none';
+            if (ticketsFilters) ticketsFilters.style.display = tab === 'tickets' ? '' : 'none';
             if (statsPane) statsPane.style.display = tab === 'stats' ? '' : 'none';
             if (analyticsPane) analyticsPane.style.display = tab === 'analytics' ? '' : 'none';
 
@@ -524,7 +565,7 @@
                     : (tab === 'content'
                         ? 'Buscar por título, descripción, universidad, facultad o carrera'
                         : (tab === 'tickets'
-                            ? 'Buscar gestión por número (AY-...)'
+                            ? 'Buscar por AY-..., email, acción, ID o palabras'
                             : (tab === 'stats'
                                 ? 'Buscar movimiento (comprador/vendedor/título)'
                                 : (tab === 'analytics'
@@ -548,9 +589,9 @@
             moderationStatus = st;
             // visual: marcar el botón activo usando el mismo look de .btn.ghost
             const map = {
-                pending_ai: modStatusPendingAi,
-                pending_manual: modStatusPendingManual,
-                approved: modStatusApproved,
+                blocked_review: modStatusPendingAi,
+                published_flagged: modStatusPendingManual,
+                auto_published: modStatusApproved,
                 rejected: modStatusRejected,
             };
             Object.values(map).forEach(b => {
@@ -569,14 +610,24 @@
             load();
         }
 
-        modStatusPendingAi.addEventListener('click', () => setModStatus('pending_ai'));
-        modStatusPendingManual.addEventListener('click', () => setModStatus('pending_manual'));
-        modStatusApproved.addEventListener('click', () => setModStatus('approved'));
+        modStatusPendingAi.addEventListener('click', () => setModStatus('blocked_review'));
+        modStatusPendingManual.addEventListener('click', () => setModStatus('published_flagged'));
+        modStatusApproved.addEventListener('click', () => setModStatus('auto_published'));
         modStatusRejected.addEventListener('click', () => setModStatus('rejected'));
 
         searchBox.addEventListener('input', () => {
             clearTimeout(timer);
             timer = setTimeout(load, 300);
+        });
+
+
+        // Gestiones filters
+        const tRefresh = document.getElementById('tRefresh');
+        if (tRefresh) tRefresh.addEventListener('click', () => load());
+        ['tFrom','tTo','tCategory','tActor','tCritical','tLimit'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('change', () => { if (activeTab === 'tickets') load(); });
         });
 
         async function load() {
@@ -591,12 +642,36 @@
                 const r = await fetch(`/admin/api/content?q=${q}`);
                 const js = await r.json();
                 renderContent(js.items || []);
+
             } else if (activeTab === 'tickets') {
                 ticketsPane.innerHTML = '<div class="muted">Cargando…</div>';
-                const r = await fetch(`/admin/api/tickets?q=${q}`);
+
+                const from = (document.getElementById('tFrom')?.value || '');
+                const to = (document.getElementById('tTo')?.value || '');
+                const category = (document.getElementById('tCategory')?.value || '');
+                const actor = (document.getElementById('tActor')?.value || '');
+                const critical = (document.getElementById('tCritical')?.checked ? '1' : '');
+                const limit = (document.getElementById('tLimit')?.value || '200');
+
+                const params = new URLSearchParams();
+                if (q) params.set('q', q);
+                if (from) params.set('from', from);
+                if (to) params.set('to', to);
+                if (category) params.set('category', category);
+                if (actor) params.set('actor', actor);
+                if (critical) params.set('critical', critical);
+                if (limit) params.set('limit', limit);
+
+                const url = `/admin/api/tickets?${params.toString()}`;
+                const r = await fetch(url);
                 const js = await r.json();
                 renderTickets(js.items || []);
-            } else if (activeTab === 'stats') {
+
+                // CSV export link (keeps same filters)
+                const exp = document.getElementById('tExport');
+                if (exp) exp.href = `/admin/export/tickets.csv?${params.toString()}`;
+            } else if
+ (activeTab === 'stats') {
                 // KPIs
                 statsKpis.innerHTML = '<div class="muted">Cargando estadísticas…</div>';
                 const days = encodeURIComponent(statsDays.value || '30');
@@ -991,32 +1066,50 @@
 
         // ---------- Acciones de usuarios ----------
         window.blockUser = async function (id) {
+            const reason = prompt('Motivo (opcional) para bloquear:') || '';
             if (!confirm('¿Bloquear este usuario? No podrá iniciar sesión.')) return;
-            const r = await fetch(`/admin/api/users/${id}/block`, { method: 'POST' });
+            const r = await fetch(`/admin/api/users/${id}/block`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason })
+            });
             const js = await r.json().catch(() => ({ ok: false }));
             if (js.ok) {
                 load();
+                if (js.ticket) alert(`Bloqueado. Nº de gestión: ${js.ticket}`);
             } else {
                 alert('No se pudo bloquear el usuario: ' + (js.error || ''));
             }
         }
 
         window.unblockUser = async function (id) {
-            const r = await fetch(`/admin/api/users/${id}/unblock`, { method: 'POST' });
+            const reason = prompt('Motivo (opcional) para desbloquear:') || '';
+            const r = await fetch(`/admin/api/users/${id}/unblock`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason })
+            });
             const js = await r.json().catch(() => ({ ok: false }));
             if (js.ok) {
                 load();
+                if (js.ticket) alert(`Desbloqueado. Nº de gestión: ${js.ticket}`);
             } else {
                 alert('No se pudo desbloquear el usuario: ' + (js.error || ''));
             }
         }
 
         window.deleteUser = async function (id) {
+            const reason = prompt('Motivo (opcional) para eliminar:') || '';
             if (!confirm('¿Eliminar este usuario de forma permanente?')) return;
-            const r = await fetch(`/admin/api/users/${id}/delete`, { method: 'POST' });
+            const r = await fetch(`/admin/api/users/${id}/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason })
+            });
             const js = await r.json().catch(() => ({ ok: false }));
             if (js.ok) {
                 load();
+                if (js.ticket) alert(`Eliminado. Nº de gestión: ${js.ticket}`);
             } else if (js.error === 'has_related_data') {
                 alert('No se puede eliminar un usuario con apuntes o compras. Bloquealo en su lugar.');
             } else if (js.error === 'cannot_delete_admin') {
@@ -1039,7 +1132,7 @@
         }
 
         // primera carga
-        setModStatus('pending_manual');
+        setModStatus('published_flagged');
         load();
 
         function renderTickets(items) {

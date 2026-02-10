@@ -34,8 +34,9 @@
   .badge-free{background:#ecfeff;border-color:#67e8f9}
   .badge-paid{background:#ecfccb;border-color:#bef264}
 
-  .status-approved{background:#dcfce7;border-color:#86efac}
-  .status-pending_ai,.status-pending_manual{background:#fffbeb;border-color:#fbbf24}
+  .status-approved,.status-auto_published{background:#dcfce7;border-color:#86efac}
+  .status-published_flagged{background:#eef2ff;border-color:#c7d2fe}
+  .status-pending_ai,.status-pending_manual,.status-blocked_review{background:#fffbeb;border-color:#fbbf24}
   .status-rejected{background:#fee2e2;border-color:#fca5a5}
 
   .top-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
@@ -96,9 +97,10 @@
               <div class="note-actions">
                 {% set st = (n.moderation_status or 'approved') %}
                 <span class="badge status-{{ st }}">
-                  {% if st == 'approved' %}Aprobado
-                  {% elif st == 'pending_ai' %}Pendiente IA
-                  {% elif st == 'pending_manual' %}Revisión
+                  {% if st in ['approved','auto_published'] %}Publicado
+                  {% elif st == 'published_flagged' %}Publicado (auditoría)
+                  {% elif st in ['blocked_review','pending_manual'] %}En revisión
+                  {% elif st == 'pending_ai' %}Procesando
                   {% elif st == 'rejected' %}Denegado
                   {% else %}{{ st }}{% endif %}
                 </span>
