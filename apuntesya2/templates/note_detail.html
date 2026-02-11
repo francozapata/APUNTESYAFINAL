@@ -290,6 +290,12 @@
       order: -1;
     }
   }
+
+  /* Preview: avoid "zoom" / open interactions (best-effort) */
+  .preview-item{ position:relative; border:1px solid #e5e7f5; border-radius:12px; overflow:hidden; background:#fff; }
+  .preview-img{ width:100%; height:auto; display:block; user-select:none; -webkit-user-drag:none; pointer-events:none; }
+  .preview-shield{ position:absolute; inset:0; cursor:default; }
+
 </style>
 
 <div class="note-shell">
@@ -333,29 +339,47 @@
         {% endif %}
 
         {# ---------- PREVIEW (watermarked) ---------- #}
-        {% if note.preview_images and note.preview_images.images %}
+        {% set _imgs = (note.preview_images or {}).get('images', []) %}
+        {% if _imgs %}
         <div style="margin:14px 0 6px;">
           <div class="muted" style="margin-bottom:8px;">
             Vista previa (marca de agua ApuntesYa). No descargable.
           </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
-            {% for _img in note.preview_images.images %}
-              <div style="border:1px solid #e5e7f5;border-radius:12px;overflow:hidden;background:#fff;">
+          <div class="preview-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+            {% set _idxs = preview_idxs if preview_idxs else range(1, (_imgs|length) + 1) %}
+            {% for idx in _idxs %}
+              <div class="preview-item">
                 <img
-                  src="{{ url_for('note_preview_image', note_id=note.id, idx=loop.index) }}"
+                  src="{{ url_for('note_preview_image', note_id=note.id, idx=idx) }}"
                   alt="Vista previa {{ loop.index }}"
-                  style="width:100%;height:auto;display:block;user-select:none;"
+                  class="preview-img"
                   draggable="false"
                 />
+                <div class="preview-shield" aria-hidden="true"></div>
               </div>
             {% endfor %}
           </div>
         </div>
         <script>
           // Soft anti-copy protections (not bulletproof)
-          document.addEventListener('contextmenu', function(e){
-            if(e.target && e.target.tagName === 'IMG'){ e.preventDefault(); }
-          });
+          (function(){
+            const stop = (e)=>{ try{ e.preventDefault(); e.stopPropagation(); }catch(_){} };
+            document.addEventListener('contextmenu', function(e){
+              if(e.target && (e.target.classList && e.target.classList.contains('preview-shield'))){ stop(e); }
+            }, {capture:true});
+            document.addEventListener('click', function(e){
+              if(e.target && (e.target.classList && e.target.classList.contains('preview-shield'))){ stop(e); }
+            }, {capture:true});
+            document.addEventListener('mousedown', function(e){
+              if(e.target && (e.target.classList && e.target.classList.contains('preview-shield'))){ stop(e); }
+            }, {capture:true});
+            document.addEventListener('touchstart', function(e){
+              if(e.target && (e.target.classList && e.target.classList.contains('preview-shield'))){ stop(e); }
+            }, {capture:true, passive:false});
+            document.addEventListener('dragstart', function(e){
+              if(e.target && (e.target.tagName === 'IMG')){ stop(e); }
+            }, {capture:true});
+          })();
         </script>
         {% endif %}
 

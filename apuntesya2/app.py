@@ -75,6 +75,7 @@ from apuntesya2.models import (
 # helpers MP
 from apuntesya2 import mp
 
+import random
 # Pricing (single source of truth)
 from apuntesya2.pricing import (
     published_from_net_cents,
@@ -1142,7 +1143,6 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
 
     Returns (pages, image_paths).
     """
-    import random
     import fitz  # PyMuPDF
     from PIL import Image
     from io import BytesIO
@@ -1164,16 +1164,17 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
         if total <= 0:
             return ([], [])
 
-        pages = {0}
-        pages.add(max(0, total // 2))
-        # add a couple pseudo-random pages (excluding first)
-        if total > 2:
-            candidates = list(range(1, total))
-            random.shuffle(candidates)
-            for p in candidates:
-                pages.add(p)
-                if len(pages) >= max_pages:
-                    break
+        pages = set()
+        # pick truly random pages so the preview is unpredictable
+        candidates = list(range(total))
+        # avoid always showing the cover page if we have enough pages
+        if total > 6:
+            candidates = list(range(2, total))  # skip first 2 pages
+        random.shuffle(candidates)
+        for p in candidates:
+            pages.add(p)
+            if len(pages) >= max_pages:
+                break
         pages = sorted(pages)[:max_pages]
 
         image_paths: list[str] = []
@@ -3393,6 +3394,15 @@ def note_detail(note_id):
         except Exception:
             pass
 
+        # Preview order: show a random subset/order each time (best-effort)
+        try:
+            _imgs = (getattr(note, "preview_images", None) or {}).get("images") or []
+            preview_idxs = list(range(1, len(_imgs) + 1))
+            random.shuffle(preview_idxs)
+            preview_idxs = preview_idxs[:min(4, len(preview_idxs))]
+        except Exception:
+            preview_idxs = []
+
         return render_template(
             "note_detail.html",
             note=note,
@@ -3407,6 +3417,7 @@ def note_detail(note_id):
             base_price=base_price,
             buyer_price=buyer_price,
             paid=(paid_param == "1"),
+            preview_idxs=preview_idxs,
         )
 
 
