@@ -934,6 +934,27 @@ def pricing_ctx():
     )
 
 
+# -----------------------------------------------------------------------------
+# Combo pricing helper (buyer price)
+#
+# Some templates/routes expect a callable named `_combo_buyer_price_cents`.
+# If it's missing, /search/* crashes with NameError.
+# We compute the buyer price using the stored `price_cents` when available,
+# otherwise we fallback to seller_net_cents -> published_from_net_cents.
+# -----------------------------------------------------------------------------
+def _combo_buyer_price_cents(combo) -> int:
+    try:
+        if not combo:
+            return 0
+        pc = int(getattr(combo, "price_cents", 0) or 0)
+        if pc > 0:
+            return pc
+        net = int(getattr(combo, "seller_net_cents", 0) or 0)
+        return int(published_from_net_cents(net)) if net > 0 else 0
+    except Exception:
+        return 0
+
+
 def get_valid_seller_token(seller: User) -> str | None:
     return seller.mp_access_token if (seller and seller.mp_access_token) else None
 
@@ -1876,8 +1897,7 @@ def index():
 # BÚSQUEDA
 # ------------------------------
 
-from sqlalchemy import select, desc, or_, distinct
-
+from sqlalchemy import select, desc, or_, distinct, func
 @app.get("/search/quick", endpoint="search_quick")
 def search_quick():
     q = (request.args.get("q") or "").strip()
@@ -1905,10 +1925,13 @@ def search_quick():
             notes = s.execute(notes_stmt).scalars().all()
 
             # Combos (match por titulo/descripcion O por notas dentro del combo)
-            # IMPORTANTE: NO podemos hacer DISTINCT sobre entidades que incluyan columnas JSON (Postgres no tiene
-            # operador de igualdad para json). Por eso buscamos IDs primero y luego cargamos los combos.
+            # IMPORTANTE:
+            # - Evitamos DISTINCT sobre entidades con columnas JSON (Postgres no define operador de igualdad para json).
+            # - Evitamos ORDER BY con SELECT DISTINCT (Postgres exige que el ORDER BY esté en el SELECT).
+            # Solución: agrupar por Combo.id y ordenar por max(created_at).
+            created_at_expr = func.max(Combo.created_at).label("created_at")
             combo_ids_stmt = (
-                select(Combo.id)
+                select(Combo.id, created_at_expr)
                 .join(ComboNote, ComboNote.combo_id == Combo.id)
                 .join(Note, Note.id == ComboNote.note_id)
                 .where(
@@ -1926,8 +1949,8 @@ def search_quick():
                         Note.description.ilike(like),
                     ),
                 )
-                .order_by(desc(Combo.created_at))
-                .distinct()
+                .group_by(Combo.id)
+                .order_by(desc(created_at_expr))
                 .limit(100)
             )
             combo_ids = [r[0] for r in s.execute(combo_ids_stmt).all()]
@@ -1991,40 +2014,29 @@ def search_advanced():
 
         notes = s.execute(notes_stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
 
-        # ---- combos (búsqueda por texto; sin filtros académicos)
-        combos = []
-        if q:
-            combos_stmt = (
-                select(Combo)
-                .where(Combo.is_active == True)  # noqa: E712
-                .where(Combo.moderation_status.in_(("approved","auto_published","published_flagged")))
-                .where(or_(
-                    Combo.title.ilike(f"%{q}%"),
-                    Combo.description.ilike(f"%{q}%"),
-                ))
-            )
-            combos = s.execute(combos_stmt.order_by(desc(Combo.created_at)).limit(100)).scalars().all()
-
         # ---------------- Combos ----------------
-        combos_stmt = (
-            select(Combo)
-            .distinct()
+        # Para combos hacemos búsqueda sobre Combo y/o sobre notas incluidas en el combo.
+        # Evitamos DISTINCT sobre entidades con JSON usando GROUP BY + carga por IDs.
+        combos = []
+        created_at_expr_adv = func.max(Combo.created_at).label("created_at")
+        combo_ids_stmt = (
+            select(Combo.id, created_at_expr_adv)
             .join(ComboNote, ComboNote.combo_id == Combo.id)
             .join(Note, Note.id == ComboNote.note_id)
             .where(
                 Combo.is_active == True,
                 Combo.moderation_status.in_(("approved","auto_published","published_flagged")),
-                    Combo.is_archived == False,
+                Combo.is_archived == False,
                 Note.is_active == True,
                 Note.moderation_status.in_(("approved","auto_published","published_flagged")),
-                    Note.is_archived == False,
+                Note.is_archived == False,
                 Note.deleted_at.is_(None),
             )
         )
 
         if q:
             like = f"%{q}%"
-            combos_stmt = combos_stmt.where(
+            combo_ids_stmt = combo_ids_stmt.where(
                 or_(
                     Combo.title.ilike(like),
                     Combo.description.ilike(like),
@@ -2034,18 +2046,23 @@ def search_advanced():
             )
 
         if university:
-            combos_stmt = combos_stmt.where(Note.university.ilike(f"%{university}%"))
+            combo_ids_stmt = combo_ids_stmt.where(Note.university.ilike(f"%{university}%"))
         if faculty:
-            combos_stmt = combos_stmt.where(Note.faculty.ilike(f"%{faculty}%"))
+            combo_ids_stmt = combo_ids_stmt.where(Note.faculty.ilike(f"%{faculty}%"))
         if career:
-            combos_stmt = combos_stmt.where(Note.career.ilike(f"%{career}%"))
+            combo_ids_stmt = combo_ids_stmt.where(Note.career.ilike(f"%{career}%"))
 
         if note_type == "free":
-            combos_stmt = combos_stmt.where(Combo.seller_net_cents == 0)
+            combo_ids_stmt = combo_ids_stmt.where(Combo.seller_net_cents == 0)
         elif note_type == "paid":
-            combos_stmt = combos_stmt.where(Combo.seller_net_cents > 0)
+            combo_ids_stmt = combo_ids_stmt.where(Combo.seller_net_cents > 0)
 
-        combos = s.execute(combos_stmt.order_by(desc(Combo.created_at)).limit(100)).scalars().all()
+        combo_ids_stmt = combo_ids_stmt.group_by(Combo.id).order_by(desc(created_at_expr_adv)).limit(100)
+        combo_ids = [r[0] for r in s.execute(combo_ids_stmt).all()]
+        if combo_ids:
+            combos = s.execute(
+                select(Combo).where(Combo.id.in_(combo_ids)).order_by(desc(Combo.created_at))
+            ).scalars().all()
 
     return render_template(
         "index.html",
@@ -2084,20 +2101,6 @@ def search():
             ))
         )
         notes = s.execute(notes_stmt.order_by(desc(Note.created_at)).limit(100)).scalars().all()
-
-        # ---- combos (búsqueda por texto; sin filtros académicos)
-        combos = []
-        if q:
-            combos_stmt = (
-                select(Combo)
-                .where(Combo.is_active == True)  # noqa: E712
-                .where(Combo.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Combo.is_archived == False)
-                .where(or_(
-                    Combo.title.ilike(f"%{q}%"),
-                    Combo.description.ilike(f"%{q}%"),
-                ))
-            )
-            combos = s.execute(combos_stmt.order_by(desc(Combo.created_at)).limit(100)).scalars().all()
 
     return render_template(
         "index.html",
