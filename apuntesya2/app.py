@@ -2961,9 +2961,10 @@ def upload_note():
     if request.method == "POST":
         title = request.form["title"].strip()
         description = request.form["description"].strip()
-        university = request.form["university"].strip()
-        faculty = request.form["faculty"].strip()
-        career = request.form["career"].strip()
+        university = request.form.get("university", "").strip() or None
+        faculty = request.form.get("faculty", "").strip() or None
+        career = request.form.get("career", "").strip() or None
+
         price = request.form.get("price", "").strip()
         # price == seller net (what they want to receive)
         price_cents = int(round(float(price) * 100)) if price else 0
