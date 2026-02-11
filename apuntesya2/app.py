@@ -1905,17 +1905,18 @@ def search_quick():
             notes = s.execute(notes_stmt).scalars().all()
 
             # Combos (match por titulo/descripcion O por notas dentro del combo)
-            combos_stmt = (
-                select(Combo)
-                .distinct()
+            # IMPORTANTE: NO podemos hacer DISTINCT sobre entidades que incluyan columnas JSON (Postgres no tiene
+            # operador de igualdad para json). Por eso buscamos IDs primero y luego cargamos los combos.
+            combo_ids_stmt = (
+                select(Combo.id)
                 .join(ComboNote, ComboNote.combo_id == Combo.id)
                 .join(Note, Note.id == ComboNote.note_id)
                 .where(
                     Combo.is_active == True,
-                    Combo.moderation_status.in_(("approved","auto_published","published_flagged")),
+                    Combo.moderation_status.in_(("approved", "auto_published", "published_flagged")),
                     Combo.is_archived == False,
                     Note.is_active == True,
-                    Note.moderation_status.in_(("approved","auto_published","published_flagged")),
+                    Note.moderation_status.in_(("approved", "auto_published", "published_flagged")),
                     Note.is_archived == False,
                     Note.deleted_at.is_(None),
                     or_(
@@ -1926,9 +1927,22 @@ def search_quick():
                     ),
                 )
                 .order_by(desc(Combo.created_at))
+                .distinct()
                 .limit(100)
             )
-            combos = s.execute(combos_stmt).scalars().all()
+            combo_ids = [r[0] for r in s.execute(combo_ids_stmt).all()]
+            if combo_ids:
+                combos = (
+                    s.execute(
+                        select(Combo)
+                        .where(Combo.id.in_(combo_ids))
+                        .order_by(desc(Combo.created_at))
+                    )
+                    .scalars()
+                    .all()
+                )
+            else:
+                combos = []
 
     return render_template(
         "index.html",
@@ -2961,9 +2975,21 @@ def upload_note():
     if request.method == "POST":
         title = request.form["title"].strip()
         description = request.form["description"].strip()
-        university = request.form.get("university", "").strip() or None
-        faculty = request.form.get("faculty", "").strip() or None
-        career = request.form.get("career", "").strip() or None
+        # En esta versión, Universidad/Facultad/Carrera son OBLIGATORIOS para publicar.
+        # (Evita NULL en DB y evita que se suba con valores "undefined").
+        university = (request.form.get("university") or "").strip()
+        faculty = (request.form.get("faculty") or "").strip()
+        career = (request.form.get("career") or "").strip()
+
+        if not university:
+            flash("Seleccioná tu Universidad.", "warning")
+            return redirect(url_for("upload_note"))
+        if not faculty:
+            flash("Seleccioná tu Facultad.", "warning")
+            return redirect(url_for("upload_note"))
+        if not career:
+            flash("Seleccioná tu Carrera.", "warning")
+            return redirect(url_for("upload_note"))
 
         price = request.form.get("price", "").strip()
         # price == seller net (what they want to receive)
@@ -3031,8 +3057,9 @@ def upload_note():
                 seller_id=current_user.id
             )
 
-            # New uploads go through AI moderation
-            note.moderation_status = "pending_ai"
+            # Publicación inmediata (para que aparezca en Home/búsquedas) y luego
+            # moderación best-effort que puede cambiar el estado.
+            note.moderation_status = "auto_published"
 
             s.add(note)
             s.commit()
@@ -4902,6 +4929,7 @@ def api_list_careers():
 
 
 @app.post("/api/academics/universities")
+@csrf.exempt
 def api_create_university():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
@@ -4919,6 +4947,7 @@ def api_create_university():
 
 
 @app.post("/api/academics/faculties")
+@csrf.exempt
 def api_create_faculty():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
@@ -4944,6 +4973,7 @@ def api_create_faculty():
 
 
 @app.post("/api/academics/careers")
+@csrf.exempt
 def api_create_career():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()

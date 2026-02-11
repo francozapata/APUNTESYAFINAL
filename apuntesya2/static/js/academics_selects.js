@@ -182,6 +182,11 @@
         // Cargar universidades
         if (uniSel) await loadUniversities(uniSel);
 
+        // Restaurar selección previa (si existe). La aplicamos al final (cuando ya hay listeners).
+        const _savedUni = (() => { try { return localStorage.getItem(prefix + ':uni'); } catch (_) { return null; } })();
+        const _savedFac = (() => { try { return localStorage.getItem(prefix + ':fac'); } catch (_) { return null; } })();
+        const _savedCar = (() => { try { return localStorage.getItem(prefix + ':car'); } catch (_) { return null; } })();
+
         function getCurrentTexts() {
             const universityText = (uniSel && uniSel.value === '__other__')
                 ? ((uniOther && uniOther.value) || '').trim()
@@ -285,49 +290,68 @@
         }
 
         // ✅ RESOLVE (NUNCA BLOQUEA; crea si hay input y se puede)
+        // ✅ RESOLVE (modo formulario):
+        // - Requiere universidad/facultad/carrera
+        // - Si el usuario eligió "Otra…" o dejó el select vacío pero escribió en el input, creamos vía API.
         async function resolveHidden() {
             // UNIVERSIDAD
             let uName = '';
             if (uniSel && uniSel.value === '__other__') {
                 const name = (uniOther && uniOther.value.trim()) || '';
-                if (name) {
-                    const u = await createUniversity(name);
-                    chosenUniId = u.id;
-                    uName = u.name;
-                }
+                if (!name) throw new Error('Seleccioná tu Universidad.');
+                const u = await createUniversity(name);
+                chosenUniId = u.id;
+                uName = u.name;
             } else if (uniSel && uniSel.value) {
                 uName = getSelectedText(uniSel);
                 chosenUniId = parseInt(uniSel.value, 10) || null;
+            } else {
+                throw new Error('Seleccioná tu Universidad.');
             }
             if (hUni) hUni.value = uName;
 
             // FACULTAD
             let fName = '';
-            if (facSel && facSel.value === '__other__') {
-                const name = (facOther && facOther.value.trim()) || '';
-                if (name && chosenUniId) {
-                    const f = await createFaculty(name, chosenUniId);
-                    chosenFacId = f.id;
-                    fName = f.name;
-                }
+            const typedFaculty = (facOther && facOther.value ? facOther.value.trim() : '');
+            const wantsOtherFaculty = (facSel && facSel.value === '__other__') || (!!typedFaculty && (!facSel || !facSel.value));
+
+            if (wantsOtherFaculty) {
+                if (!typedFaculty) throw new Error('Seleccioná tu Facultad.');
+                if (!chosenUniId) throw new Error('Seleccioná tu Universidad.');
+                const f = await createFaculty(typedFaculty, chosenUniId);
+                chosenFacId = f.id;
+                fName = f.name;
             } else if (facSel && facSel.value) {
                 fName = getSelectedText(facSel);
                 chosenFacId = parseInt(facSel.value, 10) || null;
+            } else {
+                throw new Error('Seleccioná tu Facultad.');
             }
             if (hFac) hFac.value = fName;
 
             // CARRERA
             let cName = '';
-            if (carSel && carSel.value === '__other__') {
-                const name = (carOther && carOther.value.trim()) || '';
-                if (name && chosenFacId) {
-                    const c = await createCareer(name, chosenFacId);
-                    cName = c.name;
-                }
+            const typedCareer = (carOther && carOther.value ? carOther.value.trim() : '');
+            const wantsOtherCareer = (carSel && carSel.value === '__other__') || (!!typedCareer && (!carSel || !carSel.value));
+
+            if (wantsOtherCareer) {
+                if (!typedCareer) throw new Error('Seleccioná tu Carrera.');
+                if (!chosenFacId) throw new Error('Seleccioná tu Facultad.');
+                const c = await createCareer(typedCareer, chosenFacId);
+                cName = c.name;
             } else if (carSel && carSel.value) {
                 cName = getSelectedText(carSel);
+            } else {
+                throw new Error('Seleccioná tu Carrera.');
             }
             if (hCar) hCar.value = cName;
+
+            // persist selección para la próxima vez
+            try {
+                if (chosenUniId) localStorage.setItem(prefix + ':uni', String(chosenUniId));
+                if (chosenFacId) localStorage.setItem(prefix + ':fac', String(chosenFacId));
+                if (carSel && carSel.value && carSel.value !== '__other__') localStorage.setItem(prefix + ':car', String(carSel.value));
+            } catch (_) {}
         }
 
         // -------- MODO BÚSQUEDA ----------
@@ -358,6 +382,51 @@
                 });
             }
         }
+
+        // Restaurar selección (si hay cache) en cascada sin depender de eventos
+        async function restoreFromStorage() {
+            try {
+                if (!uniSel || !savedUniId) return;
+                const uniOpt = uniSel.querySelector('option[value="' + savedUniId + '"]');
+                if (!uniOpt) return;
+
+                uniSel.value = savedUniId;
+                chosenUniId = parseInt(savedUniId, 10) || null;
+
+                clearSelect(facSel, 'Elegí tu Facultad', enableCreate);
+                clearSelect(carSel, 'Elegí tu Carrera', enableCreate);
+                enable(facSel, !!chosenUniId);
+                enable(carSel, false);
+                setVisible(uniOther, false);
+                setVisible(facOther, false);
+                setVisible(carOther, false);
+
+                if (chosenUniId) {
+                    await loadFaculties(facSel, savedUniId);
+                }
+
+                if (facSel && savedFacId) {
+                    const facOpt = facSel.querySelector('option[value="' + savedFacId + '"]');
+                    if (facOpt) {
+                        facSel.value = savedFacId;
+                        chosenFacId = parseInt(savedFacId, 10) || null;
+                        clearSelect(carSel, 'Elegí tu Carrera', enableCreate);
+                        enable(carSel, !!chosenFacId);
+                        if (chosenFacId) {
+                            await loadCareers(carSel, savedFacId);
+                        }
+                        if (carSel && savedCarId) {
+                            const carOpt = carSel.querySelector('option[value="' + savedCarId + '"]');
+                            if (carOpt) carSel.value = savedCarId;
+                        }
+                    }
+                }
+            } catch (_) {
+                // no-op
+            }
+        }
+
+        await restoreFromStorage();
 
         // inicial sync hidden
         syncHidden();
