@@ -6,74 +6,25 @@
 {% set prefix = prefix or 'acad' %}
 {% set names = names or {'university':'university','faculty':'faculty','career':'career'} %}
 
-<div id="{{ prefix }}-box" class="ay-grid" style="display:grid;gap:14px;grid-template-columns:1fr;max-width:1200px">
-    <style>
-        /* Usamos clases genéricas para evitar Jinja dentro del CSS */
-        .ay-grid .ay-select,
-        .ay-grid .ay-input {
-            width: 100%;
-            padding: 12px 14px;
-            border: 1px solid #d9d9e3;
-            border-radius: 10px;
-            background: #fff;
-            font-size: 15px;
-        }
-
-        .ay-grid .ay-select:focus,
-        .ay-grid .ay-input:focus {
-            outline: none;
-            border-color: #6ca3ff;
-            box-shadow: 0 0 0 3px rgba(108, 163, 255, .15);
-        }
-
-        .ay-grid label {
-            display: block;
-            font-weight: 600;
-            margin: 14px 0 6px;
-        }
-
-        @media(min-width: 820px) {
-            .ay-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-    </style>
-
-    <!-- Universidad -->
-    <div>
-        <label>Universidad</label>
-        <select id="{{ prefix }}-uni" class="ay-select">
-            <option value="" selected disabled>Elegí tu Universidad</option>
-            <option value="__other__">Otra…</option>
-        </select>
-        <input id="{{ prefix }}-uni-other" class="ay-input" type="text" placeholder="Escribí tu Universidad"
-            style="display:none;margin-top:8px;">
-    </div>
-
-    <!-- Facultad -->
-    <div>
-        <label>Facultad</label>
-        <select id="{{ prefix }}-fac" class="ay-select" disabled>
-            <option value="" selected disabled>Elegí tu Facultad</option>
-            <option value="__other__">Otra…</option>
-        </select>
-        <input id="{{ prefix }}-fac-other" class="ay-input" type="text" placeholder="Escribí tu Facultad"
-            style="display:none;margin-top:8px;">
-    </div>
-
-    <!-- Carrera -->
-    <div>
-        <label>Carrera</label>
-        <select id="{{ prefix }}-car" class="ay-select" disabled>
-            <option value="" selected disabled>Elegí tu Carrera</option>
-            <option value="__other__">Otra…</option>
-        </select>
-        <input id="{{ prefix }}-car-other" class="ay-input" type="text" placeholder="Escribí tu Carrera"
-            style="display:none;margin-top:8px;">
-    </div>
+<div class="upload-form-group">
+    <label>Universidad</label>
+    <select class="input" id="{{ prefix }}-uni"></select>
+    <input class="input mt-2" id="{{ prefix }}-uni-other" placeholder="Escribí tu Universidad">
 </div>
 
-{# Hidden que tu backend ya espera #}
-<input type="hidden" name="{{ names.university }}" id="{{ prefix }}-hidden-university">
-<input type="hidden" name="{{ names.faculty }}" id="{{ prefix }}-hidden-faculty">
-<input type="hidden" name="{{ names.career }}" id="{{ prefix }}-hidden-career">
+<div class="upload-form-group">
+    <label>Facultad</label>
+    <select class="input" id="{{ prefix }}-fac" disabled></select>
+    <input class="input mt-2" id="{{ prefix }}-fac-other" placeholder="Escribí tu Facultad">
+</div>
+
+<div class="upload-form-group">
+    <label>Carrera</label>
+    <select class="input" id="{{ prefix }}-car" disabled></select>
+    <input class="input mt-2" id="{{ prefix }}-car-other" placeholder="Escribí tu Carrera">
+</div>
+
+<!-- Hidden inputs que se envían al backend -->
+<input type="hidden" name="university" id="{{ prefix }}-hidden-university">
+<input type="hidden" name="faculty" id="{{ prefix }}-hidden-faculty">
+<input type="hidden" name="career" id="{{ prefix }}-hidden-career">

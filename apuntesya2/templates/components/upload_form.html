@@ -1,4 +1,3 @@
-
 <style>
   .upload-shell {
     max-width: 980px;
@@ -212,7 +211,7 @@
     </div>
 
     <form method="post" action="{{ url_for('upload_note') }}" enctype="multipart/form-data" id="uploadForm">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="upload-grid">
         <!-- COLUMNA IZQUIERDA: campos principales -->
         <div class="upload-main">
@@ -232,6 +231,8 @@
           {% set prefix = 'up' %}
           {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
           {% include 'components/academics_selects.html' %}
+          {% include 'components/academics_selects.html' %}
+
 
           <div class="upload-form-group" style="margin-top:14px;">
             <label for="price">
@@ -358,24 +359,23 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=1"></script>
+
 <script>
-  // Inicializa selects dinámicos de universidad / facultad / carrera
   document.addEventListener('DOMContentLoaded', async () => {
-    const api = await window.initAcademicsSelects({ prefix: 'up', enableCreate: true });
+    const api = await window.initAcademicsSelects({
+      prefix: 'up',
+      enableCreate: true
+    });
+
     const form = document.getElementById('uploadForm');
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      try {
-        await api.resolveHidden();
-      } catch (err) {
-        alert(err.message);
-        return;
-      }
+      await api.resolveHidden();  // 🔑 esto arma bien university/faculty/career
       form.submit();
     });
   });
 </script>
-
 <script>
   // Cálculo dinámico de comisiones y total para el comprador
   (function () {
@@ -421,4 +421,3 @@
     }
   })();
 </script>
-
