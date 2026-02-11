@@ -174,22 +174,6 @@
           <p class="profile-contact-label">Correo electrónico</p>
           <p>{{ current_user.email }}</p>
 
-          <p class="muted" style="margin:0 0 6px;">Datos académicos</p>
-          <p style="margin:0;font-weight:700;font-size:16px;">
-            {{ current_user.university or 'Universidad no indicada' }}<br>
-            <span class="muted" style="font-size:14px;">
-              {{ current_user.faculty or 'Facultad no indicada' }} • {{ current_user.career or 'Carrera no indicada' }}
-            </span>
-          </p>
-
-          <div class="academic-update">
-            <p class="muted" style="margin:0;">
-              ¿Querés cambiar tu universidad, facultad o carrera? Podés actualizar tus datos académicos cuando lo necesites.
-            </p>
-            <a href="{{ url_for('update_academics_get') }}" class="btn-pill ghost">Actualizar datos académicos</a>
-          </div>
-        </div>
-
         <div class="profile-right-box">
           <h4>Cuenta de Mercado Pago</h4>
           {% if current_user.mp_user_id %}

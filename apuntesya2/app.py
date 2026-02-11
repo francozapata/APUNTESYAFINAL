@@ -14,8 +14,8 @@ from email.message import EmailMessage
 from datetime import datetime, timedelta, timedelta
 from urllib.parse import urlencode
 from functools import wraps
-from google.cloud import storage
-from google.oauth2 import service_account
+import boto3
+from botocore.client import Config
 
 # --- Log hygiene -------------------------------------------------------------
 # Pydantic may emit a noisy warning in some environments when 3rd-party
@@ -342,25 +342,40 @@ engine = create_engine(DB_URL, **engine_kwargs)
 
 
 # -----------------------------------------------------------------------------
-# Google Cloud Storage
+# Object storage (Cloudflare R2 - S3 compatible)
+#
+# ⚠️ Backwards-compat: the codebase historically used GCS and checks
+# `gcs_bucket` to decide whether storage is remote. To keep changes minimal,
+# we keep the same variable names but they now point to R2.
 # -----------------------------------------------------------------------------
-GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
-GCS_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+R2_ACCOUNT_ID = (os.getenv("R2_ACCOUNT_ID") or "").strip()
+R2_ACCESS_KEY_ID = (os.getenv("R2_ACCESS_KEY_ID") or "").strip()
+R2_SECRET_ACCESS_KEY = (os.getenv("R2_SECRET_ACCESS_KEY") or "").strip()
+R2_BUCKET_NAME = (os.getenv("R2_BUCKET_NAME") or "").strip()
 
-gcs_client = None
-gcs_bucket = None
+# Optional fallback if you kept old env var names around
+if not R2_BUCKET_NAME:
+    R2_BUCKET_NAME = (os.getenv("GCS_BUCKET_NAME") or "").strip()
 
-if GCS_BUCKET_NAME and GCS_CREDENTIALS_JSON:
+gcs_client = None  # now: boto3 S3 client (R2)
+gcs_bucket = None  # now: bucket name string (R2)
+
+if R2_ACCOUNT_ID and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME:
     try:
-        creds_info = json.loads(GCS_CREDENTIALS_JSON)
-        credentials = service_account.Credentials.from_service_account_info(creds_info)
-        gcs_client = storage.Client(credentials=credentials)
-        gcs_bucket = gcs_client.bucket(GCS_BUCKET_NAME)
-        print(f"[GCS] Bucket configurado: {GCS_BUCKET_NAME}")
+        gcs_client = boto3.client(
+            "s3",
+            endpoint_url=f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
+            aws_access_key_id=R2_ACCESS_KEY_ID,
+            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+            config=Config(signature_version="s3v4"),
+            region_name="auto",
+        )
+        gcs_bucket = R2_BUCKET_NAME
+        print(f"[R2] Bucket configurado: {R2_BUCKET_NAME}")
     except Exception as e:
-        print("[GCS] ERROR al inicializar:", e)
+        print("[R2] ERROR al inicializar:", e)
 else:
-    print("[GCS] GCS no configurado (faltan variables de entorno)")
+    print("[R2] No configurado (faltan variables de entorno)")
 
 # -----------------------------------------------------------------------------
 # Modelos e inicio de sesión
@@ -705,7 +720,7 @@ def _bootstrap_superadmin_and_maintenance():
             "login",
             "logout",
             "auth_session_login",
-            "complete_profile",
+            
             "complete_profile_post",
             "static",
             "health",
@@ -980,55 +995,55 @@ def ensure_dirs():
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 def gcs_upload_file(file_storage, blob_name: str) -> str:
-    """
-    Sube un archivo (FileStorage de Flask) a GCS.
-    Devuelve el nombre del blob guardado.
-    """
-    if not gcs_bucket:
-        raise RuntimeError("GCS no está configurado")
+    """Upload a Flask FileStorage to object storage.
 
-    blob = gcs_bucket.blob(blob_name)
-    file_storage.stream.seek(0)
-    blob.upload_from_file(
-        file_storage.stream,
-        content_type=file_storage.content_type or "application/pdf"
+    Backwards-compat name: historically this uploaded to Google Cloud Storage.
+    Now it uploads to Cloudflare R2 (S3 compatible) using boto3.
+    """
+    if not (gcs_client and gcs_bucket):
+        raise RuntimeError("R2 no está configurado")
+    try:
+        file_storage.stream.seek(0)
+    except Exception:
+        pass
+    gcs_client.put_object(
+        Bucket=gcs_bucket,
+        Key=blob_name,
+        Body=file_storage.stream,
+        ContentType=file_storage.content_type or "application/pdf",
     )
     return blob_name
 
 
 def gcs_upload_path(local_path: str, blob_name: str, content_type: str = "application/pdf") -> str:
-    """Sube un archivo desde disco a GCS (por path)."""
-    if not gcs_bucket:
-        raise RuntimeError("GCS no está configurado")
-    blob = gcs_bucket.blob(blob_name)
-    # upload_from_filename usa el stack nativo y evita problemas de streams ya consumidos
-    blob.upload_from_filename(local_path, content_type=content_type)
-    return blob_name
+    """Upload a local file path to object storage (R2)."""
+    if not (gcs_client and gcs_bucket):
+        raise RuntimeError("R2 no está configurado")
+    extra = {"ContentType": content_type} if content_type else None
+    if extra:
+        gcs_client.upload_file(local_path, gcs_bucket, blob_name, ExtraArgs=extra)
+    else:
+        gcs_client.upload_file(local_path, gcs_bucket, blob_name)
     return blob_name
 
 
 def gcs_generate_signed_url(blob_name: str, seconds: int = 600) -> str:
-    """
-    Genera un link firmado para descargar el archivo desde GCS.
-    """
-    if not gcs_bucket:
-        raise RuntimeError("GCS no está configurado")
-
-    blob = gcs_bucket.blob(blob_name)
-    url = blob.generate_signed_url(
-        version="v4",
-        expiration=timedelta(seconds=seconds),
-        method="GET",
+    """Generate a short-lived signed URL for downloads (R2)."""
+    if not (gcs_client and gcs_bucket):
+        raise RuntimeError("R2 no está configurado")
+    return gcs_client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": gcs_bucket, "Key": blob_name},
+        ExpiresIn=int(seconds or 600),
     )
-    return url
 
 
 def gcs_delete_blob(blob_name: str) -> bool:
-    """Elimina un blob de GCS (best-effort). Devuelve True si intenta borrar."""
-    if not gcs_bucket:
+    """Best-effort delete from object storage."""
+    if not (gcs_client and gcs_bucket):
         return False
     try:
-        gcs_bucket.blob(blob_name).delete()
+        gcs_client.delete_object(Bucket=gcs_bucket, Key=blob_name)
         return True
     except Exception:
         return False
@@ -1036,28 +1051,31 @@ def gcs_delete_blob(blob_name: str) -> bool:
 
 def gcs_download_to_temp(blob_name: str) -> str:
     """Download a blob to a temporary file and return the local path."""
-    if not gcs_bucket:
-        raise RuntimeError("GCS no está configurado")
+    if not (gcs_client and gcs_bucket):
+        raise RuntimeError("R2 no está configurado")
     tmp_dir = os.path.join(BASE_DATA, "tmp")
     os.makedirs(tmp_dir, exist_ok=True)
     tmp_path = os.path.join(tmp_dir, f"{secrets.token_hex(8)}.bin")
-    blob = gcs_bucket.blob(blob_name)
-    blob.download_to_filename(tmp_path)
+    gcs_client.download_file(gcs_bucket, blob_name, tmp_path)
     return tmp_path
 
 
 def gcs_download_bytes(blob_name: str) -> bytes:
-    if not gcs_bucket:
-        raise RuntimeError("GCS no está configurado")
-    blob = gcs_bucket.blob(blob_name)
-    return blob.download_as_bytes()
+    if not (gcs_client and gcs_bucket):
+        raise RuntimeError("R2 no está configurado")
+    obj = gcs_client.get_object(Bucket=gcs_bucket, Key=blob_name)
+    return obj["Body"].read()
 
 
 def gcs_upload_bytes(data: bytes, blob_name: str, content_type: str = "application/octet-stream") -> str:
-    if not gcs_bucket:
-        raise RuntimeError("GCS no está configurado")
-    blob = gcs_bucket.blob(blob_name)
-    blob.upload_from_string(data, content_type=content_type)
+    if not (gcs_client and gcs_bucket):
+        raise RuntimeError("R2 no está configurado")
+    gcs_client.put_object(
+        Bucket=gcs_bucket,
+        Key=blob_name,
+        Body=data,
+        ContentType=content_type or "application/octet-stream",
+    )
     return blob_name
 
 
@@ -2147,24 +2165,33 @@ def auth_session_login():
                 return {"ok": True, "next": url_for("index")}, 200
 
 
-        session["pending_google"] = {
-            "email": email,
-            "name": name,
-            "uid": info.get("uid"),
-            "picture": info.get("picture")
-        }
-        return {"ok": True, "next": url_for("complete_profile")}, 200
+        
+        # Nuevo usuario: creamos un perfil mínimo y lo mandamos a /profile para completar datos.
+        with Session() as s:
+            dummy_hash = "google"
+            u = User(
+                name=name or (email.split("@")[0] if email else "Usuario"),
+                email=email,
+                password_hash=dummy_hash,
+                imagen_de_perfil=info.get("picture"),
+            )
+            s.add(u)
+            s.commit()
+            s.refresh(u)
+
+        login_user(u)
+        return {"ok": True, "next": url_for("profile", first="1")}, 200
+
 
     except Exception as e:
         app.logger.exception("session_login error")
         return {"ok": False, "error": str(e)}, 500
 
-@app.get("/complete_profile")
-def complete_profile():
-    if "pending_google" not in session:
-        return redirect(url_for("login"))
-    data = session["pending_google"]
-    return render_template("complete_profile.html", name=data.get("name"))
+
+
+# /complete_profile eliminado: ahora se completa en /profile
+
+
 
 @app.post("/complete_profile")
 def complete_profile_post():
@@ -2527,6 +2554,7 @@ def my_notes_hub():
 
 
     return render_template("my_notes_hub.html", my_notes=my_notes, combos=combos, notes=combo_notes, stats_totals=stats_totals, note_stats=note_stats)
+
 
 
 @app.get("/my-content/edit")
@@ -4871,81 +4899,78 @@ def api_list_careers():
         rows = s.execute(q.order_by(Career.name)).scalars().all()
         return jsonify([{"id": c.id, "name": c.name, "faculty_id": c.faculty_id} for c in rows])
 
+
 @app.post("/api/academics/universities")
 def api_create_university():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if not name:
-        return jsonify({"error":"name required"}), 400
+        return jsonify({"error": "name_required"}), 400
+
     with Session() as s:
-        exists = s.execute(
-            select(University).where(func.lower(University.name) == name.lower())
-        ).scalar_one_or_none()
-        if exists:
-            return jsonify({"id": exists.id, "name": exists.name}), 200
+        existing = s.execute(select(University).where(University.name == name)).scalar_one_or_none()
+        if existing:
+            return jsonify({"id": existing.id, "name": existing.name}), 200
         u = University(name=name)
-        s.add(u); s.commit()
+        s.add(u)
+        s.commit()
         return jsonify({"id": u.id, "name": u.name}), 201
+
 
 @app.post("/api/academics/faculties")
 def api_create_faculty():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     university_id = data.get("university_id")
+    try:
+        university_id = int(university_id)
+    except Exception:
+        university_id = None
+
     if not name or not university_id:
-        return jsonify({"error":"name and university_id required"}), 400
+        return jsonify({"error": "name_and_university_id_required"}), 400
+
     with Session() as s:
-        f = Faculty(name=name, university_id=int(university_id))
-        s.add(f); s.commit()
+        existing = s.execute(
+            select(Faculty).where(Faculty.name == name, Faculty.university_id == university_id)
+        ).scalar_one_or_none()
+        if existing:
+            return jsonify({"id": existing.id, "name": existing.name, "university_id": existing.university_id}), 200
+        f = Faculty(name=name, university_id=university_id)
+        s.add(f)
+        s.commit()
         return jsonify({"id": f.id, "name": f.name, "university_id": f.university_id}), 201
+
 
 @app.post("/api/academics/careers")
 def api_create_career():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     faculty_id = data.get("faculty_id")
+    try:
+        faculty_id = int(faculty_id)
+    except Exception:
+        faculty_id = None
+
     if not name or not faculty_id:
-        return jsonify({"error":"name and faculty_id required"}), 400
+        return jsonify({"error": "name_and_faculty_id_required"}), 400
+
     with Session() as s:
-        c = Career(name=name, faculty_id=int(faculty_id))
-        s.add(c); s.commit()
+        existing = s.execute(
+            select(Career).where(Career.name == name, Career.faculty_id == faculty_id)
+        ).scalar_one_or_none()
+        if existing:
+            return jsonify({"id": existing.id, "name": existing.name, "faculty_id": existing.faculty_id}), 200
+        c = Career(name=name, faculty_id=faculty_id)
+        s.add(c)
+        s.commit()
         return jsonify({"id": c.id, "name": c.name, "faculty_id": c.faculty_id}), 201
 
-# -----------------------------------------------------------------------------
-# Foto de perfil
-# -----------------------------------------------------------------------------
-@app.get("/user/<int:user_id>/avatar")
-def user_avatar(user_id: int):
-    """Redirect a la foto de perfil del usuario.
 
-    Guardamos la referencia en users.imagen_de_perfil.
-    - Si es un blob de GCS (contiene '/'): generamos signed URL.
-    - Si es un filename local: servimos desde /static/uploads/profile_images/.
-    """
-    with Session() as s:
-        u = s.get(User, user_id)
-        if not u:
-            abort(404)
-        ref = (getattr(u, "imagen_de_perfil", None) or "").strip()
 
-    if not ref:
-        # fallback: avatar default
-        return redirect(url_for("static", filename="img/avatar_default.png"))
 
-    # Si es URL completa, la usamos tal cual
-    if ref.startswith("http://") or ref.startswith("https://"):
-        return redirect(ref)
+# (removed duplicate academics POST endpoints)
 
-    # GCS blob
-    if "/" in ref:
-        try:
-            url = gcs_generate_signed_url(ref, seconds=600)
-            return redirect(url)
-        except Exception:
-            # fallback local
-            pass
-
-    return redirect(url_for("static", filename=f"uploads/profile_images/{ref}"))
 
 
 @app.route("/profile/upload_image", methods=["POST"])
@@ -4991,6 +5016,48 @@ def upload_profile_image():
 # -----------------------------------------------------------------------------
 # Cambio de contraseña MANUAL (sólo si corresponde)
 # -----------------------------------------------------------------------------
+
+@app.get("/user/<int:user_id>/avatar")
+def user_avatar(user_id: int):
+    """
+    Return a user avatar image.
+    - If imagen_de_perfil is an http(s) URL (Google), redirect to it.
+    - If imagen_de_perfil looks like an object key (e.g. profile_images/...), return a short-lived signed URL from R2.
+    - Otherwise, serve local static fallback (static/uploads/profile_images/<filename>) or default_profile.png.
+    """
+    with Session() as s:
+        u = s.get(User, user_id)
+        ref = getattr(u, "imagen_de_perfil", None) if u else None
+
+    # Default image
+    default_url = url_for("static", filename="img/default_profile.png")
+
+    if not ref:
+        return redirect(default_url)
+
+    ref = str(ref)
+
+    # External URL (Google, etc.)
+    if ref.startswith("http://") or ref.startswith("https://"):
+        return redirect(ref)
+
+    # Object key in R2
+    if gcs_bucket and ("/" in ref or ref.startswith("profile_images/") or ref.startswith("uploads/")):
+        try:
+            signed = gcs_generate_signed_url(ref, seconds=600)
+            return redirect(signed)
+        except Exception:
+            pass
+
+    # Local file fallback
+    local_dir = os.path.join(app.static_folder, "uploads", "profile_images")
+    local_path = os.path.join(local_dir, ref)
+    if os.path.exists(local_path):
+        return send_from_directory(local_dir, ref)
+
+    return redirect(default_url)
+
+
 @app.route("/profile/change_password", methods=["POST"])
 @login_required
 def change_password():
@@ -7331,56 +7398,15 @@ def update_academics():
 @app.get("/update_academics")
 @login_required
 def update_academics_get():
-    """Muestra el mismo formulario que /complete_profile pero para actualizar."""
-    return render_template(
-        "complete_profile.html",
-        name=current_user.name,
-        mode="update"
-    )
+    # Página eliminada: la edición se hace en /profile
+    return redirect(url_for("profile") + "#academics")
+
 
 @app.post("/update_academics")
 @login_required
 def update_academics_post():
-    university = (request.form.get("university") or "").strip()
-    faculty    = (request.form.get("faculty") or "").strip()
-    career     = (request.form.get("career") or "").strip()
-    seller_contact = (request.form.get("seller_contact") or "").strip()
-
-    if not (university and faculty and career):
-        flash("Completá todos los campos antes de guardar.", "warning")
-        return redirect(url_for("update_academics_get"))
-
-    with Session() as s:
-        u = s.get(User, current_user.id)
-        u.university = university
-        u.faculty    = faculty
-        u.career     = career
-        if seller_contact:
-            u.seller_contact = seller_contact
-        s.commit()
-
-    flash("✅ Datos académicos actualizados.", "success")
-    return redirect(url_for("profile"))
-
-
-# -----------------------------------------------------------------------------
-# Main
-# -----------------------------------------------------------------------------
-# ------------------------------ Combos ------------------------------
-from apuntesya2.models import ComboNote
-
-def _combo_buyer_price_cents(combo: Combo) -> int:
-    """Precio final al comprador para un combo.
-
-    Regla: el vendedor ingresa el NETO (lo que quiere recibir) y al comprador se le
-    suma el % de comisiones configurado (TOTAL_FEE_RATE). Si es gratis => 0.
-    """
-    if not combo:
-        return 0
-    net = int(getattr(combo, "seller_net_cents", 0) or 0)
-    if net <= 0:
-        return 0
-    return int(published_from_net_cents(net))
+    # Compatibilidad: enviamos al handler nuevo en /profile
+    return profile_update_academics()
 
 
 @app.route("/profile/combos")
