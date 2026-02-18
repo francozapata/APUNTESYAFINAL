@@ -1,0 +1,258 @@
+/* Home page extracted styles (was inline) */
+
+.search-shell {
+    max-width: 980px;
+    margin: var(--space-lg) auto 0;
+  }
+
+  .search-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e5e7f5;
+    padding: var(--space-md) var(--space-md) calc(var(--space-md) + 4px);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .05);
+  }
+
+  .muted {
+    color: #6b7280;
+    font-size: 13px;
+  }
+
+  .tabs.as-buttons {
+    display: flex;
+    justify-content: center;
+    padding: 6px;
+    border-radius: 999px;
+    background: #f7f9ff;
+    border: 1px solid #e0e4ff;
+    margin-bottom: var(--space-md);
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .tabs.as-buttons .tab.btn.ghost {
+    border-radius: 999px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: #4b5563;
+    padding: 9px 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tabs.as-buttons .tab.btn.ghost.active {
+    background: #4478ff;
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(68, 120, 255, .3);
+  }
+
+  .search-bar {
+    margin-top: 4px;
+  }
+
+  /* Botón Buscar embebido en la barra */
+  .search-input-wrap {
+    position: relative;
+    width: 100%;
+  }
+  .search-input-wrap input.input {
+    border-radius: 999px;
+    padding-left: 14px;
+    padding-right: 118px; /* deja lugar al botón */
+  }
+  .search-input-wrap .search-embed-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  #tab-advanced h2 {
+    margin: 6px 0 10px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  .field .input,
+  .field select.input {
+    font-size: 14px;
+  }
+
+  .grid-3.gap {
+    margin-top: 4px;
+  }
+
+  .actions.row.gap {
+    margin-top: 10px;
+  }
+
+  .actions .btn.primary {
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-weight: 600;
+  }
+
+  .actions .btn.ghost {
+    border-radius: 999px;
+    padding: 8px 16px;
+  }
+
+  .results-shell {
+    max-width: 980px;
+    margin: 16px auto 32px;
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e5e7f5;
+    padding: var(--space-md) var(--space-md) calc(var(--space-md) + 4px);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .05);
+  }
+
+  .results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .results-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .results-header span {
+    font-size: 13px;
+    color: #6b7280;
+  }
+
+  .notes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    margin-top: 4px;
+  }
+
+  .note-card.card {
+    border-radius: 16px;
+    border: 1px solid #eeeeff;
+    background: #fafbff;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 150px;
+  }
+
+  .note-card__header {
+    margin-bottom: 6px;
+  }
+
+  .note-title.link-strong {
+    font-size: 15px;
+    font-weight: 700;
+    color: #111827;
+    text-decoration: none;
+  }
+
+  .note-title.link-strong:hover {
+    text-decoration: underline;
+  }
+
+  .note-card__desc {
+    font-size: 13px;
+    color: #4b5563;
+    margin: 4px 0 6px;
+  }
+
+  .note-card__meta {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .note-card__meta span+span::before {
+    content: "•";
+    margin: 0 4px;
+    color: #9ca3af;
+  }
+
+  .note-card__footer {
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .price-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #e0ecff;
+    color: #1d4ed8;
+  }
+
+  .price-tag.free {
+    background: #e8fff0;
+    color: #166534;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    background: #fff0db;
+    color: #92400e;
+    border: 1px solid #ffe1b3;
+  }
+
+  .btn.secondary {
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .mt-1 {
+    margin-top: .25rem;
+  }
+
+  .mt-2 {
+    margin-top: .5rem;
+  }
+
+  @media(max-width:720px) {
+
+    .search-card,
+    .results-shell {
+      padding: 16px 14px 18px;
+    }
+
+    .note-card__footer {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }

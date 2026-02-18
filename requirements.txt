@@ -17,3 +17,4 @@ boto3
 botocore
 google-genai==0.8.0
 pydantic==2.9.2
+Flask-Compress==1.15

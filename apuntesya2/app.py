@@ -36,6 +36,13 @@ from flask import (
 )
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, abort, send_file
 
+
+# Optional: response compression (gzip)
+try:
+    from flask_compress import Compress
+except Exception:
+    Compress = None
+
 from flask_login import (
     LoginManager, login_user, logout_user, current_user, login_required
 )
@@ -94,6 +101,11 @@ load_dotenv()
 # -----------------------------------------------------------------------------
 app = Flask(__name__, instance_relative_config=True)
 
+# Enable gzip compression if available
+if Compress:
+    Compress(app)
+
+
 # --- SECRET KEY robusto: usa ENV si existe; si no, persiste uno en disco ---
 def _load_or_create_secret_key(path: str) -> str:
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -115,6 +127,13 @@ app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["ENV"] = os.getenv("FLASK_ENV", "production")
 
+# Static caching (browser) - 30 days by default
+try:
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = int(os.getenv("STATIC_MAX_AGE_SEC", str(60*60*24*30)))
+except Exception:
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 60*60*24*30
+
+
 # -----------------------------------------------------------------------------
 # Legal versions (TyC + Privacidad + Seguridad)
 #
@@ -133,6 +152,34 @@ app.config["MAX_CONTENT_LENGTH"] = _max_mb * 1024 * 1024
 
 # --- Security: CSRF protection ----------------------------------------------
 csrf = CSRFProtect(app)
+
+
+# --- Performance: tiny in-memory TTL cache (per-process) --------------------
+_TTL_CACHE = {}  # key -> (expires_ts, value)
+
+def _cache_get(key: str):
+    try:
+        exp, val = _TTL_CACHE.get(key, (0, None))
+        if exp and exp > datetime.utcnow().timestamp():
+            return val
+    except Exception:
+        pass
+    return None
+
+def _cache_set(key: str, value, ttl_sec: int):
+    try:
+        _TTL_CACHE[key] = (datetime.utcnow().timestamp() + int(ttl_sec), value)
+    except Exception:
+        pass
+
+
+def _cache_invalidate_prefix(prefix: str):
+    try:
+        for k in list(_TTL_CACHE.keys()):
+            if str(k).startswith(prefix):
+                _TTL_CACHE.pop(k, None)
+    except Exception:
+        pass
 
 # --- Security: simple rate limiting (per-process) ---------------------------
 # NOTE: With multiple gunicorn workers this is per-worker, still useful as a first layer.
@@ -389,7 +436,7 @@ app.config["MAX_CONTENT_LENGTH"] = 150 * 1024 * 1024  # 25MB
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, QueuePool
 
 DEFAULT_DB = f"sqlite:///{os.path.join(BASE_DATA, 'apuntesya.db')}"
 DB_URL = os.getenv("DATABASE_URL", DEFAULT_DB)
@@ -402,13 +449,19 @@ elif DB_URL.startswith("postgres://"):
 
 engine_kwargs = {"pool_pre_ping": True, "future": True}
 
-# Si es SQLite (local), dejamos como estaba
+# DB pooling:
+# - SQLite local: keep check_same_thread off (single process dev)
+# - Postgres/Supabase: use a small QueuePool to avoid per-request connect latency
 if DB_URL.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
-
-# Si es Postgres (Supabase) → usar NullPool
 else:
-    engine_kwargs["poolclass"] = NullPool
+    # If you use Supabase's pooler (PgBouncer), pooling is still fine here.
+    engine_kwargs.update({
+        "poolclass": QueuePool,
+        "pool_size": int(os.getenv("DB_POOL_SIZE", "5")),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "10")),
+        "pool_recycle": int(os.getenv("DB_POOL_RECYCLE_SEC", "300")),
+    })
 
 engine = create_engine(DB_URL, **engine_kwargs)
 
@@ -563,6 +616,58 @@ try:
     _ensure_schema(engine)
 except Exception as e:
     print('[schema] WARNING:', e)
+
+
+# -----------------------------------------------------------------------------
+# Performance: create helpful indexes (safe to run multiple times)
+# -----------------------------------------------------------------------------
+def _ensure_indexes(engine):
+    dialect = (engine.dialect.name or "").lower()
+    with engine.begin() as conn:
+        if dialect.startswith("postgres"):
+            stmts = [
+                # Public listing filters
+                """CREATE INDEX IF NOT EXISTS idx_notes_public_list
+                    ON notes (is_active, moderation_status, is_archived, deleted_at, created_at DESC)""",
+                """CREATE INDEX IF NOT EXISTS idx_notes_academics
+                    ON notes (university, faculty, career)""",
+            ]
+            # Optional trigram indexes for ILIKE searches (if extension is available)
+            try:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+                stmts += [
+                    """CREATE INDEX IF NOT EXISTS idx_notes_title_trgm
+                        ON notes USING GIN (title gin_trgm_ops)""",
+                    """CREATE INDEX IF NOT EXISTS idx_notes_desc_trgm
+                        ON notes USING GIN (description gin_trgm_ops)""",
+                ]
+            except Exception:
+                pass
+
+            for st in stmts:
+                try:
+                    conn.execute(text(st))
+                except Exception:
+                    pass
+
+        elif dialect.startswith("sqlite"):
+            stmts = [
+                "CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at)",
+                "CREATE INDEX IF NOT EXISTS idx_notes_public_flags ON notes(is_active, moderation_status, is_archived)",
+                "CREATE INDEX IF NOT EXISTS idx_notes_deleted ON notes(deleted_at)",
+                "CREATE INDEX IF NOT EXISTS idx_notes_academics ON notes(university, faculty, career)",
+            ]
+            for st in stmts:
+                try:
+                    conn.execute(text(st))
+                except Exception:
+                    pass
+
+try:
+    _ensure_indexes(engine)
+except Exception as e:
+    print('[indexes] WARNING:', e)
+
 
 
 # -----------------------------------------------------------------------------
@@ -1868,7 +1973,7 @@ from sqlalchemy import select, desc
 
 @app.route("/")
 def index():
-    # Analytics: página principal
+    # Analytics: página principal (best-effort)
     try:
         log_analytics_event(
             event="page_view",
@@ -1878,86 +1983,143 @@ def index():
         )
     except Exception:
         pass
+
+    is_anon = not getattr(current_user, "is_authenticated", False)
+
+    # We cache *data* (ids + metrics), never full HTML (CSRF tokens are per-session).
+    cache_notes_ttl = int(os.getenv("CACHE_HOME_NOTES_TTL_SEC", "60"))
+    cache_rank_ttl = int(os.getenv("CACHE_HOME_RANKINGS_TTL_SEC", "600"))
+
+    cache_key_notes = "home:notes_v1"
+    cache_key_rank = "home:ranks_v1"
+
+    cached_notes = _cache_get(cache_key_notes) if is_anon else None
+    cached_ranks = _cache_get(cache_key_rank) if is_anon else None
+
     with Session() as s:
-        # Notes (solo aprobados/activos si existen esos campos)
-        q_notes = select(Note).order_by(desc(Note.created_at)).limit(30)
+        # ---------------- Notes + Combos (frequent) ----------------
+        if cached_notes:
+            note_ids = cached_notes.get("note_ids", [])
+            combo_ids = cached_notes.get("combo_ids", [])
+            notes = []
+            combos = []
+            if note_ids:
+                notes = s.execute(
+                    select(Note).where(Note.id.in_(note_ids))
+                ).scalars().all()
+                # preserve order
+                notes_by = {n.id: n for n in notes}
+                notes = [notes_by[i] for i in note_ids if i in notes_by]
+            if combo_ids:
+                combos = s.execute(
+                    select(Combo).where(Combo.id.in_(combo_ids))
+                ).scalars().all()
+                combos_by = {c.id: c for c in combos}
+                combos = [combos_by[i] for i in combo_ids if i in combos_by]
+        else:
+            q_notes = select(Note).order_by(desc(Note.created_at)).limit(30)
 
-        if hasattr(Note, "is_active"):
-            q_notes = q_notes.where(Note.is_active == True)
+            if hasattr(Note, "is_active"):
+                q_notes = q_notes.where(Note.is_active == True)
 
-        if hasattr(Note, "moderation_status"):
-            q_notes = q_notes.where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
+            if hasattr(Note, "moderation_status"):
+                q_notes = q_notes.where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
 
-        if hasattr(Note, "deleted_at"):
-            q_notes = q_notes.where(Note.deleted_at.is_(None))
+            if hasattr(Note, "deleted_at"):
+                q_notes = q_notes.where(Note.deleted_at.is_(None))
 
-        notes = s.execute(q_notes).scalars().all()
+            notes = s.execute(q_notes).scalars().all()
 
-        # Combos (SIN filtros para que aparezcan sí o sí)
-        combos = s.execute(
-            select(Combo)
-            .where(
-                Combo.is_active == True,
-                # si tenés moderación en combos:
-                Combo.moderation_status.in_(("approved","auto_published","published_flagged")),
+            combos = s.execute(
+                select(Combo)
+                .where(
+                    Combo.is_active == True,
+                    Combo.moderation_status.in_(("approved","auto_published","published_flagged")),
                     Combo.is_archived == False,
-                # si existiera deleted_at en Combo:
-                # Combo.deleted_at.is_(None),
-            )
-            .order_by(Combo.created_at.desc())
-        ).scalars().all()
+                )
+                .order_by(Combo.created_at.desc())
+            ).scalars().all()
 
-        # Rankings (si tenés estos modelos)
-                # Rankings (filtrados para no mostrar borrados/inactivos/no aprobados)
+            if is_anon:
+                _cache_set(cache_key_notes, {
+                    "note_ids": [n.id for n in notes],
+                    "combo_ids": [c.id for c in combos],
+                }, cache_notes_ttl)
+
+        # ---------------- Rankings (heavier) ----------------
         most_downloaded = []
         best_rated = []
-        try:
-            q_most = (
-                select(Note, func.count(DownloadLog.id).label("dl"))
-                .join(DownloadLog, DownloadLog.note_id == Note.id)
-            )
 
-            if hasattr(Note, "is_active"):
-                q_most = q_most.where(Note.is_active == True)
-            if hasattr(Note, "moderation_status"):
-                q_most = q_most.where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
-            if hasattr(Note, "deleted_at"):
-                q_most = q_most.where(Note.deleted_at.is_(None))
+        if cached_ranks:
+            md = cached_ranks.get("most_downloaded", [])
+            br = cached_ranks.get("best_rated", [])
+            # md/br: list of (note_id, metric)
+            if md:
+                ids = [i for (i, _v) in md]
+                rows = s.execute(select(Note).where(Note.id.in_(ids))).scalars().all()
+                by = {n.id: n for n in rows}
+                most_downloaded = [(by[i], v) for (i, v) in md if i in by]
+            if br:
+                ids = [i for (i, _v) in br]
+                rows = s.execute(select(Note).where(Note.id.in_(ids))).scalars().all()
+                by = {n.id: n for n in rows}
+                best_rated = [(by[i], v) for (i, v) in br if i in by]
+        else:
+            try:
+                q_most = (
+                    select(Note, func.count(DownloadLog.id).label("dl"))
+                    .join(DownloadLog, DownloadLog.note_id == Note.id)
+                )
 
-            most_downloaded = s.execute(
-                q_most.group_by(Note.id)
-                .order_by(desc(func.count(DownloadLog.id)))
-                .limit(10)
-            ).all()
-        except Exception:
-            pass
+                if hasattr(Note, "is_active"):
+                    q_most = q_most.where(Note.is_active == True)
+                if hasattr(Note, "moderation_status"):
+                    q_most = q_most.where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
+                if hasattr(Note, "deleted_at"):
+                    q_most = q_most.where(Note.deleted_at.is_(None))
 
-        try:
-            q_best = (
-                select(Note, func.avg(Review.rating).label("avg"))
-                .join(Review, Review.note_id == Note.id)
-            )
+                most_downloaded = s.execute(
+                    q_most.group_by(Note.id)
+                    .order_by(desc(func.count(DownloadLog.id)))
+                    .limit(10)
+                ).all()
+            except Exception:
+                most_downloaded = []
 
-            if hasattr(Note, "is_active"):
-                q_best = q_best.where(Note.is_active == True)
-            if hasattr(Note, "moderation_status"):
-                q_best = q_best.where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
-            if hasattr(Note, "deleted_at"):
-                q_best = q_best.where(Note.deleted_at.is_(None))
+            try:
+                q_best = (
+                    select(Note, func.avg(Review.rating).label("avg"))
+                    .join(Review, Review.note_id == Note.id)
+                )
 
-            best_rated = s.execute(
-                q_best.group_by(Note.id)
-                .order_by(desc(func.avg(Review.rating)))
-                .limit(10)
-            ).all()
-        except Exception:
-            pass
+                if hasattr(Note, "is_active"):
+                    q_best = q_best.where(Note.is_active == True)
+                if hasattr(Note, "moderation_status"):
+                    q_best = q_best.where(Note.moderation_status.in_(("approved","auto_published","published_flagged"))).where(Note.is_archived == False)
+                if hasattr(Note, "deleted_at"):
+                    q_best = q_best.where(Note.deleted_at.is_(None))
 
+                best_rated = s.execute(
+                    q_best.group_by(Note.id)
+                    .order_by(desc(func.avg(Review.rating)))
+                    .limit(10)
+                ).all()
+            except Exception:
+                best_rated = []
+
+            if is_anon:
+                try:
+                    _cache_set(cache_key_rank, {
+                        "most_downloaded": [(n.id, int(dl or 0)) for (n, dl) in most_downloaded],
+                        "best_rated": [(n.id, float(avg or 0.0)) for (n, avg) in best_rated],
+                    }, cache_rank_ttl)
+                except Exception:
+                    pass
 
     return render_template(
         "index.html",
         notes=notes,
-        combos=combos,  # <- ESTO ES CLAVE
+        combos=combos,
         most_downloaded=most_downloaded,
         best_rated=best_rated,
         include_dynamic_selects=True,
@@ -5028,29 +5190,62 @@ def refund_policy():
 
 @app.get("/api/academics/universities")
 def api_list_universities():
+    cache_key = "academics:universities:v1"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        resp = jsonify(cached)
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+
     with Session() as s:
         rows = s.execute(select(University).order_by(University.name)).scalars().all()
-        return jsonify([{"id": u.id, "name": u.name} for u in rows])
+        payload = [{"id": u.id, "name": u.name} for u in rows]
+        _cache_set(cache_key, payload, 86400)
+        resp = jsonify(payload)
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
 
 @app.get("/api/academics/faculties")
 def api_list_faculties():
     uid = request.args.get("university_id", type=int)
+    cache_key = f"academics:faculties:v1:{uid or 0}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        resp = jsonify(cached)
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+
     with Session() as s:
         q = select(Faculty)
         if uid:
             q = q.where(Faculty.university_id == uid)
         rows = s.execute(q.order_by(Faculty.name)).scalars().all()
-        return jsonify([{"id": f.id, "name": f.name, "university_id": f.university_id} for f in rows])
+        payload = [{"id": f.id, "name": f.name, "university_id": f.university_id} for f in rows]
+        _cache_set(cache_key, payload, 86400)
+        resp = jsonify(payload)
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
 
 @app.get("/api/academics/careers")
 def api_list_careers():
     fid = request.args.get("faculty_id", type=int)
+    cache_key = f"academics:careers:v1:{fid or 0}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        resp = jsonify(cached)
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+
     with Session() as s:
         q = select(Career)
         if fid:
             q = q.where(Career.faculty_id == fid)
         rows = s.execute(q.order_by(Career.name)).scalars().all()
-        return jsonify([{"id": c.id, "name": c.name, "faculty_id": c.faculty_id} for c in rows])
+        payload = [{"id": c.id, "name": c.name, "faculty_id": c.faculty_id} for c in rows]
+        _cache_set(cache_key, payload, 86400)
+        resp = jsonify(payload)
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
 
 
 @app.post("/api/academics/universities")
@@ -5068,6 +5263,8 @@ def api_create_university():
         u = University(name=name)
         s.add(u)
         s.commit()
+        _cache_invalidate_prefix('academics:universities')
+        _cache_invalidate_prefix('academics:faculties')
         return jsonify({"id": u.id, "name": u.name}), 201
 
 
@@ -5094,6 +5291,8 @@ def api_create_faculty():
         f = Faculty(name=name, university_id=university_id)
         s.add(f)
         s.commit()
+        _cache_invalidate_prefix('academics:faculties')
+        _cache_invalidate_prefix('academics:careers')
         return jsonify({"id": f.id, "name": f.name, "university_id": f.university_id}), 201
 
 
@@ -5120,6 +5319,7 @@ def api_create_career():
         c = Career(name=name, faculty_id=faculty_id)
         s.add(c)
         s.commit()
+        _cache_invalidate_prefix('academics:careers')
         return jsonify({"id": c.id, "name": c.name, "faculty_id": c.faculty_id}), 201
 
 
