@@ -255,14 +255,18 @@ def _security_headers(resp):
     resp.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
     # Conservative CSP. We keep 'unsafe-inline' because templates currently use inline
     # scripts/styles. If you later remove inline usage, tighten this.
-    # We allow data:/blob: images because previews can be served as blobs in some browsers.
+    # IMPORTANT: Google login uses ES-module imports from https://www.gstatic.com/firebasejs/...
+    # and Firebase Auth calls Google APIs, so we must allow those origins.
     csp = (
         "default-src 'self'; "
-        "img-src 'self' data: blob:; "
+        "img-src 'self' data: blob: https://www.gstatic.com; "
         "style-src 'self' 'unsafe-inline'; "
-        "script-src 'self' 'unsafe-inline'; "
-        "font-src 'self' data:; "
-        "connect-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://www.gstatic.com; "
+        "font-src 'self' data: https://www.gstatic.com; "
+        "connect-src 'self' https://www.googleapis.com https://*.googleapis.com "
+        "https://identitytoolkit.googleapis.com https://securetoken.googleapis.com "
+        "https://accounts.google.com https://www.gstatic.com; "
+        "frame-src 'self' https://accounts.google.com; "
         "frame-ancestors 'none'"
     )
     resp.headers.setdefault("Content-Security-Policy", csp)
