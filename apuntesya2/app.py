@@ -258,6 +258,31 @@ def _security_headers(resp):
     # We keep 'unsafe-inline' because templates currently use inline scripts/styles.
     path = (getattr(request, "path", "") or "")
 
+    # Firebase/Google sign-in may iframe/redirect via the project's auth domain
+    # (e.g. https://<project>.firebaseapp.com and/or https://<project>.web.app).
+    # Allow only for /login (route-specific CSP).
+    firebase_domain_urls: list[str] = []
+    try:
+        pid = (os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip()
+        if pid:
+            firebase_domain_urls.extend([
+                f"https://{pid}.firebaseapp.com",
+                f"https://{pid}.web.app",
+            ])
+        extra_domains = [d.strip() for d in str(os.getenv("FIREBASE_AUTH_DOMAINS", "")).split(",") if d.strip()]
+        for d in extra_domains:
+            # Normalize to https://
+            if d.startswith("http://") or d.startswith("https://"):
+                firebase_domain_urls.append(d)
+            else:
+                firebase_domain_urls.append(f"https://{d}")
+        # De-dup while preserving order
+        seen = set()
+        firebase_domain_urls = [u for u in firebase_domain_urls if not (u in seen or seen.add(u))]
+    except Exception:
+        firebase_domain_urls = []
+    firebase_domains_csp = " ".join(firebase_domain_urls)
+
     csp_default = (
         "default-src 'self'; "
         "img-src 'self' data: blob:; "
@@ -279,8 +304,8 @@ def _security_headers(resp):
         "font-src 'self' data: https://www.gstatic.com; "
         "connect-src 'self' https://www.googleapis.com https://*.googleapis.com "
         "https://identitytoolkit.googleapis.com https://securetoken.googleapis.com "
-        "https://accounts.google.com https://www.gstatic.com https://apis.google.com; "
-        "frame-src 'self' https://accounts.google.com; "
+        f"https://accounts.google.com https://www.gstatic.com https://apis.google.com {firebase_domains_csp}; "
+        f"frame-src 'self' https://accounts.google.com {firebase_domains_csp}; "
         "frame-ancestors 'none'"
     )
 
