@@ -41,7 +41,54 @@
       </div>
     </div>
 
-    <div class="panel" style="margin-top:12px;border-color:#fee2e2;background:#fff1f2;">
+    
+<div class="panel" style="margin-top:12px;">
+  <h3 style="margin:0 0 8px;font-size:14px;font-weight:900;color:#111827">🖼️ Salud de Previews</h3>
+  <p class="muted" style="margin:0 0 10px;">
+    Total apuntes activos: <b>{{ previews_total or 0 }}</b> · Sin preview: <b>{{ previews_missing or 0 }}</b>
+  </p>
+
+  {% if previews_missing and previews_missing_samples %}
+    <div class="muted" style="margin:0 0 10px;">
+      Ejemplos (hasta 20): 
+      {% for n in previews_missing_samples %}
+        <a href="/note/{{ n.id }}" target="_blank" rel="noopener">#{{ n.id }} {{ n.title }}</a>{% if not loop.last %} · {% endif %}
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <form method="post" action="/admin/previews/rebuild" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div style="min-width:180px;flex:1;">
+      <label class="muted" style="display:block;margin-bottom:6px;">Scope</label>
+      <select class="inp" name="scope">
+        <option value="missing" selected>Solo faltantes</option>
+        <option value="all">Todos (recalcular)</option>
+      </select>
+    </div>
+    <div style="min-width:140px;">
+      <label class="muted" style="display:block;margin-bottom:6px;">Límite</label>
+      <input class="inp" name="limit" value="50" />
+    </div>
+    <div style="min-width:140px;">
+      <label class="muted" style="display:block;margin-bottom:6px;">Páginas</label>
+      <input class="inp" name="max_pages" value="4" />
+    </div>
+    <div style="min-width:220px;flex:1;">
+      <label class="muted" style="display:block;margin-bottom:6px;">note_id (opcional)</label>
+      <input class="inp" name="note_id" placeholder="Ej: 123" />
+    </div>
+    <label class="muted" style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+      <input type="checkbox" name="force" value="1"> Forzar
+    </label>
+    <button class="btn" type="submit">Regenerar previews</button>
+  </form>
+
+  <div class="muted" style="margin-top:10px;">
+    Nota: esto usa PyMuPDF + watermark y guarda previews en <code>previews/&lt;note_id&gt;</code>.
+  </div>
+</div>
+<div class="panel" style="margin-top:12px;border-color:#fee2e2;background:#fff1f2;">
       <h3 style="margin:0 0 8px;font-size:14px;font-weight:900;color:#7f1d1d">🔥 Reset de plataforma</h3>
       <p class="muted" style="margin:0 0 10px;color:#7f1d1d;">Borra histórico (compras, descargas, eventos, estadísticas, apuntes/combos, usuarios normales). <b>No elimina superadmins</b>.</p>
 

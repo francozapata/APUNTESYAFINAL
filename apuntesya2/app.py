@@ -3218,6 +3218,29 @@ def note_detail(note_id):
         if not note or not note.is_active:
             abort(404)
 
+        # ------------------------------------------------------------------
+        # Preview: ensure every note has watermarked preview images.
+        #
+        # Older notes (or notes uploaded during a transient failure) can end up
+        # without preview_images, which makes the detail page show no preview.
+        # We lazily generate and persist previews on first view.
+        # ------------------------------------------------------------------
+        try:
+            imgs_meta = (getattr(note, "preview_images", None) or {})
+            imgs = (imgs_meta.get("images") or []) if isinstance(imgs_meta, dict) else []
+            if not imgs:
+                pages, new_imgs = generate_note_preview(note)
+                if new_imgs:
+                    note.preview_pages = {"pages": pages}
+                    note.preview_images = {"images": new_imgs}
+                    s.commit()
+        except Exception as e:
+            # Never block the page if preview generation fails.
+            try:
+                app.logger.warning(f"preview lazy-generation failed: {e}")
+            except Exception:
+                pass
+
         # A6 analytics: note view (best-effort, no personal data)
         try:
             uid = int(current_user.id) if getattr(current_user, "is_authenticated", False) else None
@@ -3515,8 +3538,10 @@ def note_preview_image(note_id: int, idx: int):
         if not note or not note.is_active:
             abort(404)
 
+        # Public viewers can access previews for *public* notes
+        # (auto_published / approved / published_flagged / etc.).
         status = getattr(note, "moderation_status", "approved")
-        if status != "approved":
+        if not is_public_moderation_status(status):
             allowed = False
             try:
                 if current_user.is_authenticated and (
@@ -5257,7 +5282,118 @@ def admin_tools():
     """Herramientas de mantenimiento (A7)."""
     mm = (_get_setting("maintenance_mode", "0") or "0").strip()
     maintenance_on = mm in ("1", "true", "True", "yes", "on")
-    return render_template("admin/tools.html", maintenance_on=maintenance_on)
+
+    # Preview health (A11): count notes with missing/empty preview_images
+    previews_total = 0
+    previews_missing = 0
+    previews_missing_samples = []
+    try:
+        with Session() as s:
+            rows = (
+                s.query(Note.id, Note.title, Note.preview_images, Note.deleted_at)
+                .filter(Note.is_active == True)
+                .all()
+            )
+            previews_total = len(rows)
+            for nid, title, pimgs, deleted_at in rows:
+                if deleted_at is not None:
+                    continue
+                imgs = []
+                try:
+                    imgs = (pimgs or {}).get("images") or []
+                except Exception:
+                    imgs = []
+                if not imgs:
+                    previews_missing += 1
+                    if len(previews_missing_samples) < 20:
+                        previews_missing_samples.append({"id": nid, "title": title or f"Apunte #{nid}"})
+    except Exception:
+        pass
+
+    return render_template(
+        "admin/tools.html",
+        maintenance_on=maintenance_on,
+        previews_total=previews_total,
+        previews_missing=previews_missing,
+        previews_missing_samples=previews_missing_samples,
+    )
+
+@app.post("/admin/previews/rebuild")
+@login_required
+@superadmin_required
+def admin_previews_rebuild():
+    """Regenera previews en lote (A11).
+
+    - scope=missing (default): solo los que no tienen preview
+    - scope=all: todos los apuntes
+    - note_id: opcional (si querés uno puntual)
+    - limit: opcional (por defecto 50)
+    - max_pages: opcional (por defecto 4)
+    - force=1: fuerza regeneración aunque ya exista
+    """
+    scope = (request.form.get("scope") or "missing").strip().lower()
+    note_id_raw = (request.form.get("note_id") or "").strip()
+    force = (request.form.get("force") or "").strip() in ("1", "true", "True", "yes", "on")
+    try:
+        limit = int(request.form.get("limit") or 50)
+    except Exception:
+        limit = 50
+    limit = max(1, min(limit, 500))
+
+    try:
+        max_pages = int(request.form.get("max_pages") or 4)
+    except Exception:
+        max_pages = 4
+    max_pages = max(1, min(max_pages, 10))
+
+    rebuilt = 0
+    skipped = 0
+    failed = 0
+
+    try:
+        with Session() as s:
+            q = s.query(Note).filter(Note.deleted_at.is_(None)).filter(Note.is_active == True)
+
+            if note_id_raw:
+                try:
+                    nid = int(note_id_raw)
+                    q = q.filter(Note.id == nid)
+                except Exception:
+                    flash("note_id inválido.", "danger")
+                    return redirect(url_for("admin_tools"))
+
+            notes = q.order_by(Note.id.desc()).limit(limit).all()
+
+            for note in notes:
+                try:
+                    imgs = []
+                    try:
+                        imgs = (getattr(note, "preview_images", None) or {}).get("images") or []
+                    except Exception:
+                        imgs = []
+
+                    if not force:
+                        if scope == "missing" and imgs:
+                            skipped += 1
+                            continue
+
+                    pages, image_paths = generate_note_preview(note, max_pages=max_pages)
+                    note.preview_pages = {"pages": pages, "generated_at": datetime.utcnow().isoformat()}
+                    note.preview_images = {"images": image_paths, "generated_at": datetime.utcnow().isoformat()}
+                    s.add(note)
+                    rebuilt += 1
+                except Exception:
+                    failed += 1
+                    continue
+
+            s.commit()
+    except Exception as e:
+        flash(f"Error al regenerar previews: {e}", "danger")
+        return redirect(url_for("admin_tools"))
+
+    flash(f"Previews: regenerados={rebuilt} | omitidos={skipped} | fallidos={failed}", "success" if failed == 0 else "warning")
+    return redirect(url_for("admin_tools"))
+
 
 
 @app.post("/admin/reset")
