@@ -253,23 +253,41 @@ def _security_headers(resp):
     resp.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
     # Reduce cross-origin leakage
     resp.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
-    # Conservative CSP. We keep 'unsafe-inline' because templates currently use inline
-    # scripts/styles. If you later remove inline usage, tighten this.
+    # CSP: keep a stricter default for the whole site, and a slightly more permissive
+    # policy only for /login where Google/Firebase scripts are required.
+    # We keep 'unsafe-inline' because templates currently use inline scripts/styles.
+    path = (getattr(request, "path", "") or "")
+
+    csp_default = (
+        "default-src 'self'; "
+        "img-src 'self' data: blob:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+
     # IMPORTANT: Google login uses ES-module imports from https://www.gstatic.com/firebasejs/...
-    # and Firebase Auth calls Google APIs, so we must allow those origins.
-    csp = (
+    # and may load https://apis.google.com/js/api.js. Firebase Auth calls Google APIs.
+    csp_login = (
         "default-src 'self'; "
         "img-src 'self' data: blob: https://www.gstatic.com; "
         "style-src 'self' 'unsafe-inline'; "
-        "script-src 'self' 'unsafe-inline' https://www.gstatic.com; "
+        "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://accounts.google.com; "
         "font-src 'self' data: https://www.gstatic.com; "
         "connect-src 'self' https://www.googleapis.com https://*.googleapis.com "
         "https://identitytoolkit.googleapis.com https://securetoken.googleapis.com "
-        "https://accounts.google.com https://www.gstatic.com; "
+        "https://accounts.google.com https://www.gstatic.com https://apis.google.com; "
         "frame-src 'self' https://accounts.google.com; "
         "frame-ancestors 'none'"
     )
-    resp.headers.setdefault("Content-Security-Policy", csp)
+
+    resp.headers.setdefault(
+        "Content-Security-Policy",
+        csp_login if path.startswith("/login") else csp_default
+    )
     # HSTS (Render serves HTTPS). Only set if request is https to avoid local dev issues.
     try:
         if request.is_secure:
