@@ -204,6 +204,21 @@ def _security_headers(resp):
     resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    # Reduce cross-origin leakage
+    resp.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+    # Conservative CSP. We keep 'unsafe-inline' because templates currently use inline
+    # scripts/styles. If you later remove inline usage, tighten this.
+    # We allow data:/blob: images because previews can be served as blobs in some browsers.
+    csp = (
+        "default-src 'self'; "
+        "img-src 'self' data: blob:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+    resp.headers.setdefault("Content-Security-Policy", csp)
     # HSTS (Render serves HTTPS). Only set if request is https to avoid local dev issues.
     try:
         if request.is_secure:
@@ -211,6 +226,63 @@ def _security_headers(resp):
     except Exception:
         pass
     return resp
+
+
+# --- Security: PDF validation helpers ----------------------------------------
+def _validate_uploaded_pdf(path: str, max_pages: int = 1200) -> tuple[bool, str]:
+    """Best-effort validation for uploaded PDFs.
+
+    - Validates header magic
+    - Opens with PyMuPDF to ensure it's parseable
+    - Blocks PDFs with embedded JavaScript actions (basic)
+    - Caps page count to avoid DoS files
+    """
+    try:
+        with open(path, "rb") as fp:
+            if fp.read(4) != b"%PDF":
+                return (False, "PDF inválido (header).")
+    except Exception:
+        return (False, "No se pudo leer el archivo.")
+
+    try:
+        import fitz  # PyMuPDF
+        doc = fitz.open(path)
+
+        # Page cap (avoid pathological files)
+        try:
+            if doc.page_count and int(doc.page_count) > int(max_pages):
+                try:
+                    doc.close()
+                except Exception:
+                    pass
+                return (False, f"El PDF tiene demasiadas páginas (máx {max_pages}).")
+        except Exception:
+            pass
+
+        # Basic JS detection (not perfect, but blocks common embedded scripts)
+        try:
+            js = None
+            try:
+                js = doc.get_javascript()
+            except Exception:
+                js = None
+            if js:
+                try:
+                    doc.close()
+                except Exception:
+                    pass
+                return (False, "El PDF contiene JavaScript embebido (bloqueado).")
+        except Exception:
+            pass
+
+        try:
+            doc.close()
+        except Exception:
+            pass
+    except Exception:
+        return (False, "PDF dañado o no compatible.")
+
+    return (True, "ok")
 
 
 # -----------------------------------------------------------------------------
@@ -3017,6 +3089,19 @@ def upload_note():
             flash("Sólo PDF.")
             return redirect(url_for("upload_note"))
 
+        # Enforce max file size (defense-in-depth). Flask will reject above MAX_CONTENT_LENGTH
+        # but this catches some edge cases and gives a friendly message.
+        try:
+            file.stream.seek(0, os.SEEK_END)
+            size = int(file.stream.tell() or 0)
+            file.stream.seek(0)
+            max_len = int(app.config.get("MAX_CONTENT_LENGTH") or 0)
+            if max_len and size and size > max_len:
+                flash(f"El archivo es muy grande. Máximo permitido: {int(max_len/1024/1024)}MB.", "warning")
+                return redirect(url_for("upload_note"))
+        except Exception:
+            pass
+
         base_name = secure_filename(file.filename)
         unique_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{base_name}"
 
@@ -3026,17 +3111,18 @@ def upload_note():
         local_pdf_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
         file.save(local_pdf_path)
 
-        # Security: verify PDF magic header
+        # Security: validate PDF (magic + parseable + no embedded JS + page cap)
         try:
-            with open(local_pdf_path, "rb") as _fp:
-                if _fp.read(4) != b"%PDF":
-                    try:
-                        os.remove(local_pdf_path)
-                    except Exception:
-                        pass
-                    flash("PDF inválido.", "danger")
-                    return redirect(url_for("upload_note"))
+            ok, msg = _validate_uploaded_pdf(local_pdf_path, max_pages=int(os.getenv("MAX_PDF_PAGES", "1200")))
+            if not ok:
+                try:
+                    os.remove(local_pdf_path)
+                except Exception:
+                    pass
+                flash(msg or "PDF inválido.", "danger")
+                return redirect(url_for("upload_note"))
         except Exception:
+            # If validation fails unexpectedly, do not block uploads.
             pass
 
         if gcs_bucket:
