@@ -2,61 +2,310 @@
 {% block content %}
 
 <style>
-  .profile-shell { max-width: 980px; margin: 32px auto; }
-  .profile-card { background:#fff; border-radius:16px; border:1px solid #e5e7f5; padding:22px 20px; box-shadow:0 10px 30px rgba(15,23,42,.05); }
-  .profile-header { display:flex; gap:20px; align-items:center; margin-bottom:16px; }
-  .profile-avatar { width:88px; height:88px; border-radius:50%; object-fit:cover; border:3px solid #eef; box-shadow:0 0 0 4px rgba(68,120,255,.12); background:#f4f4ff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:28px; color:#4b5563; }
-  .profile-name { font-size:22px; font-weight:700; margin:0 0 4px; color:#111827; }
-  .profile-email { font-size:14px; color:#6b7280; margin:0; }
-  .profile-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; background:#f3f4ff; border:1px solid #e0e4ff; font-size:12px; color:#4b5563; margin-top:6px; }
-  .muted { color:#6b7280; font-size:13px; }
+  .profile-shell {
+    max-width: 980px;
+    margin: 32px auto;
+  }
 
-  .profile-tabs { display:inline-flex; gap:8px; margin:8px 0 18px; padding:4px; border-radius:999px; background:#f7f9ff; border:1px solid #e0e4ff; flex-wrap:wrap; }
-  .profile-tab { padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600; text-decoration:none; background:transparent; border:none; color:#4b5563; display:inline-flex; align-items:center; gap:4px; }
-  .profile-tab.active { background:#4478ff; color:#fff; box-shadow:0 8px 20px rgba(68,120,255,.35); }
+  .profile-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e5e7f5;
+    padding: 22px 20px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .05);
+  }
 
-  .profile-wrapper { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1.4fr); gap:24px; }
-  .profile-col { min-width:0; }
-  .profile-section-title { font-size:16px; font-weight:600; margin:8px 0 4px; color:#111827; }
+  .profile-header {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    margin-bottom: 16px;
+  }
 
-  .note-row { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 12px; border-radius:14px; border:1px solid #e5e7f5; background:#fafbff; margin-top:10px; }
-  .note-meta { font-size:12px; color:#6b7280; margin-top:3px; }
-  .note-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .profile-avatar {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #eef;
+    box-shadow: 0 0 0 4px rgba(68, 120, 255, .12);
+    background: #f4f4ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 28px;
+    color: #4b5563;
+  }
 
-  .badge-free, .badge-paid { padding:3px 9px; font-size:11px; border-radius:999px; border:1px solid transparent; font-weight:600; }
-  .badge-status { padding:3px 9px; font-size:11px; border-radius:999px; border:1px solid transparent; font-weight:700; text-transform:uppercase; letter-spacing:.02em; }
+  .profile-name {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    color: #111827;
+  }
 
-  .status-approved, .status-auto_published { background:#e8fff0; color:#166534; border-color:#bbf7d0; }
-  .status-published_flagged { background:#eef2ff; color:#3730a3; border-color:#c7d2fe; }
-  .status-blocked_review { background:#fff7ed; color:#9a3412; border-color:#fed7aa; }
-  .status-pending_ai { background:#eef2ff; color:#3730a3; border-color:#c7d2fe; }
-  .status-pending_manual { background:#fff7ed; color:#9a3412; border-color:#fed7aa; }
-  .status-rejected { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+  .profile-email {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 0;
+  }
 
-  .badge-free { background:#e8fff0; color:#166534; border-color:#bbf7d0; }
-  .badge-paid { background:#fff4e5; color:#92400e; border-color:#fed7aa; }
+  .profile-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #f3f4ff;
+    border: 1px solid #e0e4ff;
+    font-size: 12px;
+    color: #4b5563;
+    margin-top: 6px;
+  }
 
-  .btn-pill { padding:7px 13px; border-radius:999px; border:none; background:#f3f6ff; color:#334155; font-size:13px; font-weight:600; cursor:pointer; text-decoration:none; border:1px solid #dfe4ff; }
-  .btn-pill.ghost { background:#fff; color:#111827; border:1px solid #dfe4ff; }
+  .muted {
+    color: #6b7280;
+    font-size: 13px;
+  }
 
-  .profile-right-box { border-radius:14px; border:1px solid #e5e7f5; padding:12px 14px; background:#fafbff; margin-top:10px; }
-  .profile-right-box h4 { font-size:14px; margin:0 0 6px; color:#111827; }
+  .profile-tabs {
+    display: inline-flex;
+    gap: 8px;
+    margin: 8px 0 18px;
+    padding: 4px;
+    border-radius: 999px;
+    background: #f7f9ff;
+    border: 1px solid #e0e4ff;
+    flex-wrap: wrap;
+  }
 
-  .profile-contact-label { font-size:13px; color:#4b5563; margin-bottom:2px; }
+  .profile-tab {
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    background: transparent;
+    border: none;
+    color: #4b5563;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
 
-  .academic-update { margin-top:10px; padding:10px 12px; border-radius:12px; background:#f8fafc; border:1px dashed #cbd2ff; display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; }
+  .profile-tab.active {
+    background: #4478ff;
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(68, 120, 255, .35);
+  }
 
-  .mp-status { display:inline-flex; align-items:center; gap:6px; font-size:13px; }
-  .mp-status-dot { width:8px; height:8px; border-radius:999px; background:#22c55e; }
-  .mp-status-dot.off { background:#d4d4d8; }
-  .mp-status-text-off { color:#6b7280; }
+  .profile-wrapper {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr);
+    gap: 24px;
+  }
+
+  .profile-col {
+    min-width: 0;
+  }
+
+  .profile-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 8px 0 4px;
+    color: #111827;
+  }
+
+  .note-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid #e5e7f5;
+    background: #fafbff;
+    margin-top: 10px;
+  }
+
+  .note-meta {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 3px;
+  }
+
+  .note-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .badge-free,
+  .badge-paid {
+    padding: 3px 9px;
+    font-size: 11px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 600;
+  }
+
+  .badge-status {
+    padding: 3px 9px;
+    font-size: 11px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+  }
+
+  .status-approved,
+  .status-auto_published {
+    background: #e8fff0;
+    color: #166534;
+    border-color: #bbf7d0;
+  }
+
+  .status-published_flagged {
+    background: #eef2ff;
+    color: #3730a3;
+    border-color: #c7d2fe;
+  }
+
+  .status-blocked_review {
+    background: #fff7ed;
+    color: #9a3412;
+    border-color: #fed7aa;
+  }
+
+  .status-pending_ai {
+    background: #eef2ff;
+    color: #3730a3;
+    border-color: #c7d2fe;
+  }
+
+  .status-pending_manual {
+    background: #fff7ed;
+    color: #9a3412;
+    border-color: #fed7aa;
+  }
+
+  .status-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fecaca;
+  }
+
+  .badge-free {
+    background: #e8fff0;
+    color: #166534;
+    border-color: #bbf7d0;
+  }
+
+  .badge-paid {
+    background: #fff4e5;
+    color: #92400e;
+    border-color: #fed7aa;
+  }
+
+  .btn-pill {
+    padding: 7px 13px;
+    border-radius: 999px;
+    border: none;
+    background: #f3f6ff;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    border: 1px solid #dfe4ff;
+  }
+
+  .btn-pill.ghost {
+    background: #fff;
+    color: #111827;
+    border: 1px solid #dfe4ff;
+  }
+
+  .profile-right-box {
+    border-radius: 14px;
+    border: 1px solid #e5e7f5;
+    padding: 12px 14px;
+    background: #fafbff;
+    margin-top: 10px;
+  }
+
+  .profile-right-box h4 {
+    font-size: 14px;
+    margin: 0 0 6px;
+    color: #111827;
+  }
+
+  .profile-contact-label {
+    font-size: 13px;
+    color: #4b5563;
+    margin-bottom: 2px;
+  }
+
+  .academic-update {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px dashed #cbd2ff;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .mp-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .mp-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #22c55e;
+  }
+
+  .mp-status-dot.off {
+    background: #d4d4d8;
+  }
+
+  .mp-status-text-off {
+    color: #6b7280;
+  }
 
   @media (max-width: 880px) {
-    .profile-card { padding:20px 16px; }
-    .profile-header { flex-direction:column; align-items:flex-start; }
-    .profile-wrapper { grid-template-columns:minmax(0,1fr); }
-    .note-row { flex-direction:column; align-items:flex-start; }
-    .note-actions { align-self:flex-end; }
+    .profile-card {
+      padding: 20px 16px;
+    }
+
+    .profile-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .profile-wrapper {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .note-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .note-actions {
+      align-self: flex-end;
+    }
   }
 </style>
 
@@ -66,16 +315,18 @@
     <!-- HEADER -->
     <div class="profile-header">
       <div>
-        {% if current_user.imagen_de_perfil %}
-          <img src="{{ url_for('user_avatar', user_id=current_user.id) }}?v={{ (current_user.imagen_de_perfil or '')|urlencode }}" alt="Foto de perfil" class="profile-avatar">
-        {% else %}
-          <div class="profile-avatar">{{ (current_user.name or current_user.email)[0:1].upper() }}</div>
-        {% endif %}
+        <img
+          src="{{ url_for('user_avatar', user_id=current_user.id) }}?v={{ (current_user.imagen_de_perfil or '')|urlencode }}"
+          alt="Foto de perfil" class="profile-avatar">
 
-        <form method="post" action="{{ url_for('upload_profile_image') }}" enctype="multipart/form-data" style="margin-top:10px;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input id="pf-file" type="file" name="file" accept="image/*" style="display:none" onchange="this.form.submit()">
-          <button type="button" class="btn-pill" onclick="document.getElementById('pf-file').click()">📸 Cambiar foto</button>
+
+        <form method="post" action="{{ url_for('upload_profile_image') }}" enctype="multipart/form-data"
+          style="margin-top:10px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input id="pf-file" type="file" name="file" accept="image/*" style="display:none"
+            onchange="this.form.submit()">
+          <button type="button" class="btn-pill" onclick="document.getElementById('pf-file').click()">📸 Cambiar
+            foto</button>
         </form>
       </div>
       <div>
@@ -88,14 +339,15 @@
         </div>
 
         {% if current_user.legal_version_accepted %}
-          <p class="profile-email" style="margin-top:6px;font-size:12px;color:#6b7280;">
-            ✅ TyC aceptados — versión <b>{{ current_user.legal_version_accepted }}</b>
-            {% if current_user.legal_accepted_at %} · {{ current_user.legal_accepted_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
-          </p>
+        <p class="profile-email" style="margin-top:6px;font-size:12px;color:#6b7280;">
+          ✅ TyC aceptados — versión <b>{{ current_user.legal_version_accepted }}</b>
+          {% if current_user.legal_accepted_at %} · {{ current_user.legal_accepted_at.strftime('%d/%m/%Y %H:%M') }}{%
+          endif %}
+        </p>
         {% else %}
-          <p class="profile-email" style="margin-top:6px;font-size:12px;color:#6b7280;">
-            ⚠️ Aún no aceptaste los TyC y políticas.
-          </p>
+        <p class="profile-email" style="margin-top:6px;font-size:12px;color:#6b7280;">
+          ⚠️ Aún no aceptaste los TyC y políticas.
+        </p>
         {% endif %}
 
         <div class="profile-chip">
@@ -119,7 +371,7 @@
         <div class="profile-right-box" style="margin-top:10px;">
           <h4>Mis datos de contacto (visible en mi perfil de vendedor)</h4>
           <form method="post" action="{{ url_for('profile_update_contact') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div style="display:grid;grid-template-columns:1fr;gap:10px;">
               <div>
                 <div class="profile-contact-label">Teléfono / WhatsApp</div>
@@ -144,11 +396,13 @@
 
               <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
                 <label class="muted" style="display:flex;gap:8px;align-items:center;">
-                  <input type="checkbox" name="contact_visible_public" value="1" {% if contact_visible_public %}checked{% endif %}>
+                  <input type="checkbox" name="contact_visible_public" value="1" {% if contact_visible_public
+                    %}checked{% endif %}>
                   Mostrar públicamente (en mi perfil de vendedor)
                 </label>
                 <label class="muted" style="display:flex;gap:8px;align-items:center;">
-                  <input type="checkbox" name="contact_visible_buyers" value="1" {% if contact_visible_buyers %}checked{% endif %}>
+                  <input type="checkbox" name="contact_visible_buyers" value="1" {% if contact_visible_buyers
+                    %}checked{% endif %}>
                   Mostrar a compradores (luego de compra aprobada)
                 </label>
               </div>
@@ -180,72 +434,84 @@
           <p class="profile-contact-label">Correo electrónico</p>
           <p>{{ current_user.email }}</p>
 
-        <div class="profile-right-box">
-          <h4>Cuenta de Mercado Pago</h4>
-          {% if current_user.mp_user_id %}
+          <div class="profile-right-box">
+            <h4>Cuenta de Mercado Pago</h4>
+            {% if current_user.mp_user_id %}
             <p class="mp-status"><span class="mp-status-dot"></span><span>Cuenta de Mercado Pago conectada</span></p>
             <p class="muted" style="margin-top:6px;">Los pagos de tus ventas se acreditan en esta cuenta.</p>
             <form method="POST" action="{{ url_for('disconnect_mp_post') }}" style="margin-top:10px;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button class="btn-pill ghost" type="submit" onclick="return confirm('¿Desvincular tu cuenta de Mercado Pago?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn-pill ghost" type="submit"
+                onclick="return confirm('¿Desvincular tu cuenta de Mercado Pago?');">
                 Desvincular Mercado Pago
               </button>
             </form>
-          {% else %}
-            <p class="mp-status mp-status-text-off"><span class="mp-status-dot off"></span><span>Sin cuenta de Mercado Pago vinculada</span></p>
-            <p class="muted" style="margin:6px 0 8px;">Para recibir pagos por tus ventas, vas a necesitar vincular una cuenta de Mercado Pago.</p>
+            {% else %}
+            <p class="mp-status mp-status-text-off"><span class="mp-status-dot off"></span><span>Sin cuenta de Mercado
+                Pago vinculada</span></p>
+            <p class="muted" style="margin:6px 0 8px;">Para recibir pagos por tus ventas, vas a necesitar vincular una
+              cuenta de Mercado Pago.</p>
             <a href="{{ url_for('connect_mp') }}" class="btn-pill">Vincular Mercado Pago</a>
-          {% endif %}
-        </div>
+            {% endif %}
+          </div>
 
-        <div class="profile-right-box">
-          <h4>Gestión de cuenta</h4>
-          {% if current_user.is_suspended %}
-            <p class="muted" style="margin-bottom:6px;">Tu cuenta está <b>suspendida</b>. Solo podés usar tu perfil hasta reactivarla.</p>
+          <div class="profile-right-box">
+            <h4>Gestión de cuenta</h4>
+            {% if current_user.is_suspended %}
+            <p class="muted" style="margin-bottom:6px;">Tu cuenta está <b>suspendida</b>. Solo podés usar tu perfil
+              hasta reactivarla.</p>
             <form method="POST" action="{{ url_for('account_reactivate') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn-pill" type="submit">Reactivar cuenta</button>
             </form>
-          {% else %}
-            <p class="muted" style="margin-bottom:6px;">Podés suspender tu cuenta para pausar toda actividad dentro de la plataforma.</p>
+            {% else %}
+            <p class="muted" style="margin-bottom:6px;">Podés suspender tu cuenta para pausar toda actividad dentro de
+              la plataforma.</p>
             <form method="POST" action="{{ url_for('account_suspend') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button class="btn-pill ghost" type="submit" onclick="return confirm('¿Suspender tu cuenta? Podrás reactivarla desde tu perfil.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn-pill ghost" type="submit"
+                onclick="return confirm('¿Suspender tu cuenta? Podrás reactivarla desde tu perfil.');">
                 Suspender cuenta
               </button>
             </form>
-          {% endif %}
+            {% endif %}
 
-          <hr style="margin:14px 0;border:none;border-top:1px solid #e5e7f5;">
-          <p class="muted" style="margin:0 0 8px;">
-            <b>Eliminar cuenta:</b> desvincula tu Mercado Pago, elimina tus compras/descargas y borra tus datos personales.
-            Tus apuntes/combos quedan disponibles <b>solo para quienes ya los compraron/descargaron</b>.
-          </p>
-          <form method="POST" action="{{ url_for('account_delete') }}" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input name="confirm" placeholder="Escribí ELIMINAR" style="padding:10px 12px;border:1px solid #e5e7f5;border-radius:12px;min-width:180px;" />
-            <button class="btn-pill" type="submit" style="background:#ef4444;border-color:#ef4444;" onclick="return confirm('¿Eliminar cuenta definitivamente? Esta acción no se puede deshacer.');">
-              Eliminar cuenta
-            </button>
-          </form>
-        </div>
+            <hr style="margin:14px 0;border:none;border-top:1px solid #e5e7f5;">
+            <p class="muted" style="margin:0 0 8px;">
+              <b>Eliminar cuenta:</b> desvincula tu Mercado Pago, elimina tus compras/descargas y borra tus datos
+              personales.
+              Tus apuntes/combos quedan disponibles <b>solo para quienes ya los compraron/descargaron</b>.
+            </p>
+            <form method="POST" action="{{ url_for('account_delete') }}"
+              style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input name="confirm" placeholder="Escribí ELIMINAR"
+                style="padding:10px 12px;border:1px solid #e5e7f5;border-radius:12px;min-width:180px;" />
+              <button class="btn-pill" type="submit" style="background:#ef4444;border-color:#ef4444;"
+                onclick="return confirm('¿Eliminar cuenta definitivamente? Esta acción no se puede deshacer.');">
+                Eliminar cuenta
+              </button>
+            </form>
+          </div>
 
-        <div class="profile-right-box">
-          <h4>Estado como vendedor</h4>
-          {% if current_user.mp_user_id %}
+          <div class="profile-right-box">
+            <h4>Estado como vendedor</h4>
+            {% if current_user.mp_user_id %}
             <p class="muted" style="margin-bottom:4px;">Tenés el modo vendedor activo ✅</p>
-            <p class="muted">Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago conectada.</p>
-          {% else %}
+            <p class="muted">Ya podés subir apuntes y recibir pagos por las ventas en tu cuenta de Mercado Pago
+              conectada.</p>
+            {% else %}
             <p class="muted" style="margin-bottom:4px;">Todavía no tenés activo el modo vendedor.</p>
-            <p class="muted">Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil. Después vas a poder subir apuntes y recibir pagos.</p>
-          {% endif %}
+            <p class="muted">Para activarlo, primero vinculá tu cuenta de Mercado Pago desde este mismo perfil. Después
+              vas a poder subir apuntes y recibir pagos.</p>
+            {% endif %}
+          </div>
+
+
         </div>
-
-
       </div>
+
     </div>
-
   </div>
-</div>
 
-{% endblock %}
+  {% endblock %}

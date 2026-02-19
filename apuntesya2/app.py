@@ -5949,14 +5949,24 @@ def upload_profile_image():
 # Cambio de contraseña MANUAL (sólo si corresponde)
 # -----------------------------------------------------------------------------
 
+from flask import redirect, url_for, send_from_directory, abort
+
 @app.get("/user/<int:user_id>/avatar")
 def user_avatar(user_id: int):
     """
     Return a user avatar image.
 
-    NOTE: We intentionally disable caching on this endpoint because user avatars can change
-    but the URL is stable. We redirect to a short-lived signed R2 URL when the avatar is stored in R2.
+    - If user has imagen_de_perfil:
+        * If it's external URL -> redirect
+        * If it's R2 key -> redirect to signed URL (short-lived)
+        * If it's local file -> serve file
+    - Else -> serve default static image
+
+    Cache:
+      - For dynamic avatars we keep no-store (URL stable but content can change).
+      - For default image we allow a small cache to reduce load.
     """
+
     def _nocache(resp):
         try:
             resp.headers["Cache-Control"] = "no-store, max-age=0"
@@ -5966,28 +5976,48 @@ def user_avatar(user_id: int):
             pass
         return resp
 
+    def _cache_default(resp):
+        # Default can be cached safely (changes rarely).
+        # You can change max-age if you want.
+        try:
+            resp.headers["Cache-Control"] = "public, max-age=86400"  # 24hs
+        except Exception:
+            pass
+        return resp
+
+    # --- Fetch user avatar ref ---
     with Session() as s:
         u = s.get(User, user_id)
         ref = getattr(u, "imagen_de_perfil", None) if u else None
 
-    default_url = url_for("static", filename="img/default_profile.png")
+    # --- Serve default if missing ---
+    default_dir = os.path.join(app.static_folder, "img")
+    default_name = "default_profile.png"
+    default_path = os.path.join(default_dir, default_name)
 
     if not ref:
-        return _nocache(redirect(default_url))
+        # Serve default as file (no redirect)
+        if os.path.exists(default_path):
+            return _cache_default(send_from_directory(default_dir, default_name))
+        # If missing, hard fallback to static URL redirect
+        return _cache_default(redirect(url_for("static", filename="img/default_profile.png")))
 
-    ref = str(ref)
+    ref = str(ref).strip()
 
     # External URL (Google, etc.)
     if ref.startswith("http://") or ref.startswith("https://"):
         return _nocache(redirect(ref))
 
-    # Object key in R2
+    # Object key in R2 (your "gcs_*" wrapper)
     if gcs_bucket and ("/" in ref or ref.startswith("profile_images/") or ref.startswith("uploads/")):
         try:
             signed = gcs_generate_signed_url(ref, seconds=600)
             return _nocache(redirect(signed))
         except Exception:
-            pass
+            # If signing fails, fall back to default
+            if os.path.exists(default_path):
+                return _cache_default(send_from_directory(default_dir, default_name))
+            return _cache_default(redirect(url_for("static", filename="img/default_profile.png")))
 
     # Local file fallback
     local_dir = os.path.join(app.static_folder, "uploads", "profile_images")
@@ -5995,7 +6025,13 @@ def user_avatar(user_id: int):
     if os.path.exists(local_path):
         return _nocache(send_from_directory(local_dir, ref))
 
-    return _nocache(redirect(default_url))
+    # Last fallback: default
+    if os.path.exists(default_path):
+        return _cache_default(send_from_directory(default_dir, default_name))
+    return _cache_default(redirect(url_for("static", filename="img/default_profile.png")))
+
+    
+
 @app.route("/profile/change_password", methods=["POST"])
 @login_required
 def change_password():
