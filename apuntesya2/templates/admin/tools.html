@@ -151,6 +151,25 @@
   <div class="muted" style="margin-top:10px;color:#7f1d1d;">Tip: usá Reset DB para testear rápido sin tocar el bucket. Usá Reset Total solo si querés borrar también los archivos.</div>
 </div>
 
+<div class="card" style="padding:14px;margin:14px 0;border:1px solid #eee;border-radius:14px;">
+  <h3 style="margin:0 0 8px;font-size:14px;font-weight:900;">🎓 Académico (UNC + sugerencias)</h3>
+  <div class="muted" style="margin-bottom:10px;">Cargá el seed inicial de UNC y revisá sugerencias enviadas por usuarios para evitar spam y duplicados.</div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+    <form method="post" action="{{ url_for('admin_seed_unc') }}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+      <div>
+        <label style="display:block;font-size:12px;opacity:.8;">Confirmación</label>
+        <input class="input" type="text" name="confirm" placeholder="Escribí SEED_UNC" style="min-width:220px;" />
+      </div>
+      <button class="btn" type="submit">Cargar Seed UNC</button>
+    </form>
+
+    <a class="btn" href="{{ url_for('admin_academics_suggestions') }}">Ver sugerencias</a>
+  </div>
+
+  <div class="muted" style="margin-top:10px;">Nota: el seed es idempotente (no duplica). Las instituciones (Monserrat / Manuel Belgrano) se cargan como "Institución" dentro de UNC para mantener compatibilidad, pero en la UI se presentan como institución.</div>
+</div>
+
   </div>
 </div>
 {% endblock %}

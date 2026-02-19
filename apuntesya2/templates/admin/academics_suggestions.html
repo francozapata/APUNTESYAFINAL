@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container" style="max-width:1100px;">
+  <h2 style="margin-top:20px;">Sugerencias Académicas</h2>
+  <p style="color:#666;">Listado de sugerencias enviadas por usuarios (Universidad / Facultad / Carrera). Podés aprobar para que aparezcan en los desplegables o rechazar.</p>
+
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 20px;">
+    <a class="btn" href="{{ url_for('admin_academics_suggestions', status='pending') }}">Pendientes</a>
+    <a class="btn" href="{{ url_for('admin_academics_suggestions', status='approved') }}">Aprobadas</a>
+    <a class="btn" href="{{ url_for('admin_academics_suggestions', status='rejected') }}">Rechazadas</a>
+    <a class="btn" href="{{ url_for('admin_academics_suggestions', status='all') }}">Todas</a>
+  </div>
+
+  <div class="card" style="padding:14px;">
+    <div style="overflow:auto;">
+      <table class="table" style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Fecha</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Tipo</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Nombre</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Contexto</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Estado</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid #eee;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for it in items %}
+          <tr>
+            <td style="padding:8px; border-bottom:1px solid #f3f3f3; white-space:nowrap;">{{ it.created_at.strftime('%Y-%m-%d %H:%M') if it.created_at else '' }}</td>
+            <td style="padding:8px; border-bottom:1px solid #f3f3f3;">{{ it.kind }}</td>
+            <td style="padding:8px; border-bottom:1px solid #f3f3f3;"><strong>{{ it.name }}</strong></td>
+            <td style="padding:8px; border-bottom:1px solid #f3f3f3;">
+              {% if it.university_name %}Uni: {{ it.university_name }}{% endif %}
+              {% if it.faculty_name %}<br>Fac: {{ it.faculty_name }}{% endif %}
+              {% if it.university_id and not it.university_name %}Uni ID: {{ it.university_id }}{% endif %}
+              {% if it.faculty_id and not it.faculty_name %}<br>Fac ID: {{ it.faculty_id }}{% endif %}
+            </td>
+            <td style="padding:8px; border-bottom:1px solid #f3f3f3;">{{ it.status }}</td>
+            <td style="padding:8px; border-bottom:1px solid #f3f3f3; min-width:320px;">
+              <form method="post" action="{{ url_for('admin_academics_suggestions_action', sug_id=it.id) }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <input class="input" type="text" name="admin_note" placeholder="Nota (opcional)" value="{{ it.admin_note or '' }}" style="min-width:160px;">
+                {% if it.status == 'pending' %}
+                  <button class="btn" type="submit" name="action" value="approve">Aprobar</button>
+                  <button class="btn btn-danger" type="submit" name="action" value="reject" onclick="return confirm('¿Rechazar sugerencia?');">Rechazar</button>
+                {% else %}
+                  <button class="btn" type="submit" name="action" value="approve" disabled>✓</button>
+                  <button class="btn" type="submit" name="action" value="reject" disabled>✓</button>
+                {% endif %}
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        {% if not items %}
+          <tr><td colspan="6" style="padding:12px; color:#666;">No hay sugerencias para este filtro.</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

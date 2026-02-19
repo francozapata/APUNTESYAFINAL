@@ -18,7 +18,16 @@
     async function postJSON(url, body) {
         const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d.error || 'Error'); return d;
+        if (!r.ok) throw new Error(d.error || 'Error');
+        return d;
+    }
+
+    // Fire-and-forget suggestions (do not block user flow)
+    async function suggest(kind, name, extra) {
+        try {
+            if (!name) return;
+            await postJSON('/api/academics/suggestions', Object.assign({ kind, name }, extra || {}));
+        } catch (_) {}
     }
 
     /**
@@ -146,50 +155,47 @@
         }
         function fireChange() {
             const detail = getTexts();
+
+            // UX: if selected faculty is actually an institution, label it accordingly.
+            try {
+                const facLabel = fac && fac.parentElement ? fac.parentElement.querySelector('label') : null;
+                const facText = detail.facultyText || '';
+                const isInst = /Colegio Nacional de Monserrat|Escuela Superior de Comercio Manuel Belgrano/i.test(facText);
+                if (facLabel) facLabel.textContent = isInst ? 'Institución' : 'Facultad';
+            } catch (_) {}
+
             if (typeof onChange === 'function') onChange(detail);
             document.dispatchEvent(new CustomEvent('ay:academics-change', { detail: { prefix, ...detail } }));
         }
 
-        // Submit (si hay formId): crea entidades si hace falta y completa hidden
+        // Submit (si hay formId): completa hidden y registra sugerencias si hace falta
         const form = formId ? $(formId.replace('#', '')) : null;
         if (form) {
             form.addEventListener('submit', async (ev) => {
                 ev.preventDefault();
                 try {
-                    // Universidad
-                    if (!uni.value && !(enableCreate && uniO.value.trim())) throw new Error('Seleccioná o escribí tu Universidad.');
-                    let U;
+                    const uniText = uni.value === '__other__' ? (uniO.value || '').trim() : (uni.value ? uni.options[uni.selectedIndex].text : '');
+                    const facText = fac.value === '__other__' ? (facO.value || '').trim() : (fac.value ? fac.options[fac.selectedIndex].text : '');
+                    const carText = car.value === '__other__' ? (carO.value || '').trim() : (car.value ? car.options[car.selectedIndex].text : '');
+
+                    if (!uniText) throw new Error('Seleccioná o escribí tu Universidad.');
+                    if (!facText) throw new Error('Seleccioná o escribí tu Facultad/Institución.');
+                    if (!carText) throw new Error('Seleccioná o escribí tu Carrera.');
+
+                    // Registrar sugerencias si el usuario escribió "Otra…"
                     if (enableCreate && uni.value === '__other__') {
-                        const name = (uniO.value || '').trim(); if (!name) throw new Error('Escribí tu Universidad.');
-                        U = await postJSON('/api/academics/universities', { name }); uniId = U.id;
-                    } else {
-                        U = { id: uniId, name: (uni.options[uni.selectedIndex]?.text || '') };
+                        await suggest('university', uniText, {});
                     }
-
-                    // Facultad
-                    if (!fac.value && !(enableCreate && facO.value.trim())) throw new Error('Seleccioná o escribí tu Facultad.');
-                    let F;
                     if (enableCreate && fac.value === '__other__') {
-                        const name = (facO.value || '').trim(); if (!name) throw new Error('Escribí tu Facultad.');
-                        F = await postJSON('/api/academics/faculties', { name, university_id: uniId });
-                        facId = F.id;
-                    } else {
-                        F = { id: facId, name: (fac.options[fac.selectedIndex]?.text || '') };
+                        await suggest('faculty', facText, { university_id: uniId, university_name: uniText });
                     }
-
-                    // Carrera
-                    if (!car.value && !(enableCreate && carO.value.trim())) throw new Error('Seleccioná o escribí tu Carrera.');
-                    let C;
                     if (enableCreate && car.value === '__other__') {
-                        const name = (carO.value || '').trim(); if (!name) throw new Error('Escribí tu Carrera.');
-                        C = await postJSON('/api/academics/careers', { name, faculty_id: facId });
-                    } else {
-                        C = { name: (car.options[car.selectedIndex]?.text || '') };
+                        await suggest('career', carText, { university_id: uniId, faculty_id: facId, university_name: uniText, faculty_name: facText });
                     }
 
-                    if (hUni) hUni.value = U.name;
-                    if (hFac) hFac.value = F.name;
-                    if (hCar) hCar.value = C.name;
+                    if (hUni) hUni.value = uniText;
+                    if (hFac) hFac.value = facText;
+                    if (hCar) hCar.value = carText;
 
                     form.submit();
                 } catch (e) { alert(e.message || 'No se pudo guardar. Intentá de nuevo.'); }

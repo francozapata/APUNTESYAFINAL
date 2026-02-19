@@ -67,6 +67,7 @@ from apuntesya2.models import (
     University,
     Faculty,
     Career,
+    AcademicSuggestion,
     WebhookEvent,
     Review,
     DownloadLog,
@@ -78,6 +79,8 @@ from apuntesya2.models import (
     LegalAcceptanceAudit,
     AnalyticsEvent,
 )
+
+from apuntesya2.seed_unc_academics import seed_unc
 
 # helpers MP
 from apuntesya2 import mp
@@ -5303,6 +5306,18 @@ def api_create_university():
     if not name:
         return jsonify({"error": "name_required"}), 400
 
+    # Only admins/superadmins can create taxonomy entities directly.
+    if not (current_user.is_authenticated and (getattr(current_user, "is_admin", False) or getattr(current_user, "is_superadmin", False))):
+        with Session() as s:
+            sug = AcademicSuggestion(
+                user_id=int(current_user.id) if current_user.is_authenticated else None,
+                kind="university",
+                name=name,
+            )
+            s.add(sug)
+            s.commit()
+        return jsonify({"ok": True, "status": "suggested"}), 202
+
     with Session() as s:
         existing = s.execute(select(University).where(University.name == name)).scalar_one_or_none()
         if existing:
@@ -5328,6 +5343,20 @@ def api_create_faculty():
 
     if not name or not university_id:
         return jsonify({"error": "name_and_university_id_required"}), 400
+
+    if not (current_user.is_authenticated and (getattr(current_user, "is_admin", False) or getattr(current_user, "is_superadmin", False))):
+        with Session() as s:
+            u_name = s.execute(select(University.name).where(University.id == university_id)).scalar_one_or_none()
+            sug = AcademicSuggestion(
+                user_id=int(current_user.id) if current_user.is_authenticated else None,
+                kind="faculty",
+                name=name,
+                university_id=university_id,
+                university_name=u_name,
+            )
+            s.add(sug)
+            s.commit()
+        return jsonify({"ok": True, "status": "suggested"}), 202
 
     with Session() as s:
         existing = s.execute(
@@ -5357,6 +5386,27 @@ def api_create_career():
     if not name or not faculty_id:
         return jsonify({"error": "name_and_faculty_id_required"}), 400
 
+    if not (current_user.is_authenticated and (getattr(current_user, "is_admin", False) or getattr(current_user, "is_superadmin", False))):
+        with Session() as s:
+            f_row = s.execute(select(Faculty.name, Faculty.university_id).where(Faculty.id == faculty_id)).first()
+            fac_name = f_row[0] if f_row else None
+            uni_id = f_row[1] if f_row else None
+            uni_name = None
+            if uni_id:
+                uni_name = s.execute(select(University.name).where(University.id == uni_id)).scalar_one_or_none()
+            sug = AcademicSuggestion(
+                user_id=int(current_user.id) if current_user.is_authenticated else None,
+                kind="career",
+                name=name,
+                university_id=uni_id,
+                faculty_id=faculty_id,
+                university_name=uni_name,
+                faculty_name=fac_name,
+            )
+            s.add(sug)
+            s.commit()
+        return jsonify({"ok": True, "status": "suggested"}), 202
+
     with Session() as s:
         existing = s.execute(
             select(Career).where(Career.name == name, Career.faculty_id == faculty_id)
@@ -5368,6 +5418,45 @@ def api_create_career():
         s.commit()
         _cache_invalidate_prefix('academics:careers')
         return jsonify({"id": c.id, "name": c.name, "faculty_id": c.faculty_id}), 201
+
+
+@app.post("/api/academics/suggestions")
+@csrf.exempt
+def api_academics_suggestion():
+    """Create a suggestion without modifying taxonomy."""
+    data = request.get_json(silent=True) or {}
+    kind = (data.get("kind") or "").strip().lower()
+    name = (data.get("name") or "").strip()
+    if kind not in ("university", "faculty", "career") or not name:
+        return jsonify({"error": "invalid"}), 400
+
+    university_id = data.get("university_id")
+    faculty_id = data.get("faculty_id")
+    try:
+        university_id = int(university_id) if university_id is not None else None
+    except Exception:
+        university_id = None
+    try:
+        faculty_id = int(faculty_id) if faculty_id is not None else None
+    except Exception:
+        faculty_id = None
+
+    uni_name = (data.get("university_name") or "").strip() or None
+    fac_name = (data.get("faculty_name") or "").strip() or None
+
+    with Session() as s:
+        sug = AcademicSuggestion(
+            user_id=int(current_user.id) if current_user.is_authenticated else None,
+            kind=kind,
+            name=name,
+            university_id=university_id,
+            faculty_id=faculty_id,
+            university_name=uni_name,
+            faculty_name=fac_name,
+        )
+        s.add(sug)
+        s.commit()
+        return jsonify({"ok": True, "id": sug.id}), 201
 
 
 
@@ -5794,6 +5883,7 @@ def _reset_db_complete(session):
     tables_to_clear = [
         "legal_acceptance_audit",
         "otps",
+        "academic_suggestions",
         "reviews",
         "download_logs",
         "combo_purchases",
@@ -5936,6 +6026,129 @@ def admin_reset_total():
         "success",
     )
     return redirect(url_for("admin_tools"))
+
+
+@app.post("/admin/academics/seed-unc")
+@login_required
+@superadmin_required
+def admin_seed_unc():
+    """Carga idempotente del seed de UNC (universidad + facultades + carreras)."""
+    confirm = (request.form.get("confirm") or "").strip().upper()
+    if confirm != "SEED_UNC":
+        flash("Para confirmar, escribí SEED_UNC.", "danger")
+        return redirect(url_for("admin_tools"))
+
+    with Session() as s:
+        result = seed_unc(s)
+        s.commit()
+
+    _cache_invalidate_prefix("academics:")
+    _audit("seed_unc", target_type="site", target_id=None, meta=result)
+    flash(
+        f"Seed UNC listo. Facultades nuevas: {result.get('created_faculties', 0)} | Carreras nuevas: {result.get('created_careers', 0)}",
+        "success",
+    )
+    return redirect(url_for("admin_tools"))
+
+
+@app.get("/admin/academics/suggestions")
+@login_required
+@admin_required
+def admin_academics_suggestions():
+    """Lista sugerencias académicas (admins y superadmins)."""
+    status = (request.args.get("status") or "pending").strip().lower()
+    if status not in ("pending", "approved", "rejected", "all"):
+        status = "pending"
+
+    with Session() as s:
+        q = select(AcademicSuggestion).order_by(desc(AcademicSuggestion.created_at))
+        if status != "all":
+            q = q.where(AcademicSuggestion.status == status)
+        items = s.execute(q.limit(200)).scalars().all()
+
+    return render_template("admin/academics_suggestions.html", items=items, status=status)
+
+
+@app.post("/admin/academics/suggestions/<int:sug_id>/action")
+@login_required
+@admin_required
+def admin_academics_suggestions_action(sug_id: int):
+    action = (request.form.get("action") or "").strip().lower()  # approve|reject
+    note = (request.form.get("admin_note") or "").strip() or None
+
+    with Session() as s:
+        sug = s.get(AcademicSuggestion, sug_id)
+        if not sug:
+            flash("Sugerencia no encontrada.", "danger")
+            return redirect(url_for("admin_academics_suggestions"))
+
+        if action == "reject":
+            sug.status = "rejected"
+            sug.admin_note = note
+            s.add(sug)
+            s.commit()
+            _audit("academics_suggestion_rejected", target_type="academic_suggestion", target_id=sug_id, meta={"note": note})
+            flash("Sugerencia rechazada.", "success")
+            return redirect(url_for("admin_academics_suggestions"))
+
+        if action != "approve":
+            flash("Acción inválida.", "danger")
+            return redirect(url_for("admin_academics_suggestions"))
+
+        # Approve: promote to taxonomy
+        created = {}
+
+        if sug.kind == "university":
+            existing = s.execute(select(University).where(University.name == sug.name)).scalar_one_or_none()
+            if not existing:
+                u = University(name=sug.name)
+                s.add(u)
+                s.flush()
+                created["university_id"] = u.id
+            sug.status = "approved"
+
+        elif sug.kind == "faculty":
+            uid = sug.university_id
+            if not uid and sug.university_name:
+                u = s.execute(select(University).where(University.name == sug.university_name)).scalar_one_or_none()
+                if u:
+                    uid = u.id
+            if not uid:
+                flash("No se pudo aprobar: falta universidad asociada.", "danger")
+                return redirect(url_for("admin_academics_suggestions"))
+            existing = s.execute(select(Faculty).where(Faculty.name == sug.name, Faculty.university_id == uid)).scalar_one_or_none()
+            if not existing:
+                f = Faculty(name=sug.name, university_id=uid)
+                s.add(f)
+                s.flush()
+                created["faculty_id"] = f.id
+            sug.status = "approved"
+
+        elif sug.kind == "career":
+            fid = sug.faculty_id
+            if not fid and sug.faculty_name and sug.university_id:
+                f = s.execute(select(Faculty).where(Faculty.name == sug.faculty_name, Faculty.university_id == sug.university_id)).scalar_one_or_none()
+                if f:
+                    fid = f.id
+            if not fid:
+                flash("No se pudo aprobar: falta facultad asociada.", "danger")
+                return redirect(url_for("admin_academics_suggestions"))
+            existing = s.execute(select(Career).where(Career.name == sug.name, Career.faculty_id == fid)).scalar_one_or_none()
+            if not existing:
+                c = Career(name=sug.name, faculty_id=fid)
+                s.add(c)
+                s.flush()
+                created["career_id"] = c.id
+            sug.status = "approved"
+
+        sug.admin_note = note
+        s.add(sug)
+        s.commit()
+
+    _cache_invalidate_prefix("academics:")
+    _audit("academics_suggestion_approved", target_type="academic_suggestion", target_id=sug_id, meta={"created": created, "note": note})
+    flash("Sugerencia aprobada y cargada al listado.", "success")
+    return redirect(url_for("admin_academics_suggestions"))
 
 # Admin HUB - usuarios
 @app.route("/admin/api/users", methods=["GET", "POST"], endpoint="admin_api_users_list")

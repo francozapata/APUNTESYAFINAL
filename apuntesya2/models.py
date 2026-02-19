@@ -423,6 +423,31 @@ class Career(Base):
     faculty_id: Mapped[int] = mapped_column(ForeignKey("faculties.id"), nullable=False, index=True)
 
 
+class AcademicSuggestion(Base):
+    """User-submitted suggestions for the academics taxonomy.
+
+    We do NOT auto-create taxonomy entities from free-text to avoid spam/duplicates.
+    Admin/Superadmin can approve and promote suggestions into Universities/Faculties/Careers.
+    """
+
+    __tablename__ = "academic_suggestions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # university|faculty|career
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    # Optional context
+    university_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    faculty_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    university_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    faculty_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", index=True)  # pending|approved|rejected
+    admin_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class WebhookEvent(Base):
     __tablename__ = "webhook_events"
 
