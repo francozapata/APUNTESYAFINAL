@@ -204,11 +204,14 @@ def _rate_limit(key: str, limit: int, window_sec: int) -> bool:
     _RATE_BUCKET[key] = bucket
     return True
 
+
 from flask import send_from_directory
 
-@app.route('/favicon.ico')
+@app.route("/favicon.ico")
 def favicon():
-    return send_from_directory('static', 'favicon.ico', mimetype='image/vnd.microsoft.icon')
+    # devolvemos el PNG, que Chrome/Edge aceptan perfecto
+    return send_from_directory("static", "favicon-32.png", mimetype="image/png")
+
 
 @app.before_request
 def _security_rate_limits():
