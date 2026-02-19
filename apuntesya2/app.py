@@ -6249,6 +6249,89 @@ def admin_seed_unc():
     return redirect(url_for("admin_tools"))
 
 
+
+
+@app.route("/admin/tickets", methods=["GET"])
+@login_required
+@admin_required
+def admin_tickets_list():
+    status = (request.args.get("status") or "open").strip().lower()
+    with Session() as s:
+        q = s.query(Ticket).order_by(Ticket.updated_at.desc(), Ticket.created_at.desc())
+        if status == "open":
+            q = q.filter(Ticket.status.in_(["new", "in_review", "need_seller_action"]))
+        elif status in ("resolved", "rejected"):
+            q = q.filter(Ticket.status == status)
+        rows = q.limit(500).all()
+        return render_template("admin/tickets.html", tickets=rows, status=status)
+
+
+@app.route("/admin/tickets/<int:ticket_id>", methods=["GET", "POST"])
+@login_required
+@admin_required
+def admin_ticket_detail(ticket_id: int):
+    with Session() as s:
+        t = s.get(Ticket, int(ticket_id))
+        if not t:
+            abort(404)
+
+        note = None
+        try:
+            note = s.get(Note, int(t.note_id))
+        except Exception:
+            note = None
+
+        if request.method == "POST":
+            new_status = (request.form.get("status") or t.status or "new").strip().lower()
+            if new_status not in ("new", "in_review", "need_seller_action", "resolved", "rejected"):
+                new_status = t.status or "new"
+
+            resolution = (request.form.get("resolution") or "").strip() or None
+            admin_notes = (request.form.get("admin_notes") or "").strip() or None
+
+            changed = False
+            if new_status != (t.status or "new"):
+                t.status = new_status
+                changed = True
+            # always allow updating resolution/notes
+            t.resolution = resolution
+            t.admin_notes = admin_notes
+
+            # timeline event
+            ev = TicketEvent(
+                ticket_id=int(t.id),
+                actor_user_id=int(current_user.id),
+                event_type="status_update",
+                message=f"Estado → {t.status}" + (f" | Resolución: {resolution}" if resolution else ""),
+            )
+            s.add(ev)
+            try:
+                t.updated_at = datetime.utcnow()
+            except Exception:
+                pass
+
+            s.commit()
+
+            # Notificaciones (best-effort)
+            try:
+                title = f"Ticket {t.code}: actualización"
+                body = f"Estado: {t.status}" + (f"
+Resolución: {resolution}" if resolution else "")
+                ids = []
+                if t.reporter_user_id:
+                    ids.append(int(t.reporter_user_id))
+                if t.seller_user_id and int(t.seller_user_id) not in ids:
+                    ids.append(int(t.seller_user_id))
+                if ids:
+                    _notify_users(s, ids, kind="info", title=title, body=body)
+            except Exception:
+                pass
+
+            flash("Ticket actualizado.", "success")
+            return redirect(f"/admin/tickets/{t.id}")
+
+        events = s.query(TicketEvent).filter(TicketEvent.ticket_id == t.id).order_by(TicketEvent.created_at.asc()).all()
+        return render_template("admin/ticket_detail.html", t=t, note=note, events=events)
 @app.get("/admin/academics/suggestions")
 @login_required
 @admin_required

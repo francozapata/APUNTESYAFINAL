@@ -81,6 +81,12 @@
       <div>
         <h1 class="profile-name">{{ current_user.name or "Usuario sin nombre" }}</h1>
         <p class="profile-email">{{ current_user.email }}</p>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn-pill" href="{{ url_for('my_notes_hub') }}">📚 Mis apuntes</a>
+          <a class="btn-pill" href="{{ url_for('my_purchases') }}">🛒 Mis compras</a>
+          <a class="btn-pill" href="{{ url_for('tickets_list') }}">🎫 Mis tickets</a>
+        </div>
+
         {% if current_user.legal_version_accepted %}
           <p class="profile-email" style="margin-top:6px;font-size:12px;color:#6b7280;">
             ✅ TyC aceptados — versión <b>{{ current_user.legal_version_accepted }}</b>

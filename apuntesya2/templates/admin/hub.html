@@ -365,7 +365,12 @@
                 <a class="btn ghost" href="{{ url_for('admin_manage_admins') }}">👑 Administradores</a>
                 <a class="btn ghost" href="{{ url_for('admin_maintenance') }}">🛠️ Mantenimiento</a>
                 <a class="btn ghost" href="{{ url_for('admin_audit_log') }}">🧾 Auditoría</a>
+                <a class="btn ghost" href="/admin/tickets">🎫 Tickets</a>
                 <a class="btn ghost" href="{{ url_for('admin_tools') }}">🧰 Herramientas</a>
+            </div>
+            {% else %}
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                <a class="btn ghost" href="/admin/tickets">🎫 Tickets</a>
             </div>
             {% endif %}
         </div>
