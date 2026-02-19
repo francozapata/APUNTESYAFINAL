@@ -60,7 +60,11 @@
     }
 
     async function jfetch(url, opts) {
-        const r = await fetch(url, opts || {});
+        // Importante: los endpoints /api/academics/* se cachean fuerte (Cache-Control).
+        // En pantallas como búsqueda avanzada queremos reflejar cambios recientes (ej. seed/admin).
+        // Usamos cache:'reload' para forzar consulta a red y refrescar cache del navegador.
+        const fetchOpts = Object.assign({ cache: 'reload' }, (opts || {}));
+        const r = await fetch(url, fetchOpts);
         let data = {};
         try { data = await r.json(); } catch (_) { data = {}; }
         if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
