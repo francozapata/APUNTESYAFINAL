@@ -1432,10 +1432,12 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
     from PIL import Image
     from io import BytesIO
 
-    # Get local path to PDF
     tmp_pdf = None
     local_pdf = None
+    doc = None
+
     try:
+        # Get local path to PDF
         if local_pdf_override:
             local_pdf = local_pdf_override
         elif gcs_bucket and note.file_path and "/" in note.file_path:
@@ -1450,22 +1452,27 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
             return ([], [])
 
         pages = set()
-        # pick truly random pages so the preview is unpredictable
+
+        # pick random pages; avoid first pages when large
         candidates = list(range(total))
-        # avoid always showing the cover page if we have enough pages
         if total > 6:
             candidates = list(range(2, total))  # skip first 2 pages
+
         random.shuffle(candidates)
         for p in candidates:
             pages.add(p)
             if len(pages) >= max_pages:
                 break
+
         pages = sorted(pages)[:max_pages]
 
         image_paths: list[str] = []
         for idx, pno in enumerate(pages, start=1):
             page = doc.load_page(pno)
-            pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
+
+            # ⚡ Optimización: menos escala = menos RAM/CPU (reduce chance de restart)
+            pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2), alpha=False)
+
             img = Image.open(BytesIO(pix.tobytes("png")))
             img = _watermark_image(img, text="APUNTESYA")
 
@@ -1483,11 +1490,16 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
                 out_path = os.path.join(prev_dir, f"{idx}.jpg")
                 with open(out_path, "wb") as f:
                     f.write(data)
-                # store relative path
                 image_paths.append(f"previews/{note.id}/{idx}.jpg")
 
         return (pages, image_paths)
+
     finally:
+        try:
+            if doc is not None:
+                doc.close()
+        except Exception:
+            pass
         try:
             if tmp_pdf and os.path.exists(tmp_pdf):
                 os.remove(tmp_pdf)
@@ -3321,8 +3333,8 @@ def upload_note():
     if request.method == "POST":
         title = request.form["title"].strip()
         description = request.form["description"].strip()
-        # En esta versión, Universidad/Facultad/Carrera son OBLIGATORIOS para publicar.
-        # (Evita NULL en DB y evita que se suba con valores "undefined").
+
+        # Universidad/Facultad/Carrera obligatorios
         university = (request.form.get("university") or "").strip()
         faculty = (request.form.get("faculty") or "").strip()
         career = (request.form.get("career") or "").strip()
@@ -3338,7 +3350,6 @@ def upload_note():
             return redirect(url_for("upload_note"))
 
         price = request.form.get("price", "").strip()
-        # price == seller net (what they want to receive)
         price_cents = int(round(float(price) * 100)) if price else 0
 
         # Moderation acknowledgement (required)
@@ -3360,7 +3371,6 @@ def upload_note():
             return redirect(url_for("upload_note"))
 
         # Enforce max file size (defense-in-depth). Flask will reject above MAX_CONTENT_LENGTH
-        # but this catches some edge cases and gives a friendly message.
         try:
             file.stream.seek(0, os.SEEK_END)
             size = int(file.stream.tell() or 0)
@@ -3375,13 +3385,12 @@ def upload_note():
         base_name = secure_filename(file.filename)
         unique_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{base_name}"
 
-        # Siempre guardamos una copia local temporal para poder generar previews
-        # (Render + GCS no garantiza que exista un archivo local).
+        # Guardamos copia local temporal para validar y subir al bucket
         ensure_dirs()
         local_pdf_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
         file.save(local_pdf_path)
 
-        # Security: validate PDF (magic + parseable + no embedded JS + page cap)
+        # Security: validate PDF (best-effort)
         try:
             ok, msg = _validate_uploaded_pdf(local_pdf_path, max_pages=int(os.getenv("MAX_PDF_PAGES", "1200")))
             if not ok:
@@ -3395,13 +3404,12 @@ def upload_note():
             # If validation fails unexpectedly, do not block uploads.
             pass
 
+        # Subir al bucket (R2/GCS) o dejar local
         if gcs_bucket:
-            # Guardamos en GCS bajo notes/<seller_id>/<archivo>
             blob_name = f"notes/{current_user.id}/{unique_name}"
             gcs_upload_path(local_pdf_path, blob_name, content_type="application/pdf")
             stored_path = blob_name
         else:
-            # En modo local, el archivo ya quedó guardado en UPLOAD_FOLDER
             stored_path = unique_name
 
         with Session() as s:
@@ -3417,14 +3425,13 @@ def upload_note():
                 seller_id=current_user.id
             )
 
-            # Publicación inmediata (para que aparezca en Home/búsquedas) y luego
-            # moderación best-effort que puede cambiar el estado.
+            # Publicación inmediata (rápido) — NO preview/IA acá para evitar 502
             note.moderation_status = "auto_published"
 
             s.add(note)
             s.commit()
 
-            # Gestión / auditoría (subida de apunte)
+            # Auditoría (subida)
             try:
                 log_audit_event(
                     actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
@@ -3445,125 +3452,19 @@ def upload_note():
             except Exception:
                 pass
 
-            # Generate preview images (best-effort)
-            try:
-                pages, imgs = generate_note_preview(note, local_pdf_override=local_pdf_path)
-                note.preview_pages = {"pages": pages}
-                note.preview_images = {"images": imgs}
-                s.commit()
-            except Exception as e:
-                app.logger.warning(f"preview generation failed: {e}")
+        flash("Apunte subido. Ya está publicado 🎉 (La preview se genera al abrir el apunte).")
 
-            # AI moderation (best-effort). If OpenAI isn't configured, it will fall back to manual review.
-            try:
-                text_sample = _extract_text_for_moderation(note)
-                meta = {
-                    "title": title,
-                    "description": description,
-                    "university": university,
-                    "faculty": faculty,
-                    "career": career,
-                    "seller_id": current_user.id,
-                    "price_net": price_cents / 100.0,
-                }
-                ai = _gemini_moderate_note(text_sample=text_sample, meta=meta)
-                status, reason = _decision_to_status(ai)
-
-                note.ai_decision = (ai.get("risk_level") or ai.get("decision") or None)
-                note.ai_model = GEMINI_MODEL if GEMINI_API_KEY else None
-                note.ai_summary = (ai.get("summary") or None)
-                note.ai_raw = ai
-
-                # store float scores as 0..1000 integers for portability
-                def _to_i(x):
-                    try:
-                        return int(round(float(x) * 1000))
-                    except Exception:
-                        return None
-                note.ai_confidence = _to_i(ai.get("confidence"))
-                note.ai_score_quality = _to_i(ai.get("quality_score"))
-                note.ai_score_copyright = _to_i(ai.get("copyright_risk"))
-                note.ai_score_mismatch = _to_i(ai.get("mismatch_risk"))
-
-                note.moderation_status = status
-                note.moderation_reason = reason
-                
-                # Notifications
-                admin_ids = [u.id for u in s.execute(select(User).where(User.is_admin == True)).scalars().all()]
-                if status in ("auto_published", "approved"):
-                    notify_and_email_users(
-                        s,
-                        [current_user.id],
-                        kind="note_published",
-                        title="Apunte publicado",
-                        body="Tu apunte ya está publicado 🎉",
-                        email_subject="Tu apunte ya está publicado",
-                        email_body="Tu apunte ya está publicado.",
-                        dedupe_key_prefix=f"note:{note.id}:published"
-                    )
-                elif status == "published_flagged":
-                    notify_and_email_users(
-                        s,
-                        [current_user.id],
-                        kind="note_published_flagged",
-                        title="Apunte publicado",
-                        body="Tu apunte ya está publicado. Puede ser revisado de forma aleatoria.",
-                        email_subject="Tu apunte ya está publicado",
-                        email_body="Tu apunte ya está publicado. Puede ser revisado de forma aleatoria.",
-                        dedupe_key_prefix=f"note:{note.id}:flagged"
-                    )
-                elif status in ("blocked_review", "pending_manual"):
-                    note.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
-                    notify_and_email_users(
-                        s,
-                        [current_user.id],
-                        kind="note_manual_review",
-                        title="Apunte en revisión",
-                        body="Tu apunte quedó en revisión. Puede demorar hasta 12hs.",
-                        email_subject="Tu apunte está en revisión",
-                        email_body="Tu apunte quedó en revisión. Puede demorar hasta 12hs.",
-                        dedupe_key_prefix=f"note:{note.id}:manual"
-                    )
-                    notify_and_email_users(
-                        s,
-                        admin_ids,
-                        kind="manual_review_admin",
-                        title="Revisión requerida",
-                        body=f"Hay un apunte para revisar: #{note.id} — {note.title}",
-                        email_subject="Apunte para revisar",
-                        email_body=f"Hay un apunte para revisar: #{note.id} — {note.title}",
-                        dedupe_key_prefix=f"note:{note.id}:admin_manual"
-                    )
-
-                s.commit()
-            except Exception as e:
-                app.logger.warning(f"ai moderation failed: {e}")
-
-        # UX message based on status
-        msg = "Apunte subido."
-        try:
-            if note.moderation_status in ("auto_published", "approved"):
-                msg += " Ya está publicado 🎉"
-            elif note.moderation_status == "published_flagged":
-                msg += " Ya está publicado. Puede ser revisado de forma aleatoria."
-            elif note.moderation_status in ("blocked_review", "pending_manual"):
-                msg += " Quedó en revisión (puede demorar hasta 12hs)."
-            elif note.moderation_status == "rejected":
-                msg += " Fue rechazado. Revisá el motivo en tu perfil."
-            else:
-                msg += " Quedó pendiente de revisión."
-        except Exception:
-            msg += ""
-        flash(msg)
-
-        # Cleanup: si usamos GCS, no necesitamos conservar el PDF local
+        # Cleanup: si usamos bucket, no necesitamos conservar el PDF local
         try:
             if gcs_bucket and local_pdf_path and os.path.exists(local_pdf_path):
                 os.remove(local_pdf_path)
         except Exception:
             pass
+
         return redirect(url_for("note_detail", note_id=note.id))
+
     return render_template("upload.html")
+
 
 @app.route("/note/<int:note_id>")
 def note_detail(note_id):
@@ -3575,11 +3476,8 @@ def note_detail(note_id):
             abort(404)
 
         # ------------------------------------------------------------------
-        # Preview: ensure every note has watermarked preview images.
-        #
-        # Older notes (or notes uploaded during a transient failure) can end up
-        # without preview_images, which makes the detail page show no preview.
-        # We lazily generate and persist previews on first view.
+        # Preview lazy-generation: si no hay preview, la generamos acá.
+        # (No bloquea la página si falla)
         # ------------------------------------------------------------------
         try:
             imgs_meta = (getattr(note, "preview_images", None) or {})
@@ -3591,7 +3489,6 @@ def note_detail(note_id):
                     note.preview_images = {"images": new_imgs}
                     s.commit()
         except Exception as e:
-            # Never block the page if preview generation fails.
             try:
                 app.logger.warning(f"preview lazy-generation failed: {e}")
             except Exception:
@@ -3611,8 +3508,7 @@ def note_detail(note_id):
             if current_user.id != note.seller_id and not getattr(current_user, "is_admin", False):
                 abort(404)
 
-        # ARCHIVED_VISIBILITY: si el contenido fue archivado (por ejemplo, cuenta eliminada o moderación),
-        # lo ocultamos para nuevos usuarios, pero mantenemos acceso a quienes ya lo compraron/descargaron.
+        # ARCHIVED_VISIBILITY
         if bool(getattr(note, "is_archived", False)):
             is_admin = bool(current_user.is_authenticated and getattr(current_user, "is_admin", False))
             is_owner = bool(current_user.is_authenticated and current_user.id == note.seller_id)
@@ -3705,19 +3601,17 @@ def note_detail(note_id):
 
                 can_review = not already_reviewed
 
-        # Vendedor (para perfil + contacto)
+        # Vendedor
         seller = s.get(User, note.seller_id) if note.seller_id else None
 
         # Contactos del vendedor
         seller_contacts = []
         if seller:
-            # Backward compatible: if legacy seller_contact is present, show it too
             if getattr(seller, "seller_contact", None):
                 url, label = _build_contact_link(getattr(seller, "seller_contact"))
                 if url:
                     seller_contacts.append((url, "Contacto"))
 
-            # Structured contacts
             if getattr(seller, "contact_visible_public", True) or (can_download and getattr(seller, "contact_visible_buyers", True)):
                 if getattr(seller, "contact_email", None):
                     seller_contacts.append((f"mailto:{seller.contact_email}", "Email"))
@@ -3740,7 +3634,7 @@ def note_detail(note_id):
                     if ig:
                         seller_contacts.append((f"https://instagram.com/{ig}", "Instagram"))
 
-        # Verified seller badge (MP connected + at least 1 approved sale)
+        # Verified seller badge
         seller_verified = False
         if seller and getattr(seller, "mp_access_token", None):
             sold = s.execute(
@@ -3750,18 +3644,13 @@ def note_detail(note_id):
             ).scalar_one()
             seller_verified = (sold or 0) >= 1
 
-        # -----------------------------------------------------
-        # 👉 PRECIOS
-        # -----------------------------------------------------
-        # Lo que recibe el vendedor
+        # Precios
         base_price = note.price_cents / 100.0 if note.price_cents else 0.0
-
-        # Precio final al comprador (con comisiones)
         buyer_price = None
         if base_price > 0:
             buyer_price = round(base_price * GROSS_MULTIPLIER, 2)
 
-        # Analytics: vista de apunte (NO usar objetos fuera de la sesión)
+        # Analytics
         try:
             log_analytics_event(
                 event="page_view",
@@ -3773,7 +3662,7 @@ def note_detail(note_id):
         except Exception:
             pass
 
-        # Preview order: show a random subset/order each time (best-effort)
+        # Preview order: random subset each time
         try:
             _imgs = (getattr(note, "preview_images", None) or {}).get("images") or []
             preview_idxs = list(range(1, len(_imgs) + 1))
