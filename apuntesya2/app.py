@@ -1510,8 +1510,20 @@ def _watermark_image(img, text: str = "APUNTESYA"):
     return out.convert("RGB")
 
 
-def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: str | None = None) -> tuple[list[int], list[str]]:
-    """Genera previews con marca de agua y las guarda en R2 (o local si no hay R2)."""
+def generate_note_preview(
+    note: Note,
+    max_pages: int = 4,
+    local_pdf_override: str | None = None
+) -> tuple[list[int], list[str]]:
+    """
+    Generate preview images for a note PDF (with watermark) and store paths.
+
+    ✅ Usa el MISMO storage que tus PDFs: gcs_* (que en tu proyecto es R2 por Account ID).
+    ✅ Ajustable por ENV sin redeploy:
+      - PREVIEW_SCALE (default 1.0)
+      - PREVIEW_JPEG_QUALITY (default 78)
+      - PREVIEW_MAX_PAGES (default 4)
+    """
     import fitz  # PyMuPDF
     from PIL import Image
     from io import BytesIO
@@ -1521,56 +1533,46 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
     local_pdf = None
     doc = None
 
-    # Ajustes por ENV (sin redeploy)
-    scale = float(os.getenv("PREVIEW_SCALE", "1.0"))               # 1.0 recomendado en Render
-    jpeg_quality = int(os.getenv("PREVIEW_JPEG_QUALITY", "78"))    # 70-82
-    env_max_pages = int(os.getenv("PREVIEW_MAX_PAGES", str(max_pages)))
-    max_pages = max(1, min(env_max_pages, 6))  # hard-cap defensivo
+    scale = float(os.getenv("PREVIEW_SCALE", "1.0"))               # 1.0 liviano
+    jpeg_quality = int(os.getenv("PREVIEW_JPEG_QUALITY", "78"))    # 70-82 OK
+    max_pages = int(os.getenv("PREVIEW_MAX_PAGES", str(max_pages)))
 
     try:
-        # 1) Resolver PDF local
+        # Resolver PDF local
         if local_pdf_override:
             local_pdf = local_pdf_override
+        elif gcs_bucket and note.file_path and "/" in (note.file_path or ""):
+            # descarga temporal desde tu bucket (R2)
+            tmp_pdf = gcs_download_to_temp(note.file_path)
+            local_pdf = tmp_pdf
         else:
-            fp = (note.file_path or "").strip()
+            local_pdf = os.path.join(app.config["UPLOAD_FOLDER"], note.file_path)
 
-            # Si R2 está activo, normalmente fp es una key tipo "notes/<seller>/<file>.pdf"
-            if r2_bucket_enabled and fp:
-                tmp_pdf = r2_download_to_temp(fp, suffix=".pdf")
-                local_pdf = tmp_pdf
-            else:
-                local_pdf = os.path.join(app.config["UPLOAD_FOLDER"], fp)
-
-        if not local_pdf or not os.path.exists(local_pdf):
-            return ([], [])
-
-        # 2) Abrir PDF
         doc = fitz.open(local_pdf)
-        total = int(doc.page_count or 0)
+        total = doc.page_count
         if total <= 0:
             return ([], [])
 
-        # 3) Elegir páginas random
+        # Elegir páginas random (evitar portada si hay muchas)
         candidates = list(range(total))
         if total > 6:
-            candidates = list(range(2, total))  # saltea 2 primeras si hay suficientes
+            candidates = list(range(2, total))
         random.shuffle(candidates)
 
-        pages: list[int] = []
+        pages = []
         for p in candidates:
             pages.append(p)
             if len(pages) >= max_pages:
                 break
         pages = sorted(pages)[:max_pages]
 
-        # 4) Render + watermark + guardar
         image_paths: list[str] = []
         mat = fitz.Matrix(scale, scale)
 
         for idx, pno in enumerate(pages, start=1):
             page = doc.load_page(pno)
 
-            # RAM heavy -> scale bajo
+            # Pixmap (lo pesado) -> escala baja por default
             pix = page.get_pixmap(matrix=mat, alpha=False)
 
             img = Image.open(BytesIO(pix.tobytes("png")))
@@ -1580,10 +1582,11 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
             img.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
             data = buf.getvalue()
 
-            if r2_bucket_enabled:
-                key = f"previews/{note.id}/{idx}.jpg"
-                r2_upload_bytes(data, key, content_type="image/jpeg")
-                image_paths.append(key)
+            # ✅ Subir previews al MISMO bucket (R2) que ya usás
+            if gcs_bucket:
+                blob_name = f"previews/{note.id}/{idx}.jpg"
+                gcs_upload_bytes(data, blob_name, content_type="image/jpeg")
+                image_paths.append(blob_name)
             else:
                 prev_dir = os.path.join(app.config["UPLOAD_FOLDER"], "previews", str(note.id))
                 os.makedirs(prev_dir, exist_ok=True)
@@ -1595,14 +1598,11 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
         return (pages, image_paths)
 
     finally:
-        # Cerrar PDF
         try:
             if doc is not None:
                 doc.close()
         except Exception:
             pass
-
-        # Borrar temp descargado desde R2
         try:
             if tmp_pdf and os.path.exists(tmp_pdf):
                 os.remove(tmp_pdf)
@@ -3477,12 +3477,18 @@ def upload_note():
             return redirect(url_for("upload_note"))
 
         price = request.form.get("price", "").strip()
-        price_cents = int(round(float(price) * 100)) if price else 0
+        try:
+            price_cents = int(round(float(price) * 100)) if price else 0
+        except Exception:
+            flash("Precio inválido.", "warning")
+            return redirect(url_for("upload_note"))
 
+        # Moderation acknowledgement (required)
         if request.form.get("moderation_ack") != "1":
             flash("Antes de publicar, tenés que aceptar la leyenda de moderación (IA + posible revisión manual hasta 12hs).", "warning")
             return redirect(url_for("upload_note"))
 
+        # Paid notes require Mercado Pago linked
         if price_cents > 0 and not getattr(current_user, "mp_access_token", None):
             flash("Para publicar apuntes pagos tenés que vincular tu cuenta de Mercado Pago primero.", "warning")
             return redirect(url_for("profile"))
@@ -3495,7 +3501,7 @@ def upload_note():
             flash("Sólo PDF.")
             return redirect(url_for("upload_note"))
 
-        # Tamaño máximo
+        # Enforce max file size (defense-in-depth)
         try:
             file.stream.seek(0, os.SEEK_END)
             size = int(file.stream.tell() or 0)
@@ -3514,7 +3520,7 @@ def upload_note():
         local_pdf_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
         file.save(local_pdf_path)
 
-        # Validación PDF best-effort
+        # Security: validate PDF (best-effort)
         try:
             ok, msg = _validate_uploaded_pdf(local_pdf_path, max_pages=int(os.getenv("MAX_PDF_PAGES", "1200")))
             if not ok:
@@ -3527,15 +3533,13 @@ def upload_note():
         except Exception:
             pass
 
-        # Subir PDF al bucket
+        # ✅ Subimos PDF al MISMO storage que ya usás (gcs_* = tu R2 por Account ID)
         if gcs_bucket:
             blob_name = f"notes/{current_user.id}/{unique_name}"
             gcs_upload_path(local_pdf_path, blob_name, content_type="application/pdf")
             stored_path = blob_name
         else:
             stored_path = unique_name
-
-        note_id = None
 
         with Session() as s:
             note = Note(
@@ -3544,26 +3548,19 @@ def upload_note():
                 university=university,
                 faculty=faculty,
                 career=career,
-                price_cents=price_cents,
-                seller_net_cents=price_cents,
+                price_cents=price_cents,       # legacy
+                seller_net_cents=price_cents,  # canonical
                 file_path=stored_path,
                 seller_id=current_user.id
             )
 
+            # Publicación inmediata y luego moderación best-effort
             note.moderation_status = "auto_published"
-
-            # Importante: dejamos vacíos los previews (se generan manual en /note)
-            try:
-                note.preview_pages = {"pages": []}
-                note.preview_images = {"images": []}
-            except Exception:
-                pass
 
             s.add(note)
             s.commit()
-            note_id = int(note.id)
 
-            # auditoría
+            # Auditoría
             try:
                 log_audit_event(
                     actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
@@ -3584,9 +3581,23 @@ def upload_note():
             except Exception:
                 pass
 
-            # AI moderation (best-effort) — podés dejarlo
+            # ✅ IMPORTANTÍSIMO: NO generar preview acá (evita OOM/502)
+            # (Si algún día querés, habilitás con PREVIEW_ON_UPLOAD=1)
+            if os.getenv("PREVIEW_ON_UPLOAD", "0") == "1":
+                try:
+                    pages, imgs = generate_note_preview(note, local_pdf_override=local_pdf_path)
+                    note.preview_pages = {"pages": pages}
+                    note.preview_images = {"images": imgs}
+                    s.commit()
+                except Exception as e:
+                    try:
+                        app.logger.warning(f"preview generation failed (upload): {e}")
+                    except Exception:
+                        pass
+
+            # Moderación IA (best-effort)
             try:
-                text_sample = _extract_text_for_moderation(note)  # asegurate que esto NO extraiga 500 páginas
+                text_sample = _extract_text_for_moderation(note)
                 meta = {
                     "title": title,
                     "description": description,
@@ -3609,6 +3620,7 @@ def upload_note():
                         return int(round(float(x) * 1000))
                     except Exception:
                         return None
+
                 note.ai_confidence = _to_i(ai.get("confidence"))
                 note.ai_score_quality = _to_i(ai.get("quality_score"))
                 note.ai_score_copyright = _to_i(ai.get("copyright_risk"))
@@ -3616,22 +3628,91 @@ def upload_note():
 
                 note.moderation_status = status
                 note.moderation_reason = reason
+
+                # Notifications (igual que ya tenías)
+                admin_ids = [u.id for u in s.execute(select(User).where(User.is_admin == True)).scalars().all()]
+
+                if status in ("auto_published", "approved"):
+                    notify_and_email_users(
+                        s,
+                        [current_user.id],
+                        kind="note_published",
+                        title="Apunte publicado",
+                        body="Tu apunte ya está publicado 🎉",
+                        email_subject="Tu apunte ya está publicado",
+                        email_body="Tu apunte ya está publicado.",
+                        dedupe_key_prefix=f"note:{note.id}:published"
+                    )
+                elif status == "published_flagged":
+                    notify_and_email_users(
+                        s,
+                        [current_user.id],
+                        kind="note_published_flagged",
+                        title="Apunte publicado",
+                        body="Tu apunte ya está publicado. Puede ser revisado de forma aleatoria.",
+                        email_subject="Tu apunte ya está publicado",
+                        email_body="Tu apunte ya está publicado. Puede ser revisado de forma aleatoria.",
+                        dedupe_key_prefix=f"note:{note.id}:flagged"
+                    )
+                elif status in ("blocked_review", "pending_manual"):
+                    note.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
+                    notify_and_email_users(
+                        s,
+                        [current_user.id],
+                        kind="note_manual_review",
+                        title="Apunte en revisión",
+                        body="Tu apunte quedó en revisión. Puede demorar hasta 12hs.",
+                        email_subject="Tu apunte está en revisión",
+                        email_body="Tu apunte quedó en revisión. Puede demorar hasta 12hs.",
+                        dedupe_key_prefix=f"note:{note.id}:manual"
+                    )
+                    notify_and_email_users(
+                        s,
+                        admin_ids,
+                        kind="manual_review_admin",
+                        title="Revisión requerida",
+                        body=f"Hay un apunte para revisar: #{note.id} — {note.title}",
+                        email_subject="Apunte para revisar",
+                        email_body=f"Hay un apunte para revisar: #{note.id} — {note.title}",
+                        dedupe_key_prefix=f"note:{note.id}:admin_manual"
+                    )
+
                 s.commit()
             except Exception as e:
-                app.logger.warning(f"ai moderation failed: {e}")
+                try:
+                    app.logger.warning(f"ai moderation failed: {e}")
+                except Exception:
+                    pass
 
-        flash("Apunte subido. Ya está publicado 🎉 (La preview se genera desde el detalle).")
+        # UX message
+        msg = "Apunte subido."
+        try:
+            if note.moderation_status in ("auto_published", "approved"):
+                msg += " Ya está publicado 🎉"
+            elif note.moderation_status == "published_flagged":
+                msg += " Ya está publicado. Puede ser revisado de forma aleatoria."
+            elif note.moderation_status in ("blocked_review", "pending_manual"):
+                msg += " Quedó en revisión (puede demorar hasta 12hs)."
+            elif note.moderation_status == "rejected":
+                msg += " Fue rechazado. Revisá el motivo en tu perfil."
+            else:
+                msg += " Quedó pendiente de revisión."
+        except Exception:
+            pass
 
-        # Cleanup local si hay bucket
+        flash(msg)
+
+        # Cleanup local PDF (si subimos a bucket)
         try:
             if gcs_bucket and local_pdf_path and os.path.exists(local_pdf_path):
                 os.remove(local_pdf_path)
         except Exception:
             pass
 
-        return redirect(url_for("note_detail", note_id=note_id))
+        return redirect(url_for("note_detail", note_id=note.id))
 
     return render_template("upload.html")
+
 
 
 @app.route("/note/<int:note_id>")
@@ -3651,7 +3732,7 @@ def note_detail(note_id):
             if current_user.id != note.seller_id and not getattr(current_user, "is_admin", False):
                 abort(404)
 
-        # Archived visibility
+        # Archived visibility (igual)
         if bool(getattr(note, "is_archived", False)):
             is_admin = bool(current_user.is_authenticated and getattr(current_user, "is_admin", False))
             is_owner = bool(current_user.is_authenticated and current_user.id == note.seller_id)
@@ -3694,9 +3775,7 @@ def note_detail(note_id):
                 ).scalar_one_or_none()
                 can_download = p is not None
 
-        # ---------------------------------------------------------
-        # 🔒 Preview: SOLO dueño/admin puede generarla manualmente
-        # ---------------------------------------------------------
+        # Preview meta
         try:
             imgs_meta = (getattr(note, "preview_images", None) or {})
             imgs = (imgs_meta.get("images") or []) if isinstance(imgs_meta, dict) else []
@@ -3707,20 +3786,15 @@ def note_detail(note_id):
         is_admin = bool(current_user.is_authenticated and getattr(current_user, "is_admin", False))
         can_generate_preview = bool(is_owner or is_admin)
 
-        preview_generated_now = False
+        # ✅ Generación manual (ENGRANAJE)
         if gen_preview and can_generate_preview:
             try:
-                pages, new_imgs = generate_note_preview(
-                    note,
-                    max_pages=int(os.getenv("PREVIEW_MAX_PAGES", "4"))
-                )
+                pages, new_imgs = generate_note_preview(note, max_pages=int(os.getenv("PREVIEW_MAX_PAGES", "4")))
                 if new_imgs:
                     note.preview_pages = {"pages": pages}
                     note.preview_images = {"images": new_imgs}
                     s.commit()
-
                     imgs = new_imgs
-                    preview_generated_now = True
                     flash("Preview generada ✅", "success")
                 else:
                     flash("No se pudo generar la preview (PDF vacío o inválido).", "warning")
@@ -3731,10 +3805,6 @@ def note_detail(note_id):
                     pass
                 flash("Falló la preview (memoria/archivo). Probá con menos páginas o bajando escala.", "warning")
 
-        # ✅ Evita regenerar si refrescan: sacamos el gen_preview de la URL
-        if preview_generated_now:
-            return redirect(url_for("note_detail", note_id=note.id, paid=paid_param))
-
         # Analytics best-effort
         try:
             uid = int(current_user.id) if getattr(current_user, "is_authenticated", False) else None
@@ -3744,9 +3814,7 @@ def note_detail(note_id):
 
         # Downloads metric
         try:
-            dl = s.execute(
-                select(func.count(DownloadLog.id)).where(DownloadLog.note_id == note.id)
-            ).scalar_one()
+            dl = s.execute(select(func.count(DownloadLog.id)).where(DownloadLog.note_id == note.id)).scalar_one()
             note.download_count = int(dl or 0)
         except Exception:
             pass
@@ -3778,16 +3846,13 @@ def note_detail(note_id):
 
             if has_purchase:
                 already_reviewed = s.execute(
-                    select(Review).where(
-                        Review.note_id == note.id,
-                        Review.buyer_id == current_user.id
-                    )
+                    select(Review).where(Review.note_id == note.id, Review.buyer_id == current_user.id)
                 ).scalar_one_or_none() is not None
                 can_review = not already_reviewed
 
         seller = s.get(User, note.seller_id) if note.seller_id else None
 
-        # Seller contacts
+        # Seller contacts (igual)
         seller_contacts = []
         if seller:
             if getattr(seller, "seller_contact", None):
@@ -3829,9 +3894,10 @@ def note_detail(note_id):
         base_price = note.price_cents / 100.0 if note.price_cents else 0.0
         buyer_price = round(base_price * GROSS_MULTIPLIER, 2) if base_price > 0 else None
 
-        # ✅ Preview order: usar imgs (no volver a leer desde note.preview_images)
+        # Preview order
         try:
-            preview_idxs = list(range(1, len(imgs) + 1))
+            _imgs = (getattr(note, "preview_images", None) or {}).get("images") or []
+            preview_idxs = list(range(1, len(_imgs) + 1))
             random.shuffle(preview_idxs)
             preview_idxs = preview_idxs[:min(4, len(preview_idxs))]
         except Exception:
@@ -3855,6 +3921,7 @@ def note_detail(note_id):
             can_generate_preview=can_generate_preview,
             preview_has_images=bool(imgs),
         )
+
 
 
 @app.route("/seller/<int:seller_id>")
@@ -3948,25 +4015,29 @@ def note_preview_image(note_id: int, idx: int):
         if not note or not note.is_active:
             abort(404)
 
+        # Public viewers can access previews for public notes
         status = getattr(note, "moderation_status", "approved")
-
-        is_owner = bool(current_user.is_authenticated and current_user.id == note.seller_id)
-        is_admin = bool(current_user.is_authenticated and getattr(current_user, "is_admin", False))
-
         if not is_public_moderation_status(status):
-            if not (is_owner or is_admin):
+            allowed = False
+            try:
+                if current_user.is_authenticated and (
+                    current_user.id == note.seller_id or getattr(current_user, "is_admin", False)
+                ):
+                    allowed = True
+            except Exception:
+                allowed = False
+            if not allowed:
                 abort(404)
 
         meta = getattr(note, "preview_images", None) or {}
-        imgs = (meta.get("images") or []) if isinstance(meta, dict) else []
+        imgs = (meta or {}).get("images") or []
         if idx < 1 or idx > len(imgs):
             abort(404)
+        path = imgs[idx - 1]
 
-        key_or_path = imgs[idx - 1]
-
-        # R2
-        if r2_bucket_enabled and key_or_path:
-            data = r2_download_bytes(key_or_path)
+        # ✅ Bucket (tu R2 real vía gcs_*)
+        if gcs_bucket and path and "/" in path:
+            data = gcs_download_bytes(path)
             return send_file(
                 BytesIO(data),
                 mimetype="image/jpeg",
@@ -3975,11 +4046,13 @@ def note_preview_image(note_id: int, idx: int):
                 max_age=60 * 5,
             )
 
-        # Local fallback
-        fpath = os.path.join(app.config["UPLOAD_FOLDER"], key_or_path)
+        # local fallback
+        fpath = os.path.join(app.config["UPLOAD_FOLDER"], path)
         if not os.path.exists(fpath):
             abort(404)
-        return send_file(fpath, mimetype="image/jpeg", as_attachment=False, max_age=60 * 5)
+        return send_file(fpath, mimetype="image/jpeg", as_attachment=False)
+
+
 
 
 
