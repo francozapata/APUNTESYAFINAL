@@ -5781,6 +5781,162 @@ def admin_reset_platform():
     flash("Reset realizado. Se borró el histórico (se mantuvieron superadmins).", "success")
     return redirect(url_for("admin_tools"))
 
+
+def _reset_db_complete(session):
+    """Reset completo de DB (mantiene superadmins).
+
+    Nota: trabajamos a nivel SQL para ser tolerantes a diferencias entre
+    entornos (SQLite vs Postgres) y a tablas que puedan no existir.
+    """
+    from sqlalchemy import text as sqltext
+
+    # Orden: primero tablas dependientes/child, luego parent.
+    tables_to_clear = [
+        "legal_acceptance_audit",
+        "otps",
+        "reviews",
+        "download_logs",
+        "combo_purchases",
+        "purchases",
+        "notifications",
+        "webhook_events",
+        "analytics_events",
+        "stats_daily",
+        "admin_actions",
+        "audit_events",
+        "combo_notes",
+        "combos",
+        "notes",
+        # Academic taxonomy
+        "careers",
+        "faculties",
+        "universities",
+    ]
+
+    cleared = []
+    for t in tables_to_clear:
+        try:
+            session.execute(sqltext(f"DELETE FROM {t}"))
+            cleared.append(t)
+        except Exception:
+            session.rollback()
+
+    # borrar usuarios NO superadmin
+    try:
+        session.execute(sqltext("DELETE FROM users WHERE COALESCE(role,'user') <> 'superadmin'"))
+        cleared.append("users(non-superadmin)")
+    except Exception:
+        session.rollback()
+
+    # asegurar flags correctos para superadmins
+    try:
+        session.execute(sqltext("UPDATE users SET is_admin = TRUE WHERE COALESCE(role,'user') = 'superadmin'"))
+    except Exception:
+        session.rollback()
+
+    return cleared
+
+
+def _r2_delete_prefixes(prefixes):
+    """Delete objects in R2 under the given prefixes.
+
+    Returns dict with counts and deleted keys.
+    """
+    if not gcs_client or not gcs_bucket:
+        raise RuntimeError("R2 no está configurado")
+
+    deleted_total = 0
+    per_prefix = {}
+
+    for prefix in prefixes:
+        prefix_deleted = 0
+        token = None
+        while True:
+            kwargs = {"Bucket": gcs_bucket, "Prefix": prefix, "MaxKeys": 1000}
+            if token:
+                kwargs["ContinuationToken"] = token
+            resp = gcs_client.list_objects_v2(**kwargs)
+            contents = resp.get("Contents") or []
+            if contents:
+                # delete in batches (up to 1000)
+                objs = [{"Key": obj["Key"]} for obj in contents if obj.get("Key")]
+                if objs:
+                    gcs_client.delete_objects(Bucket=gcs_bucket, Delete={"Objects": objs, "Quiet": True})
+                    prefix_deleted += len(objs)
+            if resp.get("IsTruncated"):
+                token = resp.get("NextContinuationToken")
+                continue
+            break
+
+        per_prefix[prefix] = prefix_deleted
+        deleted_total += prefix_deleted
+
+    return {"deleted_total": deleted_total, "per_prefix": per_prefix}
+
+
+@app.post("/admin/reset-db")
+@login_required
+@superadmin_required
+def admin_reset_db():
+    """Reset DB completo (seguro): borra datos en DB, mantiene superadmins."""
+    confirm = (request.form.get("confirm") or "").strip().upper()
+    ack = (request.form.get("ack") or "").strip()
+    if confirm != "RESET_DB" or ack != "1":
+        flash("Para confirmar, escribí RESET_DB y marcá el checkbox.", "danger")
+        return redirect(url_for("admin_tools"))
+
+    cleared = []
+    with Session() as s:
+        cleared = _reset_db_complete(s)
+        s.commit()
+
+    _audit("reset_db_complete", target_type="site", target_id=None, meta={"cleared": cleared})
+    flash("Reset DB completo realizado (superadmins conservados).", "success")
+    return redirect(url_for("admin_tools"))
+
+
+@app.post("/admin/reset-total")
+@login_required
+@superadmin_required
+def admin_reset_total():
+    """Reset TOTAL: DB completo + borrado de archivos en R2 (prefijos controlados)."""
+    confirm = (request.form.get("confirm") or "").strip().upper()
+    ack = (request.form.get("ack") or "").strip()
+    if confirm != "RESET_TOTAL" or ack != "1":
+        flash("Para confirmar, escribí RESET_TOTAL y marcá el checkbox.", "danger")
+        return redirect(url_for("admin_tools"))
+
+    cleared = []
+    r2_result = None
+    with Session() as s:
+        cleared = _reset_db_complete(s)
+        s.commit()
+
+    # Borrado en R2 (prefijos seguros)
+    try:
+        r2_result = _r2_delete_prefixes(["notes/", "previews/"])
+    except Exception as e:
+        _audit(
+            "reset_total_r2_failed",
+            target_type="site",
+            target_id=None,
+            meta={"cleared": cleared, "r2_error": str(e)},
+        )
+        flash(f"Reset DB hecho, pero falló el borrado en R2: {e}", "warning")
+        return redirect(url_for("admin_tools"))
+
+    _audit(
+        "reset_total",
+        target_type="site",
+        target_id=None,
+        meta={"cleared": cleared, "r2": r2_result},
+    )
+    flash(
+        f"Reset TOTAL realizado. R2 borrado: {r2_result.get('deleted_total', 0)} objetos.",
+        "success",
+    )
+    return redirect(url_for("admin_tools"))
+
 # Admin HUB - usuarios
 @app.route("/admin/api/users", methods=["GET", "POST"], endpoint="admin_api_users_list")
 @login_required

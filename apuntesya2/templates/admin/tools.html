@@ -89,20 +89,67 @@
   </div>
 </div>
 <div class="panel" style="margin-top:12px;border-color:#fee2e2;background:#fff1f2;">
-      <h3 style="margin:0 0 8px;font-size:14px;font-weight:900;color:#7f1d1d">🔥 Reset de plataforma</h3>
-      <p class="muted" style="margin:0 0 10px;color:#7f1d1d;">Borra histórico (compras, descargas, eventos, estadísticas, apuntes/combos, usuarios normales). <b>No elimina superadmins</b>.</p>
+  <h3 style="margin:0 0 8px;font-size:14px;font-weight:900;color:#7f1d1d">🔥 Reset de plataforma</h3>
+  <p class="muted" style="margin:0 0 10px;color:#7f1d1d;">Acciones extremadamente sensibles. <b>Solo superadmins</b>. Todo queda en auditoría.</p>
 
-      <form method="post" action="{{ url_for('admin_reset_platform') }}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div style="flex:1;min-width:240px;">
-          <label class="muted" style="display:block;margin-bottom:6px;color:#7f1d1d;">Escribí <b>RESET</b> para confirmar</label>
-          <input class="inp" name="confirm" placeholder="RESET" autocomplete="off" />
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div style="border:1px solid #fecaca;background:#fff;border-radius:16px;padding:12px;">
+      <h4 style="margin:0 0 6px;font-size:13px;font-weight:900;color:#7f1d1d">🗃️ RESET DB COMPLETO (Seguro)</h4>
+      <div class="muted" style="color:#7f1d1d;margin:0 0 8px;line-height:1.35;">
+        <b>Se borra en la base de datos:</b>
+        <ul style="margin:6px 0 0 16px;">
+          <li>Usuarios <i>no</i> superadmin</li>
+          <li>Apuntes, combos y relación combo↔apuntes</li>
+          <li>Compras, descargas, reviews</li>
+          <li>Eventos/estadísticas (analytics, stats_daily)</li>
+          <li>Notificaciones, webhooks</li>
+          <li>Auditoría/acciones admin (audit_events, admin_actions)</li>
+          <li>Historial de aceptaciones legales (legal_acceptance_audit)</li>
+          <li>Taxonomía académica (universities/faculties/careers)</li>
+          <li>OTPs (otps)</li>
+        </ul>
+        <div style="margin-top:8px;"><b>NO</b> borra archivos en R2.</div>
+      </div>
+
+      <form method="post" action="{{ url_for('admin_reset_db') }}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div style="flex:1;min-width:220px;">
+          <label class="muted" style="display:block;margin-bottom:6px;color:#7f1d1d;">Escribí <b>RESET_DB</b> para confirmar</label>
+          <input class="inp" name="confirm" placeholder="RESET_DB" autocomplete="off" />
         </div>
-        <button class="btn danger" type="submit">Ejecutar reset</button>
+        <label class="muted" style="display:flex;gap:8px;align-items:center;margin-bottom:6px;color:#7f1d1d;">
+          <input type="checkbox" name="ack" value="1"> Entiendo que se borra la DB
+        </label>
+        <button class="btn danger" type="submit">Reset DB</button>
       </form>
-
-      <div class="muted" style="margin-top:10px;color:#7f1d1d;">Tip: si estás por lanzar de nuevo, podés resetear para arrancar “limpio”.</div>
     </div>
+
+    <div style="border:1px solid #fb7185;background:#fff;border-radius:16px;padding:12px;">
+      <h4 style="margin:0 0 6px;font-size:13px;font-weight:900;color:#9f1239">☠️ RESET TOTAL (DB + R2)</h4>
+      <div class="muted" style="color:#9f1239;margin:0 0 8px;line-height:1.35;">
+        <b>Se borra TODO lo del reset DB</b> y además:
+        <ul style="margin:6px 0 0 16px;">
+          <li>Archivos en R2 bajo prefijos: <code>notes/</code> y <code>previews/</code></li>
+        </ul>
+        <div style="margin-top:8px;">⚠️ Peligroso: esto elimina PDFs/previews del bucket.</div>
+      </div>
+
+      <form method="post" action="{{ url_for('admin_reset_total') }}" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div style="flex:1;min-width:220px;">
+          <label class="muted" style="display:block;margin-bottom:6px;color:#9f1239;">Escribí <b>RESET_TOTAL</b> para confirmar</label>
+          <input class="inp" name="confirm" placeholder="RESET_TOTAL" autocomplete="off" />
+        </div>
+        <label class="muted" style="display:flex;gap:8px;align-items:center;margin-bottom:6px;color:#9f1239;">
+          <input type="checkbox" name="ack" value="1"> Entiendo que se borra R2
+        </label>
+        <button class="btn danger" type="submit">Reset TOTAL</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="muted" style="margin-top:10px;color:#7f1d1d;">Tip: usá Reset DB para testear rápido sin tocar el bucket. Usá Reset Total solo si querés borrar también los archivos.</div>
+</div>
 
   </div>
 </div>
