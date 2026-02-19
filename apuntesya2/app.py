@@ -10,6 +10,8 @@ import re
 import warnings
 import smtplib
 import ssl
+import threading
+
 from email.message import EmailMessage
 from datetime import datetime, timedelta, timedelta
 from urllib.parse import urlencode, urlparse
@@ -1606,6 +1608,114 @@ def generate_note_preview(
         try:
             if tmp_pdf and os.path.exists(tmp_pdf):
                 os.remove(tmp_pdf)
+        except Exception:
+            pass
+
+import threading
+import time
+
+def enqueue_preview_generation(note_id: int):
+    """
+    Opción 1: genera previews en background para evitar 502/OOM en el request.
+    - Usa una NUEVA Session dentro del thread.
+    - No depende del archivo local (si tenés R2/gcs_bucket, generate_note_preview descarga temp).
+    """
+    # Si querés poder apagarlo sin redeploy:
+    if os.getenv("PREVIEW_BG_ON_UPLOAD", "1") != "1":
+        return
+
+    def _worker(nid: int):
+        try:
+            # (Opcional) pequeña pausa para liberar el request / IO
+            time.sleep(float(os.getenv("PREVIEW_BG_DELAY_SEC", "0.2")))
+        except Exception:
+            pass
+
+        try:
+            # En Flask, para loggers/config en threads a veces conviene app_context
+            with app.app_context():
+                with Session() as s:
+                    note = s.get(Note, int(nid))
+                    if not note or not getattr(note, "is_active", True):
+                        return
+
+                    # Si ya tiene previews, no regenerar
+                    try:
+                        meta = getattr(note, "preview_images", None) or {}
+                        imgs = meta.get("images") or []
+                        if imgs:
+                            return
+                    except Exception:
+                        pass
+
+                    try:
+                        pages, imgs = generate_note_preview(
+                            note,
+                            max_pages=int(os.getenv("PREVIEW_MAX_PAGES", "4")),
+                            local_pdf_override=None,  # <- clave: que use R2/temp
+                        )
+                        if imgs:
+                            note.preview_pages = {"pages": pages}
+                            note.preview_images = {"images": imgs}
+                            s.commit()
+                    except Exception as e:
+                        try:
+                            app.logger.warning(f"[preview-bg] failed for note_id={nid}: {e}")
+                        except Exception:
+                            pass
+
+        except Exception as e:
+            try:
+                app.logger.warning(f"[preview-bg] thread crashed note_id={nid}: {e}")
+            except Exception:
+                pass
+
+    try:
+        t = threading.Thread(target=_worker, args=(int(note_id),), daemon=True)
+        t.start()
+    except Exception:
+        # nunca romper el upload por esto
+        pass
+
+
+def _generate_preview_background(note_id: int, local_pdf_path: str | None = None):
+    """Genera preview en background (best-effort). No debe romper nada si falla."""
+    try:
+        with Session() as s:
+            note = s.get(Note, int(note_id))
+            if not note or not getattr(note, "is_active", False):
+                return
+
+            # Si ya tiene previews, no hacemos nada
+            try:
+                meta = getattr(note, "preview_images", None) or {}
+                imgs = (meta.get("images") or []) if isinstance(meta, dict) else []
+                if imgs:
+                    return
+            except Exception:
+                pass
+
+            # Generar (usamos local_pdf_override si lo tenés, ayuda mucho)
+            pages, new_imgs = generate_note_preview(
+                note,
+                max_pages=int(os.getenv("PREVIEW_MAX_PAGES", "4")),
+                local_pdf_override=local_pdf_path,
+            )
+            if new_imgs:
+                note.preview_pages = {"pages": pages}
+                note.preview_images = {"images": new_imgs}
+                s.commit()
+
+    except Exception as e:
+        try:
+            app.logger.warning(f"bg preview failed note_id={note_id}: {e}")
+        except Exception:
+            pass
+    finally:
+        # Si pasaste el pdf local, lo podés borrar acá (opcional)
+        try:
+            if local_pdf_path and os.path.exists(local_pdf_path):
+                os.remove(local_pdf_path)
         except Exception:
             pass
 
@@ -3459,12 +3569,16 @@ def _get_preview_queue():
 @login_required
 def upload_note():
     if request.method == "POST":
-        title = request.form["title"].strip()
-        description = request.form["description"].strip()
+        title = (request.form.get("title") or "").strip()
+        description = (request.form.get("description") or "").strip()
 
         university = (request.form.get("university") or "").strip()
         faculty = (request.form.get("faculty") or "").strip()
         career = (request.form.get("career") or "").strip()
+
+        if not title:
+            flash("Ingresá un título.", "warning")
+            return redirect(url_for("upload_note"))
 
         if not university:
             flash("Seleccioná tu Universidad.", "warning")
@@ -3476,9 +3590,11 @@ def upload_note():
             flash("Seleccioná tu Carrera.", "warning")
             return redirect(url_for("upload_note"))
 
-        price = request.form.get("price", "").strip()
+        price = (request.form.get("price") or "").strip()
         try:
             price_cents = int(round(float(price) * 100)) if price else 0
+            if price_cents < 0:
+                raise ValueError("negative")
         except Exception:
             flash("Precio inválido.", "warning")
             return redirect(url_for("upload_note"))
@@ -3495,10 +3611,10 @@ def upload_note():
 
         file = request.files.get("file")
         if not file or file.filename == "":
-            flash("Seleccioná un PDF.")
+            flash("Seleccioná un PDF.", "warning")
             return redirect(url_for("upload_note"))
         if not allowed_pdf(file.filename):
-            flash("Sólo PDF.")
+            flash("Sólo PDF.", "warning")
             return redirect(url_for("upload_note"))
 
         # Enforce max file size (defense-in-depth)
@@ -3516,6 +3632,7 @@ def upload_note():
         base_name = secure_filename(file.filename)
         unique_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{base_name}"
 
+        # Guardamos temporal local
         ensure_dirs()
         local_pdf_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
         file.save(local_pdf_path)
@@ -3531,15 +3648,28 @@ def upload_note():
                 flash(msg or "PDF inválido.", "danger")
                 return redirect(url_for("upload_note"))
         except Exception:
+            # best-effort: si falla inesperado, no bloqueamos
             pass
 
-        # ✅ Subimos PDF al MISMO storage que ya usás (gcs_* = tu R2 por Account ID)
+        # Subimos PDF a R2 (tu gcs_bucket)
         if gcs_bucket:
             blob_name = f"notes/{current_user.id}/{unique_name}"
-            gcs_upload_path(local_pdf_path, blob_name, content_type="application/pdf")
+            try:
+                gcs_upload_path(local_pdf_path, blob_name, content_type="application/pdf")
+            except Exception as e:
+                # Si falla el upload al storage, frenamos acá (si no, queda inconsistente)
+                try:
+                    app.logger.warning(f"storage upload failed: {e}")
+                except Exception:
+                    pass
+                flash("Error subiendo el PDF al almacenamiento. Probá de nuevo.", "danger")
+                return redirect(url_for("upload_note"))
             stored_path = blob_name
         else:
             stored_path = unique_name
+
+        note_id = None
+        moderation_status_for_msg = "auto_published"
 
         with Session() as s:
             note = Note(
@@ -3554,11 +3684,11 @@ def upload_note():
                 seller_id=current_user.id
             )
 
-            # Publicación inmediata y luego moderación best-effort
             note.moderation_status = "auto_published"
-
             s.add(note)
             s.commit()
+
+            note_id = int(note.id)
 
             # Auditoría
             try:
@@ -3566,9 +3696,9 @@ def upload_note():
                     actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
                     action="note_uploaded",
                     target_type="note",
-                    target_id=int(note.id),
+                    target_id=int(note_id),
                     meta={
-                        "note_id": int(note.id),
+                        "note_id": int(note_id),
                         "title": title,
                         "seller_id": int(getattr(current_user, "id", 0) or 0) or None,
                         "seller_email": getattr(current_user, "email", None),
@@ -3581,19 +3711,11 @@ def upload_note():
             except Exception:
                 pass
 
-            # ✅ IMPORTANTÍSIMO: NO generar preview acá (evita OOM/502)
-            # (Si algún día querés, habilitás con PREVIEW_ON_UPLOAD=1)
-            if os.getenv("PREVIEW_ON_UPLOAD", "0") == "1":
-                try:
-                    pages, imgs = generate_note_preview(note, local_pdf_override=local_pdf_path)
-                    note.preview_pages = {"pages": pages}
-                    note.preview_images = {"images": imgs}
-                    s.commit()
-                except Exception as e:
-                    try:
-                        app.logger.warning(f"preview generation failed (upload): {e}")
-                    except Exception:
-                        pass
+            # ✅ Opción 1: PREVIEW EN BACKGROUND (NO en el request)
+            try:
+                enqueue_preview_generation(note_id)
+            except Exception:
+                pass
 
             # Moderación IA (best-effort)
             try:
@@ -3629,87 +3751,84 @@ def upload_note():
                 note.moderation_status = status
                 note.moderation_reason = reason
 
-                # Notifications (igual que ya tenías)
+                # Notifications (tu lógica)
                 admin_ids = [u.id for u in s.execute(select(User).where(User.is_admin == True)).scalars().all()]
 
                 if status in ("auto_published", "approved"):
                     notify_and_email_users(
-                        s,
-                        [current_user.id],
+                        s, [current_user.id],
                         kind="note_published",
                         title="Apunte publicado",
                         body="Tu apunte ya está publicado 🎉",
                         email_subject="Tu apunte ya está publicado",
                         email_body="Tu apunte ya está publicado.",
-                        dedupe_key_prefix=f"note:{note.id}:published"
+                        dedupe_key_prefix=f"note:{note_id}:published"
                     )
                 elif status == "published_flagged":
                     notify_and_email_users(
-                        s,
-                        [current_user.id],
+                        s, [current_user.id],
                         kind="note_published_flagged",
                         title="Apunte publicado",
                         body="Tu apunte ya está publicado. Puede ser revisado de forma aleatoria.",
                         email_subject="Tu apunte ya está publicado",
                         email_body="Tu apunte ya está publicado. Puede ser revisado de forma aleatoria.",
-                        dedupe_key_prefix=f"note:{note.id}:flagged"
+                        dedupe_key_prefix=f"note:{note_id}:flagged"
                     )
                 elif status in ("blocked_review", "pending_manual"):
                     note.manual_review_due_at = datetime.utcnow() + timedelta(hours=12)
                     notify_and_email_users(
-                        s,
-                        [current_user.id],
+                        s, [current_user.id],
                         kind="note_manual_review",
                         title="Apunte en revisión",
                         body="Tu apunte quedó en revisión. Puede demorar hasta 12hs.",
                         email_subject="Tu apunte está en revisión",
                         email_body="Tu apunte quedó en revisión. Puede demorar hasta 12hs.",
-                        dedupe_key_prefix=f"note:{note.id}:manual"
+                        dedupe_key_prefix=f"note:{note_id}:manual"
                     )
                     notify_and_email_users(
-                        s,
-                        admin_ids,
+                        s, admin_ids,
                         kind="manual_review_admin",
                         title="Revisión requerida",
-                        body=f"Hay un apunte para revisar: #{note.id} — {note.title}",
+                        body=f"Hay un apunte para revisar: #{note_id} — {note.title}",
                         email_subject="Apunte para revisar",
-                        email_body=f"Hay un apunte para revisar: #{note.id} — {note.title}",
-                        dedupe_key_prefix=f"note:{note.id}:admin_manual"
+                        email_body=f"Hay un apunte para revisar: #{note_id} — {note.title}",
+                        dedupe_key_prefix=f"note:{note_id}:admin_manual"
                     )
 
                 s.commit()
+                moderation_status_for_msg = status
+
             except Exception as e:
                 try:
                     app.logger.warning(f"ai moderation failed: {e}")
                 except Exception:
                     pass
 
-        # UX message
+        # Mensaje UX (usar variables locales, no el objeto note “detached”)
         msg = "Apunte subido."
         try:
-            if note.moderation_status in ("auto_published", "approved"):
+            if moderation_status_for_msg in ("auto_published", "approved"):
                 msg += " Ya está publicado 🎉"
-            elif note.moderation_status == "published_flagged":
+            elif moderation_status_for_msg == "published_flagged":
                 msg += " Ya está publicado. Puede ser revisado de forma aleatoria."
-            elif note.moderation_status in ("blocked_review", "pending_manual"):
+            elif moderation_status_for_msg in ("blocked_review", "pending_manual"):
                 msg += " Quedó en revisión (puede demorar hasta 12hs)."
-            elif note.moderation_status == "rejected":
+            elif moderation_status_for_msg == "rejected":
                 msg += " Fue rechazado. Revisá el motivo en tu perfil."
             else:
                 msg += " Quedó pendiente de revisión."
         except Exception:
             pass
-
         flash(msg)
 
-        # Cleanup local PDF (si subimos a bucket)
+        # Cleanup local PDF (si subimos a bucket, lo podemos borrar sin afectar al thread)
         try:
             if gcs_bucket and local_pdf_path and os.path.exists(local_pdf_path):
                 os.remove(local_pdf_path)
         except Exception:
             pass
 
-        return redirect(url_for("note_detail", note_id=note.id))
+        return redirect(url_for("note_detail", note_id=note_id))
 
     return render_template("upload.html")
 
