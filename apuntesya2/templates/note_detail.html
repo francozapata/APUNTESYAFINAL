@@ -323,6 +323,55 @@
     border-radius: 12px;
     background: #fafbff;
   }
+
+  /* Engranaje */
+  .preview-loading-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+  }
+
+  .gear {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    background: #eef2ff;
+    border: 1px solid #dbe3ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  .gear svg {
+    width: 18px;
+    height: 18px;
+    fill: #4460ff;
+    animation: spin 1.15s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .preview-loading-text {
+    font-size: 13px;
+    color: #4b5563;
+    line-height: 1.35;
+  }
+
+  .preview-loading-sub {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
 </style>
 
 <div class="note-shell">
@@ -408,28 +457,75 @@
         </script>
 
         {% else %}
-        <div class="preview-empty">
+        <div class="preview-empty" id="preview-empty">
           <div class="muted" style="margin-bottom:8px;">
             Vista previa
           </div>
 
-          {% if can_generate_preview %}
-          <div class="muted" style="margin-bottom:10px;">
-            Todavía no se generó la preview de este apunte. Para evitar errores (Starter), se genera manualmente.
+          <div class="preview-loading-row">
+            <div class="gear" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img" focusable="false">
+                <path
+                  d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.17 7.17 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 1h-3.8a.5.5 0 0 0-.49.42l-.36 2.54c-.58.23-1.12.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 7.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.23.4.32.64.22l2.39-.96c.5.4 1.05.71 1.63.94l.36 2.54c.04.24.25.42.49.42h3.8c.24 0 .45-.18.49-.42l.36-2.54c.58-.23 1.12-.54 1.63-.94l2.39.96c.24.1.51.01.64-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z">
+                </path>
+              </svg>
+            </div>
+            <div>
+              <div class="preview-loading-text">
+                Estamos generando la vista previa automáticamente.
+              </div>
+              <div class="preview-loading-sub" id="preview-sub">
+                Si el PDF es pesado, puede tardar unos segundos.
+              </div>
+            </div>
           </div>
-          <a class="btn-primary" href="{{ url_for('note_detail', note_id=note.id, gen_preview=1) }}">
-            ⚙️ Generar preview
+
+          {% if can_generate_preview %}
+          <div class="note-help-text" style="margin-top:10px;">
+            Si no aparece en breve, podés forzarla manualmente:
+          </div>
+          <a class="btn-primary" href="{{ url_for('note_detail', note_id=note.id, gen_preview=1) }}"
+            style="margin-top:8px;">
+            ⚙️ Generar preview ahora
           </a>
           <div class="note-help-text">
-            Tip: si este PDF es muy pesado y falla, bajá <code>PREVIEW_MAX_PAGES</code> a 3 y <code>PREVIEW_SCALE</code>
-            a 0.9 en Render.
-          </div>
-          {% else %}
-          <div class="muted">
-            La vista previa no está disponible por el momento.
+            Tip: si falla, bajá <code>PREVIEW_MAX_PAGES</code> a 3 y <code>PREVIEW_SCALE</code> a 0.9 en Render.
           </div>
           {% endif %}
         </div>
+
+        <script>
+          // Auto-refresh suave para que aparezca sola cuando el background termine.
+          (function () {
+            var attempts = 0;
+            var maxAttempts = 8;         // ~20s
+            var delayMs = 2500;
+
+            // Si la URL ya tiene gen_preview=1, no spamear recargas.
+            try {
+              var qs = new URLSearchParams(window.location.search || "");
+              if (qs.get("gen_preview") === "1") return;
+            } catch (_) { }
+
+            var sub = document.getElementById("preview-sub");
+
+            function tick() {
+              attempts++;
+              if (attempts > maxAttempts) {
+                if (sub) sub.textContent = "Si esto demora mucho, recargá la página más tarde o probá generar preview manualmente.";
+                return;
+              }
+              if (sub) sub.textContent = "Generando… intento " + attempts + " de " + maxAttempts;
+              setTimeout(function () {
+                try {
+                  window.location.reload();
+                } catch (_) { }
+              }, delayMs);
+            }
+
+            setTimeout(tick, delayMs);
+          })();
+        </script>
         {% endif %}
 
         <div class="note-meta-detail">
