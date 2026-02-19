@@ -8,6 +8,10 @@
   <title>ApuntesYa</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <meta name="theme-color" content="#2563eb">
+
   <style>
     /* ---------- NAVBAR MODERNA ---------- */
     .nav {
@@ -398,7 +402,9 @@
       font-size: 14px;
     }
 
-    .legal-banner b { color: #9a3412; }
+    .legal-banner b {
+      color: #9a3412;
+    }
 
     .legal-banner .btn {
       background: #f97316;
@@ -424,10 +430,10 @@
 
       <div class="nav-actions">
         <a href="{{ url_for('index') }}" class="btn">Inicio</a>
-{% if current_user.is_authenticated %}
+        {% if current_user.is_authenticated %}
         <a href="{{ url_for('my_notes_hub') }}" class="btn">Mis apuntes</a>
         <a href="{{ url_for('my_purchases') }}" class="btn">Mis compras</a>
-<a href="{{ url_for('profile') }}" class="btn">Perfil</a>
+        <a href="{{ url_for('profile') }}" class="btn">Perfil</a>
 
         {% if current_user.is_admin %}
         <a href="{{ url_for('admin_hub') }}" class="btn">Administrar</a>
@@ -482,7 +488,8 @@
   <div class="legal-banner" role="alert" aria-live="polite">
     <div class="legal-banner-inner">
       <div>
-        ⚠️ <b>Actualizamos los Términos y Políticas</b> (versión {{ legal_version }}). Para seguir usando ApuntesYa, necesitás aceptarlos.
+        ⚠️ <b>Actualizamos los Términos y Políticas</b> (versión {{ legal_version }}). Para seguir usando ApuntesYa,
+        necesitás aceptarlos.
       </div>
       <a class="btn" href="{{ url_for('legal_accept', next=request.full_path) }}">Revisar y aceptar</a>
     </div>
