@@ -521,6 +521,28 @@
           </div>
           {% endif %}
 
+          {# ---------- REPORTAR / TICKET ---------- #}
+          <div class="note-contact" style="margin-top:14px;">
+            <p class="muted" style="margin:0 0 6px;"><b>¿Hay un problema con este apunte?</b></p>
+            {% if current_user.is_authenticated %}
+              <form method="post" action="{{ url_for('report_note', note_id=note.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <select name="reason" class="rating-pill" style="padding:8px 10px;width:100%;border-radius:12px;">
+                  <option value="calidad">Calidad baja / ilegible</option>
+                  <option value="incompleto">Incompleto / falta contenido</option>
+                  <option value="no_coincide">No coincide con lo publicado</option>
+                  <option value="copyright">Derechos de autor</option>
+                  <option value="other" selected>Otro</option>
+                </select>
+                <textarea name="details" rows="3" placeholder="Contanos qué pasó (opcional)" style="margin-top:8px;width:100%;border:1px solid #e0e4ff;border-radius:12px;padding:10px;resize:vertical;"></textarea>
+                <button class="btn-primary" type="submit" style="margin-top:8px;width:100%;">🚩 Reportar y crear ticket</button>
+              </form>
+            {% else %}
+              <p class="note-help-text" style="margin:0;">Iniciá sesión para poder reportar este apunte.</p>
+              <a class="btn-primary ghost" href="{{ url_for('login') }}" style="margin-top:8px;width:100%;">Iniciar sesión</a>
+            {% endif %}
+          </div>
+
           <div class="note-side-small">
             Solo los usuarios registrados pueden comprar y dejar reseñas sobre los apuntes.
           </div>

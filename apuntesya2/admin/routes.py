@@ -2,13 +2,17 @@
 from flask import Blueprint, request, jsonify, abort, render_template
 from flask_login import login_required, current_user
 from datetime import datetime
-from ..models import User, Note, Combo, AdminAction, Base, Notification
+from ..models import User, Note, Combo, AdminAction, Base, Notification, Ticket, TicketEvent
 from ..app import Session
 from sqlalchemy.orm import joinedload
 from flask_login import login_required, current_user
 from sqlalchemy import select, func, desc
 from apuntesya2.models import User, Note, Combo, Purchase
 from ..app import Session, MP_COMMISSION_RATE, APY_COMMISSION_RATE
+
+
+def _ticket_can_manage(u) -> bool:
+    return bool(getattr(u, "is_authenticated", False) and getattr(u, "is_admin", False))
 
 
 
@@ -216,6 +220,129 @@ def moderation_combo_reject(combo_id: int):
             pass
         s.commit()
     return jsonify(ok=True)
+
+
+# -----------------------------------------------------------------------------
+# Tickets (Reportes / Reclamos)
+# -----------------------------------------------------------------------------
+
+@admin_bp.route("/tickets")
+@login_required
+def tickets_admin_list():
+    _require_admin()
+    status = (request.args.get("status") or "").strip().lower()
+    qtxt = (request.args.get("q") or "").strip()
+
+    with Session() as s:
+        q = s.query(Ticket)
+        if status:
+            q = q.filter(Ticket.status == status)
+        if qtxt:
+            # búsqueda simple por code o note_id
+            if qtxt.upper().startswith("AYT-"):
+                q = q.filter(Ticket.code == qtxt.upper())
+            else:
+                try:
+                    nid = int(qtxt)
+                    q = q.filter(Ticket.note_id == nid)
+                except Exception:
+                    pass
+        rows = q.order_by(Ticket.updated_at.desc(), Ticket.created_at.desc()).limit(500).all()
+        return render_template("admin/tickets.html", tickets=rows, status=status, q=qtxt)
+
+
+@admin_bp.route("/tickets/<int:ticket_id>")
+@login_required
+def tickets_admin_detail(ticket_id: int):
+    _require_admin()
+    with Session() as s:
+        t = s.get(Ticket, ticket_id)
+        if not t:
+            abort(404)
+        note = None
+        try:
+            note = s.get(Note, int(t.note_id))
+        except Exception:
+            note = None
+        events = s.query(TicketEvent).filter(TicketEvent.ticket_id == t.id).order_by(TicketEvent.created_at.asc()).all()
+        return render_template("admin/ticket_detail.html", ticket=t, note=note, events=events)
+
+
+@admin_bp.route("/tickets/<int:ticket_id>/update", methods=["POST"])
+@login_required
+def tickets_admin_update(ticket_id: int):
+    _require_admin()
+    new_status = (request.form.get("status") or "").strip().lower()
+    resolution = (request.form.get("resolution") or "").strip() or None
+    admin_notes = (request.form.get("admin_notes") or "").strip() or None
+    msg = (request.form.get("message") or "").strip() or None
+
+    allowed = {"new", "in_review", "need_seller_action", "resolved", "rejected"}
+    if new_status and new_status not in allowed:
+        return abort(400)
+
+    with Session() as s:
+        t = s.get(Ticket, ticket_id)
+        if not t:
+            abort(404)
+
+        old_status = t.status
+        changed = False
+
+        if new_status and new_status != old_status:
+            t.status = new_status
+            changed = True
+            if new_status in ("resolved", "rejected"):
+                t.resolved_at = datetime.utcnow()
+            else:
+                t.resolved_at = None
+
+            s.add(TicketEvent(
+                ticket_id=t.id,
+                actor_user_id=int(current_user.id),
+                event="status_change",
+                from_status=old_status,
+                to_status=new_status,
+                message=msg,
+            ))
+
+        # actualizar textos
+        if resolution is not None:
+            t.resolution = resolution
+        if admin_notes is not None:
+            t.admin_notes = admin_notes
+
+        if resolution or admin_notes or changed:
+            t.updated_at = datetime.utcnow()
+
+        # Notificar a reportante y vendedor por cambios de estado/resolución
+        try:
+            targets = []
+            if t.reporter_user_id:
+                targets.append(int(t.reporter_user_id))
+            if t.seller_user_id:
+                targets.append(int(t.seller_user_id))
+
+            if changed:
+                nice = {
+                    "new": "Nuevo",
+                    "in_review": "En evaluación",
+                    "need_seller_action": "Acción requerida",
+                    "resolved": "Resuelto",
+                    "rejected": "Rechazado",
+                }
+                title = f"Actualización de ticket {t.code}"
+                body = f"Estado: {nice.get(old_status, old_status)} → {nice.get(t.status, t.status)}."
+                if t.status in ("resolved", "rejected") and t.resolution:
+                    body += f"\n\nResolución: {t.resolution}"
+                for uid in sorted(set(targets)):
+                    s.add(Notification(user_id=uid, kind="info", title=title, body=body))
+        except Exception:
+            pass
+
+        s.commit()
+
+    return redirect(f"/admin/tickets/{ticket_id}")
 
 @admin_bp.route("/users")
 @login_required

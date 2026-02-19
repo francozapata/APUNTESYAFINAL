@@ -12,7 +12,7 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 from datetime import datetime, timedelta, timedelta
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from functools import wraps
 import boto3
 from botocore.client import Config
@@ -78,6 +78,8 @@ from apuntesya2.models import (
     AuditEvent,
     LegalAcceptanceAudit,
     AnalyticsEvent,
+    Ticket,
+    TicketEvent,
 )
 
 from apuntesya2.seed_unc_academics import seed_unc
@@ -239,6 +241,7 @@ def _security_rate_limits():
         ("/upload", 20, 600),                # 20 per 10 min
         ("/profile/upload_image", 20, 600),  # 20 per 10 min
         ("/profile/change_password", 10, 600),
+        ("/api/academics/", 60, 300),         # 60 per 5 min (anti-spam suggestions)
     ]
     for prefix, limit, window in rules:
         if path.startswith(prefix):
@@ -1010,6 +1013,40 @@ def _audit(action: str, target_type: str | None = None, target_id: int | None = 
         pass
 
 
+def _ticket_code_for_id(ticket_id: int) -> str:
+    """Código amigable de ticket.
+
+    Formato: AYT-YYYYMMDD-000123
+    """
+    return f"AYT-{datetime.utcnow().strftime('%Y%m%d')}-{int(ticket_id):06d}"
+
+
+def _notify_users(s, user_ids: list[int], *, kind: str, title: str, body: str | None = None):
+    """Create notifications (best-effort)."""
+    try:
+        for uid in sorted({int(x) for x in user_ids if x}):
+            try:
+                s.add(Notification(user_id=uid, kind=kind, title=title, body=body))
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
+def _admin_user_ids(s) -> list[int]:
+    """Return user ids of staff (admin/superadmin)."""
+    try:
+        # role preferred
+        q = s.query(User.id)
+        if hasattr(User, "role"):
+            q = q.filter(User.role.in_(["admin", "superadmin"]))
+        else:
+            q = q.filter(User.is_admin == True)
+        return [int(r[0]) for r in q.all()]
+    except Exception:
+        return []
+
+
 def staff_required(fn):
     """Admin OR Superadmin."""
     @wraps(fn)
@@ -1229,10 +1266,31 @@ try:
 except Exception:
     auth_reset_bp = None
 
+# Helpcenter (FAQ/Ayuda) + Admin FAQ (si existe)
+try:
+    from .blueprints.helpcenter import helpcenter_bp
+except Exception:
+    try:
+        from blueprints.helpcenter import helpcenter_bp
+    except Exception:
+        helpcenter_bp = None
+
+try:
+    from .blueprints.admin_faq import admin_faq_bp
+except Exception:
+    try:
+        from blueprints.admin_faq import admin_faq_bp
+    except Exception:
+        admin_faq_bp = None
+
 if admin_bp:
     app.register_blueprint(admin_bp)
 if auth_reset_bp:
     app.register_blueprint(auth_reset_bp)
+if helpcenter_bp:
+    app.register_blueprint(helpcenter_bp)
+if admin_faq_bp:
+    app.register_blueprint(admin_faq_bp)
 
 # -----------------------------------------------------------------------------
 # Utils
@@ -4574,6 +4632,14 @@ def buy_note(note_id):
             # Mercado Pago marketplace_fee = comisión de plataforma (MP cobra su fee aparte)
             marketplace_fee = float(money_1_decimal(price_ars * platform_fee_percent))
 
+            # Protect webhook endpoint with a shared secret (query param) so random callers
+            # can't spam it. MP will call exactly this URL.
+            wh_secret = (app.config.get("MP_WEBHOOK_SECRET") or "").strip()
+            notification_url = (
+                url_for("mp_webhook", _external=True, secret=wh_secret)
+                if wh_secret else url_for("mp_webhook", _external=True)
+            )
+
             pref = mp.create_preference_for_seller_token(
                 seller_access_token=use_token,
                 title=note.title,
@@ -4582,7 +4648,7 @@ def buy_note(note_id):
                 marketplace_fee=marketplace_fee,
                 external_reference=f"purchase:{p.id}",
                 back_urls=back_urls,
-                notification_url=url_for("mp_webhook", _external=True)
+                notification_url=notification_url
             )
 
             with Session() as s2:
@@ -5039,8 +5105,9 @@ def _upsert_purchase_from_payment(pay: dict):
             pass
 
 def mp_webhook():
+    # Webhook should be POST-only. If something hits this with GET, reject.
     if request.method == "GET":
-        return ("ok", 200)
+        return ("Method Not Allowed", 405)
 
     try:
         configured_secret = (app.config.get("MP_WEBHOOK_SECRET") or "").strip()
@@ -5097,10 +5164,11 @@ def mp_webhook():
             app.logger.exception("mp_webhook error")
         except Exception:
             pass
-        return {"ok": False, "error": str(e)}, 200
+        # Return 5xx so the provider can retry instead of treating it as success.
+        return {"ok": False, "error": str(e)}, 500
 
 app.add_url_rule("/webhooks/mercadopago", view_func=mp_webhook, methods=["POST"], endpoint="mp_webhook")
-app.add_url_rule("/mp/webhook",            view_func=mp_webhook, methods=["POST", "GET"], endpoint="mp_webhook_legacy")
+app.add_url_rule("/mp/webhook",            view_func=mp_webhook, methods=["POST"], endpoint="mp_webhook_legacy")
 
 # CSRF must be disabled for external callbacks
 try:
@@ -5126,6 +5194,14 @@ def legal_accept_post():
         return redirect(url_for("legal_accept"))
 
     next_url = (request.form.get("next") or request.args.get("next") or url_for("index"))
+
+    # Prevent open-redirects (only allow same-site relative paths)
+    try:
+        parsed = urlparse(str(next_url or ""))
+        if parsed.scheme or parsed.netloc or not str(next_url).startswith("/"):
+            next_url = url_for("index")
+    except Exception:
+        next_url = url_for("index")
     try:
         with Session() as s:
             u = s.get(User, int(current_user.id))
@@ -5198,38 +5274,143 @@ def security_redirect():
 @app.route("/note/<int:note_id>/report", methods=["POST"])
 @login_required
 def report_note(note_id):
+    reason = (request.form.get("reason") or "other").strip()[:80] or "other"
+    details = (request.form.get("details") or "").strip() or None
+
     with Session() as s:
         n = s.get(Note, note_id)
         if not n:
             abort(404)
-        if hasattr(n, "is_reported"):
-            n.is_reported = True
-            s.commit()
 
-    # Gestión / auditoría
-    code = None
-    try:
-        code = log_audit_event(
-            actor_user_id=current_user.id,
-            action="note_reported",
-            target_type="note",
-            target_id=int(note_id),
-            meta={
-                "reporter_user_id": int(current_user.id),
-                "reporter_email": getattr(current_user, "email", None),
-            },
+        # Marcar legacy flag (si existe) para visibilidad rápida
+        try:
+            if hasattr(n, "is_reported"):
+                n.is_reported = True
+        except Exception:
+            pass
+
+        seller_id = int(getattr(n, "seller_id", 0) or 0) or None
+
+        # Crear ticket
+        t = Ticket(
+            code="PENDING",
+            note_id=int(note_id),
+            reporter_user_id=int(current_user.id),
+            seller_user_id=seller_id,
+            status="new",
+            reason=reason,
+            details=details,
         )
-    except Exception:
-        code = None
+        s.add(t)
+        s.flush()
+        t.code = _ticket_code_for_id(t.id)
+        # Evento inicial
+        s.add(TicketEvent(ticket_id=t.id, actor_user_id=int(current_user.id), event="created", from_status=None, to_status="new", message=details))
 
-    flash("Gracias por tu reporte. Un administrador lo revisará.", "success")
-    if code:
-        flash(f"Nº de gestión: {code}", "info")
-    return redirect(url_for("note_detail", note_id=note_id))
+        # Auditoría (gestión histórica)
+        try:
+            log_audit_event(
+                actor_user_id=int(current_user.id),
+                action="ticket_created",
+                target_type="ticket",
+                target_id=int(t.id),
+                meta={
+                    "ticket_code": t.code,
+                    "note_id": int(note_id),
+                    "reason": reason,
+                    "reporter_user_id": int(current_user.id),
+                    "reporter_email": getattr(current_user, "email", None),
+                },
+            )
+        except Exception:
+            pass
+
+        # Notificaciones
+        admin_ids = _admin_user_ids(s)
+        _notify_users(
+            s,
+            [int(current_user.id)],
+            kind="info",
+            title=f"Reporte recibido (Ticket {t.code})",
+            body="Recibimos tu reporte. Un administrador lo revisará y te avisaremos novedades.",
+        )
+        if seller_id:
+            _notify_users(
+                s,
+                [seller_id],
+                kind="warning",
+                title=f"Tu apunte fue reportado (Ticket {t.code})",
+                body=f"Se abrió un ticket por un reporte sobre tu apunte. Motivo: {reason}. Te avisaremos cuando haya novedades.",
+            )
+        if admin_ids:
+            _notify_users(
+                s,
+                admin_ids,
+                kind="warning",
+                title=f"Nuevo ticket {t.code}",
+                body=f"Apunte #{note_id} reportado. Motivo: {reason}.",
+            )
+
+        s.commit()
+
+    flash("✅ Reporte recibido. Creamos un ticket para seguimiento.", "success")
+    flash(f"Ticket: {t.code}", "info")
+    return redirect(url_for("ticket_detail", ticket_code=t.code))
 
 # -----------------------------------------------------------------------------
 # Taxonomías académicas (dropdowns) + creación "aprendida"
 # -----------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------
+# Tickets (Reportes / Reclamos)
+# -----------------------------------------------------------------------------
+
+def _can_view_ticket(u, t: Ticket) -> bool:
+    try:
+        if _is_staff(u):
+            return True
+        uid = int(getattr(u, "id", 0) or 0)
+        return uid and (uid == int(t.reporter_user_id or 0) or uid == int(t.seller_user_id or 0))
+    except Exception:
+        return False
+
+
+@app.get("/tickets")
+@login_required
+def tickets_list():
+    """Listado de tickets del usuario (como reportante o vendedor)."""
+    with Session() as s:
+        uid = int(current_user.id)
+        q = s.query(Ticket).filter(
+            (Ticket.reporter_user_id == uid) | (Ticket.seller_user_id == uid)
+        ).order_by(Ticket.updated_at.desc(), Ticket.created_at.desc())
+        rows = q.limit(300).all()
+        return render_template("tickets_list.html", tickets=rows)
+
+
+@app.get("/tickets/<ticket_code>")
+@login_required
+def ticket_detail(ticket_code: str):
+    ticket_code = (ticket_code or "").strip()
+    with Session() as s:
+        t = s.query(Ticket).filter(Ticket.code == ticket_code).first()
+        if not t:
+            abort(404)
+        if not _can_view_ticket(current_user, t):
+            abort(403)
+
+        # note title (best-effort)
+        note = None
+        try:
+            note = s.get(Note, int(t.note_id))
+        except Exception:
+            note = None
+
+        events = s.query(TicketEvent).filter(TicketEvent.ticket_id == t.id).order_by(TicketEvent.created_at.asc()).all()
+
+        return render_template("ticket_detail.html", ticket=t, note=note, events=events)
+
 def _norm(s: str) -> str:
     return (s or "").strip()
 
@@ -8628,6 +8809,13 @@ def buy_combo(combo_id):
                 flash("El vendedor no tiene Mercado Pago vinculado. No se puede procesar la compra.", "warning")
                 return redirect(url_for("combo_detail", combo_id=combo.id))
 
+            # Protect webhook endpoint with a shared secret (query param).
+            wh_secret = (app.config.get("MP_WEBHOOK_SECRET") or "").strip()
+            notification_url = (
+                url_for("mp_webhook", _external=True, secret=wh_secret)
+                if wh_secret else url_for("mp_webhook", _external=True)
+            )
+
             pref = mp.create_preference_for_seller_token(
                 seller_access_token=seller_token,
                 title=f"Combo: {combo.title}",
@@ -8636,7 +8824,7 @@ def buy_combo(combo_id):
                 marketplace_fee=marketplace_fee,
                 external_reference=f"combo_purchase:{cp.id}",
                 back_urls=back_urls,
-                notification_url=url_for("mp_webhook", _external=True)
+                notification_url=notification_url
             )
 
             with Session() as s2:

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Ticket {{ ticket.code }}{% endblock %}
+
+{% block content %}
+<div style="max-width:980px;margin:28px auto;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1 class="h4" style="margin-bottom:6px;">🎫 Ticket {{ ticket.code }}</h1>
+      <div class="muted">Estado: <b>{{ ticket.status }}</b> · Apunte #{{ ticket.note_id }}{% if note %} · <a href="{{ url_for('note_detail', note_id=note.id) }}">{{ note.title }}</a>{% endif %}</div>
+    </div>
+    <div>
+      <a class="btn btn-secondary" href="{{ url_for('tickets_list') }}">⬅️ Volver</a>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px;padding:16px;">
+    <div><b>Motivo:</b> {{ ticket.reason }}</div>
+    {% if ticket.details %}
+      <div style="margin-top:10px;"><b>Detalle:</b><br>{{ ticket.details }}</div>
+    {% endif %}
+    {% if ticket.resolution %}
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">
+        <b>Resolución:</b><br>{{ ticket.resolution }}
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-top:14px;padding:16px;">
+    <h2 class="h6" style="margin-top:0;">Historial</h2>
+    {% if events and events|length %}
+      <ul style="margin:0;padding-left:18px;">
+        {% for ev in events %}
+          <li style="margin:8px 0;">
+            <span class="muted">{{ ev.created_at }}</span>
+            —
+            {% if ev.event == 'created' %}
+              Ticket creado
+            {% elif ev.event == 'status_change' %}
+              Estado: <b>{{ ev.from_status }}</b> → <b>{{ ev.to_status }}</b>
+            {% else %}
+              {{ ev.event }}
+            {% endif %}
+            {% if ev.message %}
+              <div class="muted" style="margin-top:2px;">{{ ev.message }}</div>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted" style="margin:0;">Sin eventos todavía.</p>
+    {% endif %}
+  </div>
+
+  <div style="margin-top:16px;">
+    <a class="btn btn-secondary" href="{{ url_for('helpcenter.faq_index') }}">📚 Centro de ayuda</a>
+  </div>
+</div>
+{% endblock %}

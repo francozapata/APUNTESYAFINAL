@@ -359,6 +359,57 @@ class AuditEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+# -----------------------
+#  TICKETS (Reportes / Reclamos)
+# -----------------------
+
+class Ticket(Base):
+    """Ticket de soporte/moderación generado a partir de un reporte de apunte.
+
+    Se usa para tener trazabilidad y estados claros (nuevo/en evaluación/resuelto, etc.).
+    """
+
+    __tablename__ = "tickets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Código amigable para compartir (ej: AYT-20260219-000123)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
+
+    note_id: Mapped[int] = mapped_column(ForeignKey("notes.id"), nullable=False, index=True)
+    reporter_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    seller_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="new", index=True)
+    reason: Mapped[str] = mapped_column(String(80), nullable=False, default="other")
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Visible para usuario (resolución final). Admin notes queda interno.
+    resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+
+
+class TicketEvent(Base):
+    """Historial de cambios de un ticket (timeline)."""
+
+    __tablename__ = "ticket_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, index=True)
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+
+    event: Mapped[str] = mapped_column(String(32), nullable=False, default="status_change")
+    from_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    to_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class LegalAcceptanceAudit(Base):
     """Registro histórico de aceptaciones legales (TyC/Privacidad/Seguridad).
 

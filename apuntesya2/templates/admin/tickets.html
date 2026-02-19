@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Admin · Tickets{% endblock %}
+
+{% block content %}
+<div style="max-width:1100px;margin:28px auto;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1 class="h4" style="margin-bottom:6px;">🎫 Tickets</h1>
+      <div class="muted">Reportes/reclamos con estados y trazabilidad.</div>
+    </div>
+    <form method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input class="form-control" name="q" value="{{ q }}" placeholder="Buscar (AYT-... o note_id)" style="min-width:240px;">
+      <select class="form-select" name="status" style="min-width:170px;">
+        <option value="" {% if not status %}selected{% endif %}>Todos</option>
+        <option value="new" {% if status=='new' %}selected{% endif %}>Nuevo</option>
+        <option value="in_review" {% if status=='in_review' %}selected{% endif %}>En evaluación</option>
+        <option value="need_seller_action" {% if status=='need_seller_action' %}selected{% endif %}>Acción requerida</option>
+        <option value="resolved" {% if status=='resolved' %}selected{% endif %}>Resuelto</option>
+        <option value="rejected" {% if status=='rejected' %}selected{% endif %}>Rechazado</option>
+      </select>
+      <button class="btn btn-primary" type="submit">Filtrar</button>
+      <a class="btn btn-secondary" href="/admin">Volver</a>
+    </form>
+  </div>
+
+  <div class="card" style="margin-top:14px;padding:0;overflow:hidden;">
+    <table class="table" style="width:100%;margin:0;">
+      <thead>
+        <tr>
+          <th style="padding:12px 14px;">Ticket</th>
+          <th style="padding:12px 14px;">Apunte</th>
+          <th style="padding:12px 14px;">Motivo</th>
+          <th style="padding:12px 14px;">Estado</th>
+          <th style="padding:12px 14px;">Actualizado</th>
+          <th style="padding:12px 14px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tickets %}
+        <tr>
+          <td style="padding:10px 14px;"><b>{{ t.code }}</b></td>
+          <td style="padding:10px 14px;">#{{ t.note_id }}</td>
+          <td style="padding:10px 14px;">{{ t.reason }}</td>
+          <td style="padding:10px 14px;"><span class="badge">{{ t.status }}</span></td>
+          <td style="padding:10px 14px;" class="muted">{{ t.updated_at or t.created_at }}</td>
+          <td style="padding:10px 14px;text-align:right;">
+            <a class="btn btn-sm btn-primary" href="/admin/tickets/{{ t.id }}">Abrir</a>
+          </td>
+        </tr>
+        {% endfor %}
+        {% if not tickets or tickets|length == 0 %}
+          <tr><td colspan="6" style="padding:14px;" class="muted">No hay tickets.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
