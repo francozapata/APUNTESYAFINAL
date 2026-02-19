@@ -288,7 +288,7 @@ def _security_headers(resp):
 
     csp_default = (
         "default-src 'self'; "
-        "img-src 'self' data: blob:; "
+        "img-src 'self' data: blob: https://*.r2.cloudflarestorage.com https://r2.cloudflarestorage.com; "
         "style-src 'self' 'unsafe-inline'; "
         "script-src 'self' 'unsafe-inline'; "
         "font-src 'self' data:; "
@@ -301,7 +301,7 @@ def _security_headers(resp):
     # and may load https://apis.google.com/js/api.js. Firebase Auth calls Google APIs.
     csp_login = (
         "default-src 'self'; "
-        "img-src 'self' data: blob: https://www.gstatic.com; "
+        "img-src 'self' data: blob: https://www.gstatic.com https://*.r2.cloudflarestorage.com https://r2.cloudflarestorage.com; "
         "style-src 'self' 'unsafe-inline'; "
         "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://accounts.google.com; "
         "font-src 'self' data: https://www.gstatic.com; "
@@ -5513,31 +5513,39 @@ def upload_profile_image():
 def user_avatar(user_id: int):
     """
     Return a user avatar image.
-    - If imagen_de_perfil is an http(s) URL (Google), redirect to it.
-    - If imagen_de_perfil looks like an object key (e.g. profile_images/...), return a short-lived signed URL from R2.
-    - Otherwise, serve local static fallback (static/uploads/profile_images/<filename>) or default_profile.png.
+
+    NOTE: We intentionally disable caching on this endpoint because user avatars can change
+    but the URL is stable. We redirect to a short-lived signed R2 URL when the avatar is stored in R2.
     """
+    def _nocache(resp):
+        try:
+            resp.headers["Cache-Control"] = "no-store, max-age=0"
+            resp.headers["Pragma"] = "no-cache"
+            resp.headers["Expires"] = "0"
+        except Exception:
+            pass
+        return resp
+
     with Session() as s:
         u = s.get(User, user_id)
         ref = getattr(u, "imagen_de_perfil", None) if u else None
 
-    # Default image
     default_url = url_for("static", filename="img/default_profile.png")
 
     if not ref:
-        return redirect(default_url)
+        return _nocache(redirect(default_url))
 
     ref = str(ref)
 
     # External URL (Google, etc.)
     if ref.startswith("http://") or ref.startswith("https://"):
-        return redirect(ref)
+        return _nocache(redirect(ref))
 
     # Object key in R2
     if gcs_bucket and ("/" in ref or ref.startswith("profile_images/") or ref.startswith("uploads/")):
         try:
             signed = gcs_generate_signed_url(ref, seconds=600)
-            return redirect(signed)
+            return _nocache(redirect(signed))
         except Exception:
             pass
 
@@ -5545,11 +5553,9 @@ def user_avatar(user_id: int):
     local_dir = os.path.join(app.static_folder, "uploads", "profile_images")
     local_path = os.path.join(local_dir, ref)
     if os.path.exists(local_path):
-        return send_from_directory(local_dir, ref)
+        return _nocache(send_from_directory(local_dir, ref))
 
-    return redirect(default_url)
-
-
+    return _nocache(redirect(default_url))
 @app.route("/profile/change_password", methods=["POST"])
 @login_required
 def change_password():

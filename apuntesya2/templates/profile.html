@@ -67,7 +67,7 @@
     <div class="profile-header">
       <div>
         {% if current_user.imagen_de_perfil %}
-          <img src="{{ url_for('user_avatar', user_id=current_user.id) }}" alt="Foto de perfil" class="profile-avatar">
+          <img src="{{ url_for('user_avatar', user_id=current_user.id) }}?v={{ (current_user.imagen_de_perfil or '')|urlencode }}" alt="Foto de perfil" class="profile-avatar">
         {% else %}
           <div class="profile-avatar">{{ (current_user.name or current_user.email)[0:1].upper() }}</div>
         {% endif %}
