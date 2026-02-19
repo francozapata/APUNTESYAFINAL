@@ -6315,8 +6315,7 @@ def admin_ticket_detail(ticket_id: int):
             # Notificaciones (best-effort)
             try:
                 title = f"Ticket {t.code}: actualización"
-                body = f"Estado: {t.status}" + (f"
-Resolución: {resolution}" if resolution else "")
+                body = f"Estado: {t.status}" + (f"\nResolución: {t.resolution}" if t.resolution else "")
                 ids = []
                 if t.reporter_user_id:
                     ids.append(int(t.reporter_user_id))
