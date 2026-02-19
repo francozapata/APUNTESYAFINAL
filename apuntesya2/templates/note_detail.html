@@ -292,10 +292,37 @@
   }
 
   /* Preview: avoid "zoom" / open interactions (best-effort) */
-  .preview-item{ position:relative; border:1px solid #e5e7f5; border-radius:12px; overflow:hidden; background:#fff; }
-  .preview-img{ width:100%; height:auto; display:block; user-select:none; -webkit-user-drag:none; pointer-events:none; }
-  .preview-shield{ position:absolute; inset:0; cursor:default; }
+  .preview-item {
+    position: relative;
+    border: 1px solid #e5e7f5;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+  }
 
+  .preview-img {
+    width: 100%;
+    height: auto;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+  }
+
+  .preview-shield {
+    position: absolute;
+    inset: 0;
+    cursor: default;
+  }
+
+  /* Preview empty box */
+  .preview-empty {
+    margin: 14px 0 6px;
+    padding: 12px 12px;
+    border: 1px dashed #d4d8ff;
+    border-radius: 12px;
+    background: #fafbff;
+  }
 </style>
 
 <div class="note-shell">
@@ -345,42 +372,64 @@
           <div class="muted" style="margin-bottom:8px;">
             Vista previa (marca de agua ApuntesYa). No descargable.
           </div>
-          <div class="preview-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+          <div class="preview-grid"
+            style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
             {% set _idxs = preview_idxs if preview_idxs else range(1, (_imgs|length) + 1) %}
             {% for idx in _idxs %}
-              <div class="preview-item">
-                <img
-                  src="{{ url_for('note_preview_image', note_id=note.id, idx=idx) }}"
-                  alt="Vista previa {{ loop.index }}"
-                  class="preview-img"
-                  draggable="false"
-                />
-                <div class="preview-shield" aria-hidden="true"></div>
-              </div>
+            <div class="preview-item">
+              <img src="{{ url_for('note_preview_image', note_id=note.id, idx=idx) }}"
+                alt="Vista previa {{ loop.index }}" class="preview-img" draggable="false" />
+              <div class="preview-shield" aria-hidden="true"></div>
+            </div>
             {% endfor %}
           </div>
         </div>
+
         <script>
           // Soft anti-copy protections (not bulletproof)
-          (function(){
-            const stop = (e)=>{ try{ e.preventDefault(); e.stopPropagation(); }catch(_){} };
-            document.addEventListener('contextmenu', function(e){
-              if(e.target && (e.target.classList && e.target.classList.contains('preview-shield'))){ stop(e); }
-            }, {capture:true});
-            document.addEventListener('click', function(e){
-              if(e.target && (e.target.classList && e.target.classList.contains('preview-shield'))){ stop(e); }
-            }, {capture:true});
-            document.addEventListener('mousedown', function(e){
-              if(e.target && (e.target.classList && e.target.classList.contains('preview-shield'))){ stop(e); }
-            }, {capture:true});
-            document.addEventListener('touchstart', function(e){
-              if(e.target && (e.target.classList && e.target.classList.contains('preview-shield'))){ stop(e); }
-            }, {capture:true, passive:false});
-            document.addEventListener('dragstart', function(e){
-              if(e.target && (e.target.tagName === 'IMG')){ stop(e); }
-            }, {capture:true});
+          (function () {
+            const stop = (e) => { try { e.preventDefault(); e.stopPropagation(); } catch (_) { } };
+            document.addEventListener('contextmenu', function (e) {
+              if (e.target && (e.target.classList && e.target.classList.contains('preview-shield'))) { stop(e); }
+            }, { capture: true });
+            document.addEventListener('click', function (e) {
+              if (e.target && (e.target.classList && e.target.classList.contains('preview-shield'))) { stop(e); }
+            }, { capture: true });
+            document.addEventListener('mousedown', function (e) {
+              if (e.target && (e.target.classList && e.target.classList.contains('preview-shield'))) { stop(e); }
+            }, { capture: true });
+            document.addEventListener('touchstart', function (e) {
+              if (e.target && (e.target.classList && e.target.classList.contains('preview-shield'))) { stop(e); }
+            }, { capture: true, passive: false });
+            document.addEventListener('dragstart', function (e) {
+              if (e.target && (e.target.tagName === 'IMG')) { stop(e); }
+            }, { capture: true });
           })();
         </script>
+
+        {% else %}
+        <div class="preview-empty">
+          <div class="muted" style="margin-bottom:8px;">
+            Vista previa
+          </div>
+
+          {% if can_generate_preview %}
+          <div class="muted" style="margin-bottom:10px;">
+            Todavía no se generó la preview de este apunte. Para evitar errores (Starter), se genera manualmente.
+          </div>
+          <a class="btn-primary" href="{{ url_for('note_detail', note_id=note.id, gen_preview=1) }}">
+            ⚙️ Generar preview
+          </a>
+          <div class="note-help-text">
+            Tip: si este PDF es muy pesado y falla, bajá <code>PREVIEW_MAX_PAGES</code> a 3 y <code>PREVIEW_SCALE</code>
+            a 0.9 en Render.
+          </div>
+          {% else %}
+          <div class="muted">
+            La vista previa no está disponible por el momento.
+          </div>
+          {% endif %}
+        </div>
         {% endif %}
 
         <div class="note-meta-detail">
@@ -401,7 +450,7 @@
 
           {% if can_review %}
           <form method="post" action="{{ url_for('submit_review', note_id=note.id) }}" class="review-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label class="muted">Tu calificación:</label><br>
             <select name="rating" required class="review-rating">
               <option value="">Elegir…</option>
@@ -483,7 +532,6 @@
               Una vez completado el pago, vas a poder descargar el PDF desde esta misma página y desde tu perfil.
             </p>
             {% else %}
-            {# Apunte gratis pero sin permiso de descarga (caso raro) #}
             <p class="note-help-text">
               Iniciá sesión para poder descargar este apunte gratuito.
             </p>
@@ -495,28 +543,32 @@
           <div class="note-contact">
             <div style="display:flex;align-items:center;gap:10px;margin:0 0 8px;">
               {% if seller.imagen_de_perfil %}
-                <img src="{{ url_for('user_avatar', user_id=seller.id) }}" alt="Foto de perfil" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #eef;background:#f4f4ff;" />
+              <img src="{{ url_for('user_avatar', user_id=seller.id) }}" alt="Foto de perfil"
+                style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #eef;background:#f4f4ff;" />
               {% else %}
-                <div style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#4b5563;background:#f4f4ff;border:2px solid #eef;">{{ (seller.name or seller.email)[0:1].upper() }}</div>
+              <div
+                style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#4b5563;background:#f4f4ff;border:2px solid #eef;">
+                {{ (seller.name or seller.email)[0:1].upper() }}</div>
               {% endif %}
 
               <p class="muted" style="margin:0;">
                 Vendedor:
                 <a href="{{ url_for('seller_profile', seller_id=seller.id) }}">{{ seller.name }}</a>
-              {% if seller_verified %}
+                {% if seller_verified %}
                 <span class="rating-pill" title="Vendedor verificado">Verificado</span>
-              {% endif %}
+                {% endif %}
               </p>
             </div>
             {% if seller_contacts and (can_download or note.price_cents==0) %}
-              <p class="muted" style="margin:0 0 4px;">Contacto del vendedor:</p>
-              <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                {% for url, label in seller_contacts %}
-                  <a class="rating-pill" href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }}</a>
-                {% endfor %}
-              </div>
+            <p class="muted" style="margin:0 0 4px;">Contacto del vendedor:</p>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              {% for url, label in seller_contacts %}
+              <a class="rating-pill" href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }}</a>
+              {% endfor %}
+            </div>
             {% else %}
-              <p class="note-help-text" style="margin-top:6px;">Tras la compra vas a ver los datos de contacto del vendedor acá mismo.</p>
+            <p class="note-help-text" style="margin-top:6px;">Tras la compra vas a ver los datos de contacto del
+              vendedor acá mismo.</p>
             {% endif %}
           </div>
           {% endif %}
@@ -525,21 +577,24 @@
           <div class="note-contact" style="margin-top:14px;">
             <p class="muted" style="margin:0 0 6px;"><b>¿Hay un problema con este apunte?</b></p>
             {% if current_user.is_authenticated %}
-              <form method="post" action="{{ url_for('report_note', note_id=note.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <select name="reason" class="rating-pill" style="padding:8px 10px;width:100%;border-radius:12px;">
-                  <option value="calidad">Calidad baja / ilegible</option>
-                  <option value="incompleto">Incompleto / falta contenido</option>
-                  <option value="no_coincide">No coincide con lo publicado</option>
-                  <option value="copyright">Derechos de autor</option>
-                  <option value="other" selected>Otro</option>
-                </select>
-                <textarea name="details" rows="3" placeholder="Contanos qué pasó (opcional)" style="margin-top:8px;width:100%;border:1px solid #e0e4ff;border-radius:12px;padding:10px;resize:vertical;"></textarea>
-                <button class="btn-primary" type="submit" style="margin-top:8px;width:100%;">🚩 Reportar y crear ticket</button>
-              </form>
+            <form method="post" action="{{ url_for('report_note', note_id=note.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select name="reason" class="rating-pill" style="padding:8px 10px;width:100%;border-radius:12px;">
+                <option value="calidad">Calidad baja / ilegible</option>
+                <option value="incompleto">Incompleto / falta contenido</option>
+                <option value="no_coincide">No coincide con lo publicado</option>
+                <option value="copyright">Derechos de autor</option>
+                <option value="other" selected>Otro</option>
+              </select>
+              <textarea name="details" rows="3" placeholder="Contanos qué pasó (opcional)"
+                style="margin-top:8px;width:100%;border:1px solid #e0e4ff;border-radius:12px;padding:10px;resize:vertical;"></textarea>
+              <button class="btn-primary" type="submit" style="margin-top:8px;width:100%;">🚩 Reportar y crear
+                ticket</button>
+            </form>
             {% else %}
-              <p class="note-help-text" style="margin:0;">Iniciá sesión para poder reportar este apunte.</p>
-              <a class="btn-primary ghost" href="{{ url_for('login') }}" style="margin-top:8px;width:100%;">Iniciar sesión</a>
+            <p class="note-help-text" style="margin:0;">Iniciá sesión para poder reportar este apunte.</p>
+            <a class="btn-primary ghost" href="{{ url_for('login') }}" style="margin-top:8px;width:100%;">Iniciar
+              sesión</a>
             {% endif %}
           </div>
 
@@ -555,8 +610,6 @@
 {% if paid and can_download %}
 <script>
   (function () {
-    // Dispara la descarga del PDF en segundo plano,
-    // pero la página visible sigue siendo el detalle del apunte.
     var iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     iframe.src = "{{ url_for('download_note', note_id=note.id) }}";

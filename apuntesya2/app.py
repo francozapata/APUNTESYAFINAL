@@ -556,6 +556,93 @@ if R2_ACCOUNT_ID and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_BUCKET_NAM
 else:
     print("[R2] No configurado (faltan variables de entorno)")
 
+
+import os, tempfile
+from io import BytesIO
+
+import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
+
+# ----------------------------
+# R2 configuration (S3 compatible)
+# ----------------------------
+R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL", "").strip()
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "").strip()
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
+R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "").strip()
+
+r2_client = None
+r2_bucket_enabled = False
+
+def _init_r2():
+    global r2_client, r2_bucket_enabled
+
+    if not (R2_ENDPOINT_URL and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_BUCKET_NAME):
+        r2_client = None
+        r2_bucket_enabled = False
+        return
+
+    # Cloudflare R2: región puede ser "auto". Importante: signature_version="s3v4"
+    r2_client = boto3.client(
+        "s3",
+        endpoint_url=R2_ENDPOINT_URL,
+        aws_access_key_id=R2_ACCESS_KEY_ID,
+        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+        region_name=os.getenv("R2_REGION", "auto"),
+        config=Config(signature_version="s3v4"),
+    )
+    r2_bucket_enabled = True
+
+_init_r2()
+
+
+def r2_upload_bytes(data: bytes, key: str, content_type: str = "application/octet-stream") -> None:
+    """Upload raw bytes to R2 under a given key."""
+    if not r2_bucket_enabled or r2_client is None:
+        raise RuntimeError("R2 not configured (missing env vars).")
+
+    r2_client.put_object(
+        Bucket=R2_BUCKET_NAME,
+        Key=key,
+        Body=data,
+        ContentType=content_type,
+        # Cache control: previews se pueden cachear un rato
+        CacheControl="public, max-age=300",
+    )
+
+
+def r2_download_bytes(key: str) -> bytes:
+    """Download object bytes from R2."""
+    if not r2_bucket_enabled or r2_client is None:
+        raise RuntimeError("R2 not configured (missing env vars).")
+
+    obj = r2_client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
+    return obj["Body"].read()
+
+
+def r2_download_to_temp(key: str, suffix: str = ".pdf") -> str:
+    """Download object from R2 to a temporary local file and return its path."""
+    if not r2_bucket_enabled or r2_client is None:
+        raise RuntimeError("R2 not configured (missing env vars).")
+
+    fd, path = tempfile.mkstemp(prefix="ay_", suffix=suffix)
+    os.close(fd)
+
+    try:
+        r2_client.download_file(Bucket=R2_BUCKET_NAME, Key=key, Filename=path)
+    except Exception:
+        # Limpieza si falló
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+        raise
+
+    return path
+
+
 # -----------------------------------------------------------------------------
 # Modelos e inicio de sesión
 # -----------------------------------------------------------------------------
@@ -1424,6 +1511,7 @@ def _watermark_image(img, text: str = "APUNTESYA"):
 
 
 def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: str | None = None) -> tuple[list[int], list[str]]:
+    """Genera previews con marca de agua y las guarda en R2 (o local si no hay R2)."""
     import fitz  # PyMuPDF
     from PIL import Image
     from io import BytesIO
@@ -1433,45 +1521,56 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
     local_pdf = None
     doc = None
 
-    # Ajustes por ENV (por si querés tocar sin redeploy)
-    scale = float(os.getenv("PREVIEW_SCALE", "1.0"))          # 1.0 = liviano
-    jpeg_quality = int(os.getenv("PREVIEW_JPEG_QUALITY", "78"))  # 70-80 ok
-    max_pages = int(os.getenv("PREVIEW_MAX_PAGES", str(max_pages)))
+    # Ajustes por ENV (sin redeploy)
+    scale = float(os.getenv("PREVIEW_SCALE", "1.0"))               # 1.0 recomendado en Render
+    jpeg_quality = int(os.getenv("PREVIEW_JPEG_QUALITY", "78"))    # 70-82
+    env_max_pages = int(os.getenv("PREVIEW_MAX_PAGES", str(max_pages)))
+    max_pages = max(1, min(env_max_pages, 6))  # hard-cap defensivo
 
     try:
+        # 1) Resolver PDF local
         if local_pdf_override:
             local_pdf = local_pdf_override
-        elif gcs_bucket and note.file_path and "/" in note.file_path:
-            tmp_pdf = gcs_download_to_temp(note.file_path)
-            local_pdf = tmp_pdf
         else:
-            local_pdf = os.path.join(app.config["UPLOAD_FOLDER"], note.file_path)
+            fp = (note.file_path or "").strip()
 
+            # Si R2 está activo, normalmente fp es una key tipo "notes/<seller>/<file>.pdf"
+            if r2_bucket_enabled and fp:
+                tmp_pdf = r2_download_to_temp(fp, suffix=".pdf")
+                local_pdf = tmp_pdf
+            else:
+                local_pdf = os.path.join(app.config["UPLOAD_FOLDER"], fp)
+
+        if not local_pdf or not os.path.exists(local_pdf):
+            return ([], [])
+
+        # 2) Abrir PDF
         doc = fitz.open(local_pdf)
-        total = doc.page_count
+        total = int(doc.page_count or 0)
         if total <= 0:
             return ([], [])
 
-        # Elegimos páginas random
+        # 3) Elegir páginas random
         candidates = list(range(total))
         if total > 6:
-            candidates = list(range(2, total))
+            candidates = list(range(2, total))  # saltea 2 primeras si hay suficientes
         random.shuffle(candidates)
 
-        pages = []
+        pages: list[int] = []
         for p in candidates:
             pages.append(p)
             if len(pages) >= max_pages:
                 break
         pages = sorted(pages)[:max_pages]
 
+        # 4) Render + watermark + guardar
         image_paths: list[str] = []
         mat = fitz.Matrix(scale, scale)
 
         for idx, pno in enumerate(pages, start=1):
             page = doc.load_page(pno)
 
-            # pixmap = RAM heavy -> escala baja para no explotar
+            # RAM heavy -> scale bajo
             pix = page.get_pixmap(matrix=mat, alpha=False)
 
             img = Image.open(BytesIO(pix.tobytes("png")))
@@ -1481,10 +1580,10 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
             img.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
             data = buf.getvalue()
 
-            if gcs_bucket:
-                blob_name = f"previews/{note.id}/{idx}.jpg"
-                gcs_upload_bytes(data, blob_name, content_type="image/jpeg")
-                image_paths.append(blob_name)
+            if r2_bucket_enabled:
+                key = f"previews/{note.id}/{idx}.jpg"
+                r2_upload_bytes(data, key, content_type="image/jpeg")
+                image_paths.append(key)
             else:
                 prev_dir = os.path.join(app.config["UPLOAD_FOLDER"], "previews", str(note.id))
                 os.makedirs(prev_dir, exist_ok=True)
@@ -1496,11 +1595,14 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
         return (pages, image_paths)
 
     finally:
+        # Cerrar PDF
         try:
             if doc is not None:
                 doc.close()
         except Exception:
             pass
+
+        # Borrar temp descargado desde R2
         try:
             if tmp_pdf and os.path.exists(tmp_pdf):
                 os.remove(tmp_pdf)
@@ -3542,14 +3644,14 @@ def note_detail(note_id):
         if not note or not note.is_active:
             abort(404)
 
-        # Moderation visibility (igual)
+        # Moderation visibility
         if not is_public_moderation_status(getattr(note, "moderation_status", "approved")):
             if not current_user.is_authenticated:
                 abort(404)
             if current_user.id != note.seller_id and not getattr(current_user, "is_admin", False):
                 abort(404)
 
-        # Archived visibility (igual)
+        # Archived visibility
         if bool(getattr(note, "is_archived", False)):
             is_admin = bool(current_user.is_authenticated and getattr(current_user, "is_admin", False))
             is_owner = bool(current_user.is_authenticated and current_user.id == note.seller_id)
@@ -3577,7 +3679,7 @@ def note_detail(note_id):
                 if not has_access:
                     abort(404)
 
-        # Can download (igual)
+        # Can download
         can_download = False
         if current_user.is_authenticated:
             if note.price_cents == 0 or note.seller_id == current_user.id:
@@ -3592,7 +3694,9 @@ def note_detail(note_id):
                 ).scalar_one_or_none()
                 can_download = p is not None
 
+        # ---------------------------------------------------------
         # 🔒 Preview: SOLO dueño/admin puede generarla manualmente
+        # ---------------------------------------------------------
         try:
             imgs_meta = (getattr(note, "preview_images", None) or {})
             imgs = (imgs_meta.get("images") or []) if isinstance(imgs_meta, dict) else []
@@ -3606,19 +3710,30 @@ def note_detail(note_id):
         preview_generated_now = False
         if gen_preview and can_generate_preview:
             try:
-                pages, new_imgs = generate_note_preview(note, max_pages=int(os.getenv("PREVIEW_MAX_PAGES", "4")))
+                pages, new_imgs = generate_note_preview(
+                    note,
+                    max_pages=int(os.getenv("PREVIEW_MAX_PAGES", "4"))
+                )
                 if new_imgs:
                     note.preview_pages = {"pages": pages}
                     note.preview_images = {"images": new_imgs}
                     s.commit()
+
                     imgs = new_imgs
                     preview_generated_now = True
                     flash("Preview generada ✅", "success")
                 else:
                     flash("No se pudo generar la preview (PDF vacío o inválido).", "warning")
             except Exception as e:
-                app.logger.warning(f"preview generation failed: {e}")
+                try:
+                    app.logger.warning(f"preview generation failed: {e}")
+                except Exception:
+                    pass
                 flash("Falló la preview (memoria/archivo). Probá con menos páginas o bajando escala.", "warning")
+
+        # ✅ Evita regenerar si refrescan: sacamos el gen_preview de la URL
+        if preview_generated_now:
+            return redirect(url_for("note_detail", note_id=note.id, paid=paid_param))
 
         # Analytics best-effort
         try:
@@ -3629,7 +3744,9 @@ def note_detail(note_id):
 
         # Downloads metric
         try:
-            dl = s.execute(select(func.count(DownloadLog.id)).where(DownloadLog.note_id == note.id)).scalar_one()
+            dl = s.execute(
+                select(func.count(DownloadLog.id)).where(DownloadLog.note_id == note.id)
+            ).scalar_one()
             note.download_count = int(dl or 0)
         except Exception:
             pass
@@ -3658,15 +3775,19 @@ def note_detail(note_id):
                 ).scalar_one_or_none() is not None
             else:
                 has_purchase = True
+
             if has_purchase:
                 already_reviewed = s.execute(
-                    select(Review).where(Review.note_id == note.id, Review.buyer_id == current_user.id)
+                    select(Review).where(
+                        Review.note_id == note.id,
+                        Review.buyer_id == current_user.id
+                    )
                 ).scalar_one_or_none() is not None
                 can_review = not already_reviewed
 
         seller = s.get(User, note.seller_id) if note.seller_id else None
 
-        # Seller contacts (tu lógica, la dejo igual)
+        # Seller contacts
         seller_contacts = []
         if seller:
             if getattr(seller, "seller_contact", None):
@@ -3708,10 +3829,9 @@ def note_detail(note_id):
         base_price = note.price_cents / 100.0 if note.price_cents else 0.0
         buyer_price = round(base_price * GROSS_MULTIPLIER, 2) if base_price > 0 else None
 
-        # Preview order
+        # ✅ Preview order: usar imgs (no volver a leer desde note.preview_images)
         try:
-            _imgs = (getattr(note, "preview_images", None) or {}).get("images") or []
-            preview_idxs = list(range(1, len(_imgs) + 1))
+            preview_idxs = list(range(1, len(imgs) + 1))
             random.shuffle(preview_idxs)
             preview_idxs = preview_idxs[:min(4, len(preview_idxs))]
         except Exception:
@@ -3818,50 +3938,49 @@ def seller_profile(seller_id: int):
         contacts=contacts,
     )
 
-
 @app.route("/preview/<int:note_id>/<int:idx>.jpg")
 def note_preview_image(note_id: int, idx: int):
-    """Serve protected preview images (watermarked) without exposing storage URLs.
+    """Serve protected preview images (watermarked) without exposing storage URLs."""
+    from io import BytesIO
 
-    Public viewers: only for approved notes.
-    Sellers/Admin: can view previews even if the note is pending moderation.
-    """
     with Session() as s:
         note = s.get(Note, note_id)
         if not note or not note.is_active:
             abort(404)
 
-        # Public viewers can access previews for *public* notes
-        # (auto_published / approved / published_flagged / etc.).
         status = getattr(note, "moderation_status", "approved")
+
+        is_owner = bool(current_user.is_authenticated and current_user.id == note.seller_id)
+        is_admin = bool(current_user.is_authenticated and getattr(current_user, "is_admin", False))
+
         if not is_public_moderation_status(status):
-            allowed = False
-            try:
-                if current_user.is_authenticated and (
-                    current_user.id == note.seller_id or getattr(current_user, "is_admin", False)
-                ):
-                    allowed = True
-            except Exception:
-                allowed = False
-            if not allowed:
+            if not (is_owner or is_admin):
                 abort(404)
 
         meta = getattr(note, "preview_images", None) or {}
-        imgs = (meta or {}).get("images") or []
+        imgs = (meta.get("images") or []) if isinstance(meta, dict) else []
         if idx < 1 or idx > len(imgs):
             abort(404)
-        path = imgs[idx - 1]
 
-        from io import BytesIO
-        if gcs_bucket and path and "/" in path:
-            data = gcs_download_bytes(path)
-            return send_file(BytesIO(data), mimetype="image/jpeg", as_attachment=False, download_name=f"preview_{note_id}_{idx}.jpg")
+        key_or_path = imgs[idx - 1]
 
-        # local fallback
-        fpath = os.path.join(app.config["UPLOAD_FOLDER"], path)
+        # R2
+        if r2_bucket_enabled and key_or_path:
+            data = r2_download_bytes(key_or_path)
+            return send_file(
+                BytesIO(data),
+                mimetype="image/jpeg",
+                as_attachment=False,
+                download_name=f"preview_{note_id}_{idx}.jpg",
+                max_age=60 * 5,
+            )
+
+        # Local fallback
+        fpath = os.path.join(app.config["UPLOAD_FOLDER"], key_or_path)
         if not os.path.exists(fpath):
             abort(404)
-        return send_file(fpath, mimetype="image/jpeg", as_attachment=False)
+        return send_file(fpath, mimetype="image/jpeg", as_attachment=False, max_age=60 * 5)
+
 
 
 @app.post("/note/<int:note_id>/review")
