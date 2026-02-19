@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container" style="max-width: 980px; margin-top: 20px;">
+  <h1 class="mb-2">Centro de ayuda</h1>
+  <p class="text-muted">Respuestas rápidas y guías para usar ApuntesYa.</p>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">Compras y descargas</h5>
+      <ul class="mb-0">
+        <li>Si compraste un apunte, se habilita la descarga cuando el pago figura como <b>aprobado</b>.</li>
+        <li>En apuntes gratuitos, la descarga está habilitada directamente.</li>
+        <li>Si te aparece un error al descargar, probá actualizar la página y volver a intentar.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">Vender apuntes</h5>
+      <ul class="mb-0">
+        <li>Publicá un PDF claro y completo (idealmente con portada y contenido ordenado).</li>
+        <li>Revisá el precio antes de publicar. Recordá que el precio publicado incluye comisiones.</li>
+        <li>Si un apunte recibe un reporte, se crea un <b>ticket</b> y te avisamos por notificación.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">Reportes y Tickets</h5>
+      <ul class="mb-0">
+        <li>Al reportar un apunte se crea un ticket con un código (ej: <b>AYT-20260219-000123</b>).</li>
+        <li>Te vamos avisando cuando pase a <b>En evaluación</b> y cuando quede <b>Resuelto</b> o <b>Rechazado</b>.</li>
+        <li>Podés ver tus tickets en <a href="/tickets">Mis tickets</a>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">Contacto</h5>
+      <p class="mb-0">Si necesitás ayuda con un caso puntual, escribinos desde la sección de contacto del sitio.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

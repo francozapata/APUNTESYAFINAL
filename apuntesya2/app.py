@@ -5269,6 +5269,17 @@ def security_redirect():
     return redirect(url_for("seguridad"))
 
 # -----------------------------------------------------------------------------
+# Centro de ayuda / FAQ (hotfix estático)
+# -----------------------------------------------------------------------------
+# Nota: en este proyecto usamos SQLAlchemy core (Session) y no hay un modelo FAQ
+# dinámico en DB. Para evitar que el sitio caiga por endpoints inexistentes,
+# exponemos una página de ayuda simple y estable.
+@app.route("/faq", endpoint="faq")
+@app.route("/ayuda", endpoint="ayuda")
+def faq_static():
+    return render_template("help/faq_static.html")
+
+# -----------------------------------------------------------------------------
 # Reportar apunte
 # -----------------------------------------------------------------------------
 @app.route("/note/<int:note_id>/report", methods=["POST"])

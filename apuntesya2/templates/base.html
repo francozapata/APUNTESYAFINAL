@@ -424,7 +424,7 @@
 
       <div class="nav-actions">
         <a href="{{ url_for('index') }}" class="btn">Inicio</a>
-        <a href="{{ url_for('helpcenter.faq_index') }}" class="btn">Ayuda</a>
+        <!-- Hotfix: evitar BuildError si el helpcenter/FAQ dinamico no esta disponible --><a href="/faq" class="btn">Ayuda</a>
 
         {% if current_user.is_authenticated %}
         <a href="{{ url_for('my_notes_hub') }}" class="btn">Mis apuntes</a>
