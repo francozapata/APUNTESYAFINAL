@@ -1424,20 +1424,21 @@ def _watermark_image(img, text: str = "APUNTESYA"):
 
 
 def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: str | None = None) -> tuple[list[int], list[str]]:
-    """Generate preview images for a note PDF (with watermark) and store paths.
-
-    Returns (pages, image_paths).
-    """
     import fitz  # PyMuPDF
     from PIL import Image
     from io import BytesIO
+    import os, random
 
     tmp_pdf = None
     local_pdf = None
     doc = None
 
+    # Ajustes por ENV (por si querés tocar sin redeploy)
+    scale = float(os.getenv("PREVIEW_SCALE", "1.0"))          # 1.0 = liviano
+    jpeg_quality = int(os.getenv("PREVIEW_JPEG_QUALITY", "78"))  # 70-80 ok
+    max_pages = int(os.getenv("PREVIEW_MAX_PAGES", str(max_pages)))
+
     try:
-        # Get local path to PDF
         if local_pdf_override:
             local_pdf = local_pdf_override
         elif gcs_bucket and note.file_path and "/" in note.file_path:
@@ -1451,33 +1452,33 @@ def generate_note_preview(note: Note, max_pages: int = 4, local_pdf_override: st
         if total <= 0:
             return ([], [])
 
-        pages = set()
-
-        # pick random pages; avoid first pages when large
+        # Elegimos páginas random
         candidates = list(range(total))
         if total > 6:
-            candidates = list(range(2, total))  # skip first 2 pages
-
+            candidates = list(range(2, total))
         random.shuffle(candidates)
+
+        pages = []
         for p in candidates:
-            pages.add(p)
+            pages.append(p)
             if len(pages) >= max_pages:
                 break
-
         pages = sorted(pages)[:max_pages]
 
         image_paths: list[str] = []
+        mat = fitz.Matrix(scale, scale)
+
         for idx, pno in enumerate(pages, start=1):
             page = doc.load_page(pno)
 
-            # ⚡ Optimización: menos escala = menos RAM/CPU (reduce chance de restart)
-            pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2), alpha=False)
+            # pixmap = RAM heavy -> escala baja para no explotar
+            pix = page.get_pixmap(matrix=mat, alpha=False)
 
             img = Image.open(BytesIO(pix.tobytes("png")))
             img = _watermark_image(img, text="APUNTESYA")
 
             buf = BytesIO()
-            img.save(buf, format="JPEG", quality=82, optimize=True)
+            img.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
             data = buf.getvalue()
 
             if gcs_bucket:
@@ -3327,6 +3328,31 @@ def my_purchases():
 # -----------------------------------------------------------------------------
 # Upload / Detail / Download
 # -----------------------------------------------------------------------------
+from datetime import datetime, timedelta
+import os
+from flask import request, redirect, url_for, flash, render_template
+from werkzeug.utils import secure_filename
+
+# Si usás rq:
+try:
+    from rq import Queue
+except Exception:
+    Queue = None
+
+def _get_preview_queue():
+    """
+    Returns an RQ Queue if REDIS_URL exists and rq is installed.
+    """
+    redis_url = os.getenv("REDIS_URL", "").strip()
+    if not redis_url or Queue is None:
+        return None
+    try:
+        import redis
+        conn = redis.from_url(redis_url)
+        return Queue("previews", connection=conn, default_timeout=600)  # 10 min
+    except Exception:
+        return None
+
 @app.route("/upload", methods=["GET", "POST"])
 @login_required
 def upload_note():
@@ -3334,7 +3360,6 @@ def upload_note():
         title = request.form["title"].strip()
         description = request.form["description"].strip()
 
-        # Universidad/Facultad/Carrera obligatorios
         university = (request.form.get("university") or "").strip()
         faculty = (request.form.get("faculty") or "").strip()
         career = (request.form.get("career") or "").strip()
@@ -3352,12 +3377,10 @@ def upload_note():
         price = request.form.get("price", "").strip()
         price_cents = int(round(float(price) * 100)) if price else 0
 
-        # Moderation acknowledgement (required)
         if request.form.get("moderation_ack") != "1":
             flash("Antes de publicar, tenés que aceptar la leyenda de moderación (IA + posible revisión manual hasta 12hs).", "warning")
             return redirect(url_for("upload_note"))
 
-        # Paid notes require Mercado Pago linked
         if price_cents > 0 and not getattr(current_user, "mp_access_token", None):
             flash("Para publicar apuntes pagos tenés que vincular tu cuenta de Mercado Pago primero.", "warning")
             return redirect(url_for("profile"))
@@ -3370,7 +3393,7 @@ def upload_note():
             flash("Sólo PDF.")
             return redirect(url_for("upload_note"))
 
-        # Enforce max file size (defense-in-depth). Flask will reject above MAX_CONTENT_LENGTH
+        # Tamaño máximo
         try:
             file.stream.seek(0, os.SEEK_END)
             size = int(file.stream.tell() or 0)
@@ -3385,12 +3408,11 @@ def upload_note():
         base_name = secure_filename(file.filename)
         unique_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{base_name}"
 
-        # Guardamos copia local temporal para validar y subir al bucket
         ensure_dirs()
         local_pdf_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_name)
         file.save(local_pdf_path)
 
-        # Security: validate PDF (best-effort)
+        # Validación PDF best-effort
         try:
             ok, msg = _validate_uploaded_pdf(local_pdf_path, max_pages=int(os.getenv("MAX_PDF_PAGES", "1200")))
             if not ok:
@@ -3401,16 +3423,17 @@ def upload_note():
                 flash(msg or "PDF inválido.", "danger")
                 return redirect(url_for("upload_note"))
         except Exception:
-            # If validation fails unexpectedly, do not block uploads.
             pass
 
-        # Subir al bucket (R2/GCS) o dejar local
+        # Subir PDF al bucket
         if gcs_bucket:
             blob_name = f"notes/{current_user.id}/{unique_name}"
             gcs_upload_path(local_pdf_path, blob_name, content_type="application/pdf")
             stored_path = blob_name
         else:
             stored_path = unique_name
+
+        note_id = None
 
         with Session() as s:
             note = Note(
@@ -3419,19 +3442,26 @@ def upload_note():
                 university=university,
                 faculty=faculty,
                 career=career,
-                price_cents=price_cents,       # legacy field (kept)
-                seller_net_cents=price_cents,  # canonical
+                price_cents=price_cents,
+                seller_net_cents=price_cents,
                 file_path=stored_path,
                 seller_id=current_user.id
             )
 
-            # Publicación inmediata (rápido) — NO preview/IA acá para evitar 502
             note.moderation_status = "auto_published"
+
+            # Importante: dejamos vacíos los previews (se generan manual en /note)
+            try:
+                note.preview_pages = {"pages": []}
+                note.preview_images = {"images": []}
+            except Exception:
+                pass
 
             s.add(note)
             s.commit()
+            note_id = int(note.id)
 
-            # Auditoría (subida)
+            # auditoría
             try:
                 log_audit_event(
                     actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
@@ -3452,63 +3482,74 @@ def upload_note():
             except Exception:
                 pass
 
-        flash("Apunte subido. Ya está publicado 🎉 (La preview se genera al abrir el apunte).")
+            # AI moderation (best-effort) — podés dejarlo
+            try:
+                text_sample = _extract_text_for_moderation(note)  # asegurate que esto NO extraiga 500 páginas
+                meta = {
+                    "title": title,
+                    "description": description,
+                    "university": university,
+                    "faculty": faculty,
+                    "career": career,
+                    "seller_id": current_user.id,
+                    "price_net": price_cents / 100.0,
+                }
+                ai = _gemini_moderate_note(text_sample=text_sample, meta=meta)
+                status, reason = _decision_to_status(ai)
 
-        # Cleanup: si usamos bucket, no necesitamos conservar el PDF local
+                note.ai_decision = (ai.get("risk_level") or ai.get("decision") or None)
+                note.ai_model = GEMINI_MODEL if GEMINI_API_KEY else None
+                note.ai_summary = (ai.get("summary") or None)
+                note.ai_raw = ai
+
+                def _to_i(x):
+                    try:
+                        return int(round(float(x) * 1000))
+                    except Exception:
+                        return None
+                note.ai_confidence = _to_i(ai.get("confidence"))
+                note.ai_score_quality = _to_i(ai.get("quality_score"))
+                note.ai_score_copyright = _to_i(ai.get("copyright_risk"))
+                note.ai_score_mismatch = _to_i(ai.get("mismatch_risk"))
+
+                note.moderation_status = status
+                note.moderation_reason = reason
+                s.commit()
+            except Exception as e:
+                app.logger.warning(f"ai moderation failed: {e}")
+
+        flash("Apunte subido. Ya está publicado 🎉 (La preview se genera desde el detalle).")
+
+        # Cleanup local si hay bucket
         try:
             if gcs_bucket and local_pdf_path and os.path.exists(local_pdf_path):
                 os.remove(local_pdf_path)
         except Exception:
             pass
 
-        return redirect(url_for("note_detail", note_id=note.id))
+        return redirect(url_for("note_detail", note_id=note_id))
 
     return render_template("upload.html")
 
 
 @app.route("/note/<int:note_id>")
 def note_detail(note_id):
-    paid_param = request.args.get("paid", "0")  # "1" si viene de MP
+    paid_param = request.args.get("paid", "0")
+    gen_preview = request.args.get("gen_preview", "0") == "1"
 
     with Session() as s:
         note = s.get(Note, note_id)
         if not note or not note.is_active:
             abort(404)
 
-        # ------------------------------------------------------------------
-        # Preview lazy-generation: si no hay preview, la generamos acá.
-        # (No bloquea la página si falla)
-        # ------------------------------------------------------------------
-        try:
-            imgs_meta = (getattr(note, "preview_images", None) or {})
-            imgs = (imgs_meta.get("images") or []) if isinstance(imgs_meta, dict) else []
-            if not imgs:
-                pages, new_imgs = generate_note_preview(note)
-                if new_imgs:
-                    note.preview_pages = {"pages": pages}
-                    note.preview_images = {"images": new_imgs}
-                    s.commit()
-        except Exception as e:
-            try:
-                app.logger.warning(f"preview lazy-generation failed: {e}")
-            except Exception:
-                pass
-
-        # A6 analytics: note view (best-effort, no personal data)
-        try:
-            uid = int(current_user.id) if getattr(current_user, "is_authenticated", False) else None
-            log_analytics_event(event="note_view", user_id=uid, path=request.path, note_id=int(note_id))
-        except Exception:
-            pass
-
-        # Hide non-public notes from the public (seller/admin can still view)
+        # Moderation visibility (igual)
         if not is_public_moderation_status(getattr(note, "moderation_status", "approved")):
             if not current_user.is_authenticated:
                 abort(404)
             if current_user.id != note.seller_id and not getattr(current_user, "is_admin", False):
                 abort(404)
 
-        # ARCHIVED_VISIBILITY
+        # Archived visibility (igual)
         if bool(getattr(note, "is_archived", False)):
             is_admin = bool(current_user.is_authenticated and getattr(current_user, "is_admin", False))
             is_owner = bool(current_user.is_authenticated and current_user.id == note.seller_id)
@@ -3536,7 +3577,7 @@ def note_detail(note_id):
                 if not has_access:
                     abort(404)
 
-        # ¿Puede descargar?
+        # Can download (igual)
         can_download = False
         if current_user.is_authenticated:
             if note.price_cents == 0 or note.seller_id == current_user.id:
@@ -3551,16 +3592,49 @@ def note_detail(note_id):
                 ).scalar_one_or_none()
                 can_download = p is not None
 
-        # Downloads metric (best-effort)
+        # 🔒 Preview: SOLO dueño/admin puede generarla manualmente
         try:
-            dl = s.execute(
-                select(func.count(DownloadLog.id)).where(DownloadLog.note_id == note.id)
-            ).scalar_one()
+            imgs_meta = (getattr(note, "preview_images", None) or {})
+            imgs = (imgs_meta.get("images") or []) if isinstance(imgs_meta, dict) else []
+        except Exception:
+            imgs = []
+
+        is_owner = bool(current_user.is_authenticated and current_user.id == note.seller_id)
+        is_admin = bool(current_user.is_authenticated and getattr(current_user, "is_admin", False))
+        can_generate_preview = bool(is_owner or is_admin)
+
+        preview_generated_now = False
+        if gen_preview and can_generate_preview:
+            try:
+                pages, new_imgs = generate_note_preview(note, max_pages=int(os.getenv("PREVIEW_MAX_PAGES", "4")))
+                if new_imgs:
+                    note.preview_pages = {"pages": pages}
+                    note.preview_images = {"images": new_imgs}
+                    s.commit()
+                    imgs = new_imgs
+                    preview_generated_now = True
+                    flash("Preview generada ✅", "success")
+                else:
+                    flash("No se pudo generar la preview (PDF vacío o inválido).", "warning")
+            except Exception as e:
+                app.logger.warning(f"preview generation failed: {e}")
+                flash("Falló la preview (memoria/archivo). Probá con menos páginas o bajando escala.", "warning")
+
+        # Analytics best-effort
+        try:
+            uid = int(current_user.id) if getattr(current_user, "is_authenticated", False) else None
+            log_analytics_event(event="note_view", user_id=uid, path=request.path, note_id=int(note_id))
+        except Exception:
+            pass
+
+        # Downloads metric
+        try:
+            dl = s.execute(select(func.count(DownloadLog.id)).where(DownloadLog.note_id == note.id)).scalar_one()
             note.download_count = int(dl or 0)
         except Exception:
             pass
 
-        # Reseñas y nombres de usuarios
+        # Reviews
         rows = s.execute(
             select(Review, User.name)
             .join(User, User.id == Review.buyer_id)
@@ -3568,18 +3642,12 @@ def note_detail(note_id):
             .order_by(Review.created_at.desc())
         ).all()
         reviews = rows
+        avg_rating = round(sum(r.rating for r, _ in reviews) / len(reviews), 2) if reviews else None
 
-        # Promedio de estrellas
-        if reviews:
-            avg_rating = round(sum(r.rating for r, _ in reviews) / len(reviews), 2)
-        else:
-            avg_rating = None
-
-        # ¿Puede calificar este usuario?
+        # Can review
         can_review = False
         already_reviewed = False
         if current_user.is_authenticated and current_user.id != note.seller_id:
-
             if note.price_cents > 0:
                 has_purchase = s.execute(
                     select(Purchase).where(
@@ -3589,26 +3657,20 @@ def note_detail(note_id):
                     )
                 ).scalar_one_or_none() is not None
             else:
-                has_purchase = True  # Gratis → puede reseñar
-
+                has_purchase = True
             if has_purchase:
                 already_reviewed = s.execute(
-                    select(Review).where(
-                        Review.note_id == note.id,
-                        Review.buyer_id == current_user.id
-                    )
+                    select(Review).where(Review.note_id == note.id, Review.buyer_id == current_user.id)
                 ).scalar_one_or_none() is not None
-
                 can_review = not already_reviewed
 
-        # Vendedor
         seller = s.get(User, note.seller_id) if note.seller_id else None
 
-        # Contactos del vendedor
+        # Seller contacts (tu lógica, la dejo igual)
         seller_contacts = []
         if seller:
             if getattr(seller, "seller_contact", None):
-                url, label = _build_contact_link(getattr(seller, "seller_contact"))
+                url, _ = _build_contact_link(getattr(seller, "seller_contact"))
                 if url:
                     seller_contacts.append((url, "Contacto"))
 
@@ -3634,7 +3696,6 @@ def note_detail(note_id):
                     if ig:
                         seller_contacts.append((f"https://instagram.com/{ig}", "Instagram"))
 
-        # Verified seller badge
         seller_verified = False
         if seller and getattr(seller, "mp_access_token", None):
             sold = s.execute(
@@ -3644,25 +3705,10 @@ def note_detail(note_id):
             ).scalar_one()
             seller_verified = (sold or 0) >= 1
 
-        # Precios
         base_price = note.price_cents / 100.0 if note.price_cents else 0.0
-        buyer_price = None
-        if base_price > 0:
-            buyer_price = round(base_price * GROSS_MULTIPLIER, 2)
+        buyer_price = round(base_price * GROSS_MULTIPLIER, 2) if base_price > 0 else None
 
-        # Analytics
-        try:
-            log_analytics_event(
-                event="page_view",
-                user_id=(current_user.id if current_user.is_authenticated else None),
-                path=request.path,
-                note_id=int(note_id),
-                meta={"page": "note_detail", "price_cents": int(getattr(note, "price_cents", 0) or 0)},
-            )
-        except Exception:
-            pass
-
-        # Preview order: random subset each time
+        # Preview order
         try:
             _imgs = (getattr(note, "preview_images", None) or {}).get("images") or []
             preview_idxs = list(range(1, len(_imgs) + 1))
@@ -3686,6 +3732,8 @@ def note_detail(note_id):
             buyer_price=buyer_price,
             paid=(paid_param == "1"),
             preview_idxs=preview_idxs,
+            can_generate_preview=can_generate_preview,
+            preview_has_images=bool(imgs),
         )
 
 

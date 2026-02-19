@@ -18,3 +18,7 @@ botocore
 google-genai==0.8.0
 pydantic==2.9.2
 Flask-Compress==1.15
+
+rq==1.16.2
+redis==5.0.8
+
