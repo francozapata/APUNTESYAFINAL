@@ -39,6 +39,7 @@
             <td style="padding:8px; border-bottom:1px solid #f3f3f3;">{{ it.status }}</td>
             <td style="padding:8px; border-bottom:1px solid #f3f3f3; min-width:320px;">
               <form method="post" action="{{ url_for('admin_academics_suggestions_action', sug_id=it.id) }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input class="input" type="text" name="admin_note" placeholder="Nota (opcional)" value="{{ it.admin_note or '' }}" style="min-width:160px;">
                 {% if it.status == 'pending' %}
                   <button class="btn" type="submit" name="action" value="approve">Aprobar</button>

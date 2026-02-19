@@ -157,6 +157,7 @@
 
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
     <form method="post" action="{{ url_for('admin_seed_unc') }}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div>
         <label style="display:block;font-size:12px;opacity:.8;">Confirmación</label>
         <input class="input" type="text" name="confirm" placeholder="Escribí SEED_UNC" style="min-width:220px;" />
