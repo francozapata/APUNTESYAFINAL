@@ -299,9 +299,10 @@ def _security_headers(resp):
         firebase_domain_urls = []
     firebase_domains_csp = " ".join(firebase_domain_urls)
 
+    # NOTE: Allow Google profile photos (Firebase/Google Sign-In commonly returns *.googleusercontent.com)
     csp_default = (
         "default-src 'self'; "
-        "img-src 'self' data: blob: https://*.r2.cloudflarestorage.com https://r2.cloudflarestorage.com; "
+        "img-src 'self' data: blob: https://*.r2.cloudflarestorage.com https://r2.cloudflarestorage.com https://*.googleusercontent.com https://lh3.googleusercontent.com; "
         "style-src 'self' 'unsafe-inline'; "
         "script-src 'self' 'unsafe-inline'; "
         "font-src 'self' data:; "
@@ -314,7 +315,7 @@ def _security_headers(resp):
     # and may load https://apis.google.com/js/api.js. Firebase Auth calls Google APIs.
     csp_login = (
         "default-src 'self'; "
-        "img-src 'self' data: blob: https://www.gstatic.com https://*.r2.cloudflarestorage.com https://r2.cloudflarestorage.com; "
+        "img-src 'self' data: blob: https://www.gstatic.com https://*.r2.cloudflarestorage.com https://r2.cloudflarestorage.com https://*.googleusercontent.com https://lh3.googleusercontent.com; "
         "style-src 'self' 'unsafe-inline'; "
         "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://accounts.google.com; "
         "font-src 'self' data: https://www.gstatic.com; "
@@ -2751,6 +2752,23 @@ def auth_session_login():
                         "ticket": ticket
                     }, 403
 
+                # ✅ Actualizamos la foto (y nombre si viene) desde Google en cada login
+                try:
+                    pic = (info.get("picture") or "").strip()
+                    nm = (info.get("name") or "").strip()
+                    changed = False
+                    if pic and getattr(u, "imagen_de_perfil", None) != pic:
+                        u.imagen_de_perfil = pic
+                        changed = True
+                    # Si el usuario no tiene nombre o viene uno mejor desde Google
+                    if nm and (not getattr(u, "name", None) or getattr(u, "name", "").strip() == "Usuario"):
+                        u.name = nm
+                        changed = True
+                    if changed:
+                        s.commit()
+                except Exception:
+                    # No bloqueamos el login por un fallo de actualización de foto/nombre
+                    s.rollback()
                 login_user(u)
                 # If legal docs were updated, force re-acceptance
                 if _user_needs_legal_accept(int(u.id)):
