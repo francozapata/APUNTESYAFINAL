@@ -209,8 +209,7 @@ from flask import send_from_directory
 
 @app.route("/favicon.ico")
 def favicon():
-    # devolvemos el PNG, que Chrome/Edge aceptan perfecto
-    return send_from_directory("static", "favicon-32.png", mimetype="image/png")
+    return send_from_directory(app.static_folder, "favicon-32.png", mimetype="image/png")
 
 
 @app.before_request
