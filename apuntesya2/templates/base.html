@@ -225,6 +225,134 @@
       display: none;
     }
 
+    /* ---------- MP LINK HELP (botón flotante + modal) ---------- */
+    #mp-help-fab {
+      position: fixed;
+      bottom: 86px; /* arriba del botón de contacto */
+      right: 24px;
+      z-index: 55;
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      border: none;
+      cursor: pointer;
+      background: transparent;
+      padding: 0;
+    }
+
+    #mp-help-fab .mp-help-pill { display: none; }
+
+
+    #mp-help-fab .mp-help-dot {
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(90deg, #2563eb, #4f46e5);
+      box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
+      color: #fff;
+      font-size: 18px;
+      flex: 0 0 auto;
+      border: none;
+    }
+
+    @media (max-width: 520px) { #mp-help-fab .mp-help-pill { display: none; } }
+
+    #mp-help-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.46);
+      z-index: 60;
+    }
+
+    #mp-help-modal {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      width: 720px;
+      max-width: calc(100vw - 36px);
+      max-height: calc(100vh - 36px);
+      overflow: auto;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 30px 70px rgba(15, 23, 42, 0.35);
+      z-index: 70;
+      padding: 16px;
+    }
+
+    .mp-help-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #e5e7eb;
+      margin-bottom: 12px;
+    }
+
+    .mp-help-title {
+      font-size: 15px;
+      font-weight: 900;
+      color: #111827;
+    }
+
+    .mp-help-desc {
+      font-size: 12.5px;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    .mp-help-steps {
+      display: grid;
+      gap: 12px;
+    }
+
+    .mp-help-step {
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 12px;
+      background: #f9fafb;
+    }
+
+    .mp-help-step h4 {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      color: #111827;
+    }
+
+    .mp-help-step p {
+      margin: 0 0 10px 0;
+      font-size: 12.5px;
+      color: #374151;
+    }
+
+    .mp-help-step img {
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background: #fff;
+      display: block;
+    }
+
+    .mp-help-footer {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .mp-help-footer .muted {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
     @media (max-width: 720px) {
       .nav-inner {
         gap: 10px;
@@ -517,6 +645,62 @@
     <a class="btn ghost" href="{{ url_for('refund_policy') }}">Reembolsos</a>
   </div>
 
+  <!-- MP Help (botón flotante + modal con instructivo) -->
+  <button id="mp-help-fab" aria-label="Ayuda para vincular Mercado Pago" title="Vincular Mercado Pago"
+    aria-expanded="false" aria-controls="mp-help-modal">
+    <span class="mp-help-pill">¿Necesitás ayuda para vincular MP?</span>
+    <span class="mp-help-dot">💳</span>
+  </button>
+
+  <div id="mp-help-overlay" class="hidden" aria-hidden="true"></div>
+
+  <div id="mp-help-modal" class="hidden" role="dialog" aria-modal="true"
+    aria-label="Instructivo para vincular Mercado Pago">
+    <div class="mp-help-head">
+      <div>
+        <div class="mp-help-title">Vincular tu Mercado Pago (vendedor)</div>
+        <div class="mp-help-desc">Seguí estos pasos para vincular tu cuenta y poder recibir pagos por tus ventas.</div>
+      </div>
+      <button id="mp-help-close" aria-label="Cerrar" title="Cerrar"
+        style="border:none;background:transparent;font-size:22px;line-height:1;cursor:pointer;">×</button>
+    </div>
+
+    <div class="mp-help-steps">
+      <div class="mp-help-step">
+        <h4>1) Entrá a tu perfil y bajá hasta “Cuenta de Mercado Pago”</h4>
+        <p>Desde el menú superior, entrá a <b>Perfil</b>. Vas a ver el estado <b>“Sin cuenta de Mercado Pago vinculada”</b> y el botón para vincular.</p>
+        <img loading="lazy" src="{{ url_for('static', filename='img/help/mp_link/step1.png') }}"
+          alt="Paso 1: ir al perfil y ubicar la sección Mercado Pago">
+      </div>
+
+      <div class="mp-help-step">
+        <h4>2) Tocá “Vincular Mercado Pago”</h4>
+        <p>Se abre Mercado Pago. Elegí tu país (por ejemplo <b>Argentina</b>) y continuá. Si te lo pide, iniciá sesión con la cuenta donde querés cobrar.</p>
+        <img loading="lazy" src="{{ url_for('static', filename='img/help/mp_link/step2.png') }}"
+          alt="Paso 2: botón vincular Mercado Pago">
+      </div>
+
+      <div class="mp-help-step">
+        <h4>3) Volvé a ApuntesYa y verificá que quedó conectada</h4>
+        <p>Cuando se complete, en tu perfil tiene que aparecer <b>“Cuenta de Mercado Pago conectada”</b> (y vas a ver la opción <b>Desvincular Mercado Pago</b>).</p>
+        <img loading="lazy" src="{{ url_for('static', filename='img/help/mp_link/step3.png') }}"
+          alt="Paso 3: aceptar permisos de Mercado Pago">
+      </div>
+
+      <div class="mp-help-step">
+        <h4>4) Confirmá que tu estado como vendedor esté activo ✅</h4>
+        <p>Si está todo OK, vas a ver <b>“Tenés el modo vendedor activo ✅”</b>. Eso significa que ya podés subir apuntes y recibir pagos en tu Mercado Pago.</p>
+        <img loading="lazy" src="{{ url_for('static', filename='img/help/mp_link/step4.png') }}"
+          alt="Paso 4: estado vinculado en ApuntesYa">
+      </div>
+    </div>
+
+    <div class="mp-help-footer">
+      <div class="muted">Tip: si tenés varias cuentas de Mercado Pago, cerrá sesión antes de vincular para asegurarte de conectar la correcta.</div>
+      <a class="btn" href="{{ url_for('profile') }}">Ir a Perfil</a>
+    </div>
+  </div>
+
   <!-- Contact Widget: button, overlay, and panel -->
   <button id="contact-widget-button" aria-expanded="false" aria-controls="contact-widget-panel"
     aria-label="Abrir contacto" title="Contactar ApuntesYa"
@@ -586,6 +770,51 @@
         if (btn) { btn.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
       }
     })();
+  </script>
+
+  <script>
+    // MP Help modal
+    document.addEventListener('DOMContentLoaded', function () {
+      const fab = document.getElementById('mp-help-fab');
+      const overlay = document.getElementById('mp-help-overlay');
+      const modal = document.getElementById('mp-help-modal');
+      const closeBtn = document.getElementById('mp-help-close');
+
+      if (!fab || !overlay || !modal) return;
+
+      function openModal() {
+        modal.classList.remove('hidden');
+        overlay.classList.remove('hidden');
+        overlay.setAttribute('aria-hidden', 'false');
+        fab.setAttribute('aria-expanded', 'true');
+        if (closeBtn) closeBtn.focus();
+      }
+
+      function closeModal() {
+        modal.classList.add('hidden');
+        overlay.classList.add('hidden');
+        overlay.setAttribute('aria-hidden', 'true');
+        fab.setAttribute('aria-expanded', 'false');
+        fab.focus();
+      }
+
+      fab.addEventListener('click', function (e) {
+        e.preventDefault();
+        const isOpen = fab.getAttribute('aria-expanded') === 'true';
+        if (isOpen) closeModal();
+        else openModal();
+      });
+
+      overlay.addEventListener('click', closeModal);
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          const isOpen = fab.getAttribute('aria-expanded') === 'true';
+          if (isOpen) closeModal();
+        }
+      });
+    });
   </script>
 
   <script>
