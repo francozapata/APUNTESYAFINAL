@@ -1,15 +1,8 @@
 // ==== Firebase Google Auth (v11) ====
 
 // Tus claves del SDK Web (están bien estas):
-const firebaseConfig = {
-    apiKey: "AIzaSyCHc6uy6uc1Jr6bzHQYGUZi2uZvTX0S9fE",
-    authDomain: "apuntesya-d7d72.firebaseapp.com",
-    projectId: "apuntesya-d7d72",
-    storageBucket: "apuntesya-d7d72.firebasestorage.app",
-    messagingSenderId: "332327927567",
-    appId: "1:332327927567:web:22ecbb47817c2b7c71487a",
-    measurementId: "G-9MBP39X788",
-};
+const firebaseConfig = window.FIREBASE_WEB_CONFIG;
+
 
 // SDK imports
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
