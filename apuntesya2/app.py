@@ -1,11 +1,11 @@
 # apuntesya2/app.py
 
 import os
+import json
+import base64
 import uuid
 import secrets
 import math
-import json
-import base64
 import re
 import warnings
 import smtplib
@@ -13,7 +13,7 @@ import ssl
 import threading
 
 from email.message import EmailMessage
-from datetime import datetime, timedelta, timedelta
+from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlparse
 from functools import wraps
 import boto3
@@ -2701,14 +2701,51 @@ import os
 
 @app.route("/login", methods=["GET"])
 def login():
-    firebase_web_config = {
-        "apiKey": os.getenv("FIREBASE_WEB_API_KEY"),
-        "authDomain": os.getenv("FIREBASE_WEB_AUTH_DOMAIN"),
-        "projectId": os.getenv("FIREBASE_WEB_PROJECT_ID"),
-        "storageBucket": os.getenv("FIREBASE_WEB_STORAGE_BUCKET"),
-        "messagingSenderId": os.getenv("FIREBASE_WEB_MESSAGING_SENDER_ID"),
-        "appId": os.getenv("FIREBASE_WEB_APP_ID"),
-    }
+    """Login sólo con Google/Firebase.
+
+    Importante:
+    - En staging y producción se suelen usar *proyectos Firebase distintos*.
+    - Para evitar mezclar configs (y terminar con auth/unauthorized-domain),
+      permitimos inyectar el config web completo vía ENV.
+
+    Prioridad de lectura:
+      1) FIREBASE_WEB_CONFIG_JSON (string JSON)
+      2) FIREBASE_WEB_CONFIG_B64  (JSON en base64)
+      3) variables sueltas FIREBASE_WEB_* (compat)
+    """
+
+    firebase_web_config = {}
+
+    cfg_json = (os.getenv("FIREBASE_WEB_CONFIG_JSON") or "").strip()
+    cfg_b64 = (os.getenv("FIREBASE_WEB_CONFIG_B64") or "").strip()
+
+    if cfg_json:
+        try:
+            firebase_web_config = json.loads(cfg_json)
+        except Exception:
+            firebase_web_config = {}
+    elif cfg_b64:
+        try:
+            decoded = base64.b64decode(cfg_b64.encode("utf-8")).decode("utf-8")
+            firebase_web_config = json.loads(decoded)
+        except Exception:
+            firebase_web_config = {}
+    else:
+        # Compat: variables sueltas
+        project_id = (os.getenv("FIREBASE_WEB_PROJECT_ID") or os.getenv("FIREBASE_PROJECT_ID") or "").strip()
+        auth_domain = (os.getenv("FIREBASE_WEB_AUTH_DOMAIN") or (f"{project_id}.firebaseapp.com" if project_id else "")).strip()
+        firebase_web_config = {
+            "apiKey": os.getenv("FIREBASE_WEB_API_KEY"),
+            "authDomain": auth_domain,
+            "projectId": project_id,
+            "storageBucket": os.getenv("FIREBASE_WEB_STORAGE_BUCKET"),
+            "messagingSenderId": os.getenv("FIREBASE_WEB_MESSAGING_SENDER_ID"),
+            "appId": os.getenv("FIREBASE_WEB_APP_ID"),
+            "measurementId": os.getenv("FIREBASE_WEB_MEASUREMENT_ID"),
+        }
+
+    # Limpieza: quitar keys vacías (deja el JSON prolijo en el template)
+    firebase_web_config = {k: v for k, v in (firebase_web_config or {}).items() if v}
 
     return render_template(
         "login_google.html",
