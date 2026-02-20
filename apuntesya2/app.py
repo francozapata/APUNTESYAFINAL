@@ -2699,7 +2699,19 @@ def register():
 
 @app.route("/login", methods=["GET"])
 def login():
-    return render_template("login_google.html")
+    firebase_web_config = {
+        "apiKey": os.getenv("FIREBASE_WEB_API_KEY", ""),
+        "authDomain": os.getenv("FIREBASE_WEB_AUTH_DOMAIN", ""),
+        "projectId": os.getenv("FIREBASE_WEB_PROJECT_ID", ""),
+        "storageBucket": os.getenv("FIREBASE_WEB_STORAGE_BUCKET", ""),
+        "messagingSenderId": os.getenv("FIREBASE_WEB_MESSAGING_SENDER_ID", ""),
+        "appId": os.getenv("FIREBASE_WEB_APP_ID", ""),
+    }
+
+    return render_template(
+        "login_google.html",
+        firebase_web_config=firebase_web_config
+    )
 
 @app.route("/logout")
 def logout():

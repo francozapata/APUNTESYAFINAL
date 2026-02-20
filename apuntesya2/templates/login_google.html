@@ -111,11 +111,15 @@
             <a href="/terminos">Términos y condiciones</a> · <a href="/privacidad">Privacidad</a> · <a
                 href="/seguridad">Seguridad</a>
         </p>
-
     </div>
 </div>
 
+<!-- # ✅ Inyectamos la config web (por env vars) ANTES de cargar el módulo #} -->
+<script>
+    window.FIREBASE_WEB_CONFIG = {{ firebase_web_config | tojson }};
+</script>
+
 <!-- ✅ Cargar SOLO acá, como módulo -->
-<script type="module" src="{{ url_for('static', filename='js/firebase_google_auth.js') }}?v=6"></script>
+<script type="module" src="{{ url_for('static', filename='js/firebase_google_auth.js') }}?v=7"></script>
 
 {% endblock %}
