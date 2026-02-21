@@ -452,44 +452,58 @@ def _validate_uploaded_pdf(path: str, max_pages: int = 1200) -> tuple[bool, str]
 # Firebase Admin (única inicialización)
 # -----------------------------------------------------------------------------
 def _init_firebase_admin():
+    # Inicializa Firebase Admin UNA sola vez.
+    # En Render se requiere credencial explícita para poder verificar ID tokens.
     if firebase_admin._apps:
         return
 
     fb_opts = {}
-    project_id = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    project_id = (os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip()
     if project_id:
-        fb_opts["projectId"] = project_id.strip()
+        fb_opts["projectId"] = project_id
 
     cred_obj = None
 
-    # 1) Credencial como base64 en ENV
-    b64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "").strip()
-    if b64:
+    # 0) Recomendado: JSON completo en una ENV
+    sa_json = os.getenv("FIREBASE_ADMIN_SA_JSON", "").strip()
+    if sa_json:
         try:
-            raw = base64.b64decode(b64).decode("utf-8")
-            data = json.loads(raw)
-            cred_obj = credentials.Certificate(data)
+            cred_obj = credentials.Certificate(json.loads(sa_json))
         except Exception as e:
-            print("[Firebase] WARNING: no pude decodificar FIREBASE_SERVICE_ACCOUNT_B64:", e)
+            raise RuntimeError(f"FIREBASE_ADMIN_SA_JSON inválido: {e}")
 
-    # 2) Ruta a JSON en disco
+    # 1) Compatibilidad: credencial como base64 en ENV
+    if not cred_obj:
+        b64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "").strip()
+        if b64:
+            try:
+                raw = base64.b64decode(b64).decode("utf-8")
+                cred_obj = credentials.Certificate(json.loads(raw))
+            except Exception as e:
+                raise RuntimeError(f"FIREBASE_SERVICE_ACCOUNT_B64 inválido: {e}")
+
+    # 2) Compatibilidad: ruta a JSON en disco
     if not cred_obj:
         cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
         if cred_path and os.path.exists(cred_path):
             try:
                 cred_obj = credentials.Certificate(cred_path)
             except Exception as e:
-                print("[Firebase] WARNING: credencial en ruta inválida:", e)
+                raise RuntimeError(f"FIREBASE_SERVICE_ACCOUNT_JSON inválido: {e}")
 
-    # 3) Sin credencial: igual inicializamos con projectId
-    try:
-        if cred_obj:
-            firebase_admin.initialize_app(cred_obj, fb_opts or None)
-        else:
-            firebase_admin.initialize_app(options=fb_opts or None)
-        print("[Firebase] Admin SDK inicializado.", "projectId=", fb_opts.get("projectId"))
-    except Exception as e:
-        print("[Firebase] WARNING al inicializar:", e)
+    # 3) En Render: si no hay credencial, NO intentamos ADC (rompe verify_id_token).
+    running_on_render = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID") or os.getenv("RENDER_EXTERNAL_URL"))
+    if running_on_render and not cred_obj:
+        raise RuntimeError("Faltan credenciales Firebase Admin en Render. Configurá FIREBASE_ADMIN_SA_JSON.")
+
+    # 4) Inicialización final
+    if cred_obj:
+        firebase_admin.initialize_app(cred_obj, fb_opts or None)
+        print("[Firebase] Admin SDK inicializado con credenciales (service account). projectId=", fb_opts.get("projectId"))
+    else:
+        # Dev/local: permite ADC si lo tenés configurado
+        firebase_admin.initialize_app(options=fb_opts or None)
+        print("[Firebase] Admin SDK inicializado SIN credenciales explícitas (ADC/local). projectId=", fb_opts.get("projectId"))
 
 _init_firebase_admin()
 
@@ -9489,17 +9503,6 @@ def _err_500(e):
     except Exception:
         pass
     return render_template("errors/500.html", error_id=error_id), 500
-
-import os, json
-import firebase_admin
-from firebase_admin import credentials
-
-sa_json = os.getenv("FIREBASE_ADMIN_SA_JSON")
-if sa_json:
-    cred = credentials.Certificate(json.loads(sa_json))
-    firebase_admin.initialize_app(cred)
-else:
-    firebase_admin.initialize_app()  # fallback local (si tenés ADC)
 
 
 if __name__ == "__main__":

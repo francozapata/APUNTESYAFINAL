@@ -130,6 +130,8 @@
 <!-- ✅ Inyectamos la config web (por env vars) ANTES de cargar el módulo -->
 <script>
     window.FIREBASE_WEB_CONFIG = {{ firebase_web_config | default ({}, true) | tojson }};
+    // Alias para debug/compat
+    window.firebaseWebConfig = window.FIREBASE_WEB_CONFIG;
     window.FIREBASE_WEB_MISSING = {{ firebase_web_missing | default ([], true) | tojson }};
 </script>
 
