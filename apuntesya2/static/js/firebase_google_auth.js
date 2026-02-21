@@ -56,7 +56,7 @@ async function doGoogleSignIn() {
         return;
     }
     try {
-        const result = await signInWithPopup(auth, provider);
+        const result = await signInWithRedirect(auth, provider);
         const idToken = await result.user.getIdToken(/* forceRefresh */ true);
         await backendSessionLogin(idToken);
     } catch (e) {
@@ -102,3 +102,24 @@ if (auth) {
 }
 
 export { };
+
+
+getRedirectResult(auth)
+    .then(async (result) => {
+        if (!result) return;
+
+        const idToken = await result.user.getIdToken();
+        // tu POST actual a /auth/session_login con idToken
+        await fetch("/auth/session_login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id_token: idToken }),
+        }).then(async (r) => {
+            if (!r.ok) throw new Error(await r.text());
+            window.location.href = "/";
+        });
+    })
+    .catch((err) => {
+        console.error("Redirect login error:", err);
+        alert("Error al iniciar sesión con Google.\n" + (err?.message || err));
+    });
