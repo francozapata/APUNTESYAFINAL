@@ -58,6 +58,49 @@ Este paquete contiene todo lo necesario para publicar tu app Flask (como **Apunt
 
 ---
 
+## 🔥 Firebase (Google Login) — variables para PROD y STAGING
+
+En **Render**, cada servicio (tu web **PROD** y tu web **STAGING**) tiene su set de Environment Variables.
+
+### A) Firebase Admin SDK (backend) — recomendado
+Elegí **una** de estas opciones:
+
+**Opción A1 (recomendada en Render):**
+- `FIREBASE_SERVICE_ACCOUNT_B64` = base64 del JSON de service account
+- `FIREBASE_PROJECT_ID` = tu projectId (opcional si viene dentro del JSON)
+
+**Opción A2:**
+- `FIREBASE_SERVICE_ACCOUNT_JSON` = ruta al JSON (sólo si lo montás en disco; en Render suele ser incómodo)
+
+> Tip: para crear el base64 en tu PC:
+> - Linux/macOS: `base64 -w 0 serviceAccount.json`
+> - Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes('serviceAccount.json'))`
+
+### B) Firebase Web SDK (frontend) — necesario para el botón “Continuar con Google”
+Podés configurarlo de 2 maneras (la app soporta ambas):
+
+**Opción B1 (más cómoda): 1 sola variable JSON**
+- `FIREBASE_WEB_CONFIG_JSON` = JSON completo del Web SDK (el que te da Firebase en “Configuración del proyecto → Tus apps → SDK web”).
+
+**Opción B2: variables individuales**
+- `FIREBASE_WEB_API_KEY`
+- `FIREBASE_WEB_AUTH_DOMAIN`
+- `FIREBASE_WEB_PROJECT_ID`
+- `FIREBASE_WEB_STORAGE_BUCKET` (opcional)
+- `FIREBASE_WEB_MESSAGING_SENDER_ID` (opcional)
+- `FIREBASE_WEB_APP_ID`
+
+> Si falta alguna clave obligatoria (apiKey/authDomain/projectId/appId), la pantalla de login muestra un aviso y deshabilita el botón.
+
+### Importante (Firebase Console)
+Para que funcione en ambos entornos:
+- En Firebase → Authentication → **Settings → Authorized domains** agregá:
+  - tu dominio de Render PROD (ej: `tu-app.onrender.com`)
+  - tu dominio de Render STAGING
+  - (y si usás dominio propio, también)
+
+---
+
 ## 🧪 Probar localmente (opcional)
 ```bash
 python -m venv .venv

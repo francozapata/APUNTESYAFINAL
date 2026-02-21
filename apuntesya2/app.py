@@ -1,6 +1,58 @@
 # apuntesya2/app.py
 
 import os
+
+def _firebase_web_config_from_env():
+    """Build Firebase Web SDK config from ENV.
+
+    Soporte pensado para Render (PROD y STAGING), sin tocar código:
+      - FIREBASE_WEB_CONFIG_JSON: string JSON con la config Web SDK
+      - FIREBASE_WEB_CONFIG_B64 : base64(JSON)
+      - o variables individuales FIREBASE_WEB_*.
+
+    Devuelve (config_dict, missing_required_keys).
+    """
+    required = ["apiKey", "authDomain", "projectId", "appId"]
+
+    raw_json = (os.getenv("FIREBASE_WEB_CONFIG_JSON") or "").strip()
+    raw_b64 = (os.getenv("FIREBASE_WEB_CONFIG_B64") or "").strip()
+
+    cfg = {}
+    if raw_json:
+        try:
+            cfg = json.loads(raw_json)
+        except Exception as e:
+            print("[Firebase] WARNING: FIREBASE_WEB_CONFIG_JSON inválido:", e)
+            cfg = {}
+    elif raw_b64:
+        try:
+            cfg = json.loads(base64.b64decode(raw_b64).decode("utf-8"))
+        except Exception as e:
+            print("[Firebase] WARNING: no pude decodificar FIREBASE_WEB_CONFIG_B64:", e)
+            cfg = {}
+    else:
+        cfg = {
+            "apiKey": os.getenv("FIREBASE_WEB_API_KEY"),
+            "authDomain": os.getenv("FIREBASE_WEB_AUTH_DOMAIN"),
+            "projectId": os.getenv("FIREBASE_WEB_PROJECT_ID") or os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT"),
+            "storageBucket": os.getenv("FIREBASE_WEB_STORAGE_BUCKET"),
+            "messagingSenderId": os.getenv("FIREBASE_WEB_MESSAGING_SENDER_ID"),
+            "appId": os.getenv("FIREBASE_WEB_APP_ID"),
+        }
+
+    # Normalizar: strip y remover vacíos
+    clean = {}
+    for k, v in (cfg or {}).items():
+        if isinstance(v, str):
+            v = v.strip()
+        if v is None:
+            continue
+        if isinstance(v, str) and v == "":
+            continue
+        clean[k] = v
+
+    missing = [k for k in required if not clean.get(k)]
+    return clean, missing
 import uuid
 import secrets
 import math
@@ -2701,18 +2753,12 @@ import os
 
 @app.route("/login", methods=["GET"])
 def login():
-    firebase_web_config = {
-        "apiKey": os.getenv("FIREBASE_WEB_API_KEY"),
-        "authDomain": os.getenv("FIREBASE_WEB_AUTH_DOMAIN"),
-        "projectId": os.getenv("FIREBASE_WEB_PROJECT_ID"),
-        "storageBucket": os.getenv("FIREBASE_WEB_STORAGE_BUCKET"),
-        "messagingSenderId": os.getenv("FIREBASE_WEB_MESSAGING_SENDER_ID"),
-        "appId": os.getenv("FIREBASE_WEB_APP_ID"),
-    }
+    firebase_web_config, firebase_web_missing = _firebase_web_config_from_env()
 
     return render_template(
         "login_google.html",
-        firebase_web_config=firebase_web_config
+        firebase_web_config=firebase_web_config,
+        firebase_web_missing=firebase_web_missing,
     )
 
 @app.route("/logout")
