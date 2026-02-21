@@ -5,6 +5,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5061326299331465"
+    crossorigin="anonymous"></script>
+
   <title>ApuntesYa</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 
@@ -228,7 +231,8 @@
     /* ---------- MP LINK HELP (botón flotante + modal) ---------- */
     #mp-help-fab {
       position: fixed;
-      bottom: 86px; /* arriba del botón de contacto */
+      bottom: 86px;
+      /* arriba del botón de contacto */
       right: 24px;
       z-index: 55;
       display: inline-flex;
@@ -240,7 +244,9 @@
       padding: 0;
     }
 
-    #mp-help-fab .mp-help-pill { display: none; }
+    #mp-help-fab .mp-help-pill {
+      display: none;
+    }
 
 
     #mp-help-fab .mp-help-dot {
@@ -258,7 +264,11 @@
       border: none;
     }
 
-    @media (max-width: 520px) { #mp-help-fab .mp-help-pill { display: none; } }
+    @media (max-width: 520px) {
+      #mp-help-fab .mp-help-pill {
+        display: none;
+      }
+    }
 
     #mp-help-overlay {
       position: fixed;
@@ -668,35 +678,40 @@
     <div class="mp-help-steps">
       <div class="mp-help-step">
         <h4>1) Entrá a tu perfil y bajá hasta “Cuenta de Mercado Pago”</h4>
-        <p>Desde el menú superior, entrá a <b>Perfil</b>. Vas a ver el estado <b>“Sin cuenta de Mercado Pago vinculada”</b> y el botón para vincular.</p>
+        <p>Desde el menú superior, entrá a <b>Perfil</b>. Vas a ver el estado <b>“Sin cuenta de Mercado Pago
+            vinculada”</b> y el botón para vincular.</p>
         <img loading="lazy" src="{{ url_for('static', filename='img/help/mp_link/step1.png') }}"
           alt="Paso 1: ir al perfil y ubicar la sección Mercado Pago">
       </div>
 
       <div class="mp-help-step">
         <h4>2) Tocá “Vincular Mercado Pago”</h4>
-        <p>Se abre Mercado Pago. Elegí tu país (por ejemplo <b>Argentina</b>) y continuá. Si te lo pide, iniciá sesión con la cuenta donde querés cobrar.</p>
+        <p>Se abre Mercado Pago. Elegí tu país (por ejemplo <b>Argentina</b>) y continuá. Si te lo pide, iniciá sesión
+          con la cuenta donde querés cobrar.</p>
         <img loading="lazy" src="{{ url_for('static', filename='img/help/mp_link/step2.png') }}"
           alt="Paso 2: botón vincular Mercado Pago">
       </div>
 
       <div class="mp-help-step">
         <h4>3) Volvé a ApuntesYa y verificá que quedó conectada</h4>
-        <p>Cuando se complete, en tu perfil tiene que aparecer <b>“Cuenta de Mercado Pago conectada”</b> (y vas a ver la opción <b>Desvincular Mercado Pago</b>).</p>
+        <p>Cuando se complete, en tu perfil tiene que aparecer <b>“Cuenta de Mercado Pago conectada”</b> (y vas a ver la
+          opción <b>Desvincular Mercado Pago</b>).</p>
         <img loading="lazy" src="{{ url_for('static', filename='img/help/mp_link/step3.png') }}"
           alt="Paso 3: aceptar permisos de Mercado Pago">
       </div>
 
       <div class="mp-help-step">
         <h4>4) Confirmá que tu estado como vendedor esté activo ✅</h4>
-        <p>Si está todo OK, vas a ver <b>“Tenés el modo vendedor activo ✅”</b>. Eso significa que ya podés subir apuntes y recibir pagos en tu Mercado Pago.</p>
+        <p>Si está todo OK, vas a ver <b>“Tenés el modo vendedor activo ✅”</b>. Eso significa que ya podés subir apuntes
+          y recibir pagos en tu Mercado Pago.</p>
         <img loading="lazy" src="{{ url_for('static', filename='img/help/mp_link/step4.png') }}"
           alt="Paso 4: estado vinculado en ApuntesYa">
       </div>
     </div>
 
     <div class="mp-help-footer">
-      <div class="muted">Tip: si tenés varias cuentas de Mercado Pago, cerrá sesión antes de vincular para asegurarte de conectar la correcta.</div>
+      <div class="muted">Tip: si tenés varias cuentas de Mercado Pago, cerrá sesión antes de vincular para asegurarte de
+        conectar la correcta.</div>
       <a class="btn" href="{{ url_for('profile') }}">Ir a Perfil</a>
     </div>
   </div>
