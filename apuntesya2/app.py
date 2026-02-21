@@ -9490,6 +9490,17 @@ def _err_500(e):
         pass
     return render_template("errors/500.html", error_id=error_id), 500
 
+import os, json
+import firebase_admin
+from firebase_admin import credentials
+
+sa_json = os.getenv("FIREBASE_ADMIN_SA_JSON")
+if sa_json:
+    cred = credentials.Certificate(json.loads(sa_json))
+    firebase_admin.initialize_app(cred)
+else:
+    firebase_admin.initialize_app()  # fallback local (si tenés ADC)
+
 
 if __name__ == "__main__":
     app.run(debug=True)
