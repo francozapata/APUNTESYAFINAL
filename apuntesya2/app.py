@@ -2765,6 +2765,7 @@ def login():
     # Limpieza: quitar keys vacías (deja el JSON prolijo en el template)
     firebase_web_config = {k: v for k, v in (firebase_web_config or {}).items() if v}
 
+    firebase_web_missing = []
     return render_template(
         "login_google.html",
         firebase_web_config=firebase_web_config,
