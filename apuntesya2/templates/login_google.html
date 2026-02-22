@@ -101,7 +101,20 @@
             Usamos Google para que el acceso sea más rápido y seguro.
         </p>
 
-        <button id="btnGoogle" class="btn-google">
+        {% if firebase_web_missing and (firebase_web_missing|length) > 0 %}
+        <div style="margin:12px 0 14px; padding:10px 12px; border-radius:12px; border:1px solid #fee2e2; background:#fff1f2; color:#991b1b; text-align:left; font-size:12px;">
+            <div style="font-weight:700; margin-bottom:4px;">Configuración de Firebase incompleta</div>
+            <div>Faltan variables para iniciar sesión con Google:</div>
+            <ul style="margin:6px 0 0 18px;">
+                {% for k in firebase_web_missing %}
+                <li><code>{{ k }}</code></li>
+                {% endfor %}
+            </ul>
+            <div style="margin-top:6px; opacity:0.9;">Cargalas en Render (PROD y STAGING) y recargá esta página.</div>
+        </div>
+        {% endif %}
+
+        <button id="btnGoogle" class="btn-google" {% if firebase_web_missing and (firebase_web_missing|length) > 0 %}disabled style="opacity:.55; cursor:not-allowed;"{% endif %}>
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
             <span>Continuar con Google</span>
         </button>
@@ -117,6 +130,9 @@
 <!-- ✅ Inyectamos la config web (por env vars) ANTES de cargar el módulo -->
 <script>
     window.FIREBASE_WEB_CONFIG = {{ firebase_web_config | default ({}, true) | tojson }};
+    // Alias para debug/compat
+    window.firebaseWebConfig = window.FIREBASE_WEB_CONFIG;
+    window.FIREBASE_WEB_MISSING = {{ firebase_web_missing | default ([], true) | tojson }};
 </script>
 
 <!-- ✅ Cargar SOLO acá, como módulo -->
