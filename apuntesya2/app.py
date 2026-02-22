@@ -494,14 +494,15 @@ def _init_firebase_admin():
     # 3) En Render: si no hay credencial, NO intentamos ADC (rompe verify_id_token).
     running_on_render = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID") or os.getenv("RENDER_EXTERNAL_URL"))
     if running_on_render and not cred_obj:
-        raise RuntimeError("Faltan credenciales Firebase Admin en Render. Configurá FIREBASE_ADMIN_SA_JSON.")
+        raise RuntimeError(
+            "Faltan credenciales Firebase Admin en Render. Configurá FIREBASE_SERVICE_ACCOUNT_B64."
+        )
 
-    # 4) Inicialización final
+    # 4) Inicialización final (UNA sola vez)
     if cred_obj:
         firebase_admin.initialize_app(cred_obj, fb_opts or None)
         print("[Firebase] Admin SDK inicializado con credenciales (service account). projectId=", fb_opts.get("projectId"))
     else:
-        # Dev/local: permite ADC si lo tenés configurado
         firebase_admin.initialize_app(options=fb_opts or None)
         print("[Firebase] Admin SDK inicializado SIN credenciales explícitas (ADC/local). projectId=", fb_opts.get("projectId"))
 
