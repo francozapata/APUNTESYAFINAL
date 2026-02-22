@@ -102,7 +102,8 @@
         </p>
 
         {% if firebase_web_missing and (firebase_web_missing|length) > 0 %}
-        <div style="margin:12px 0 14px; padding:10px 12px; border-radius:12px; border:1px solid #fee2e2; background:#fff1f2; color:#991b1b; text-align:left; font-size:12px;">
+        <div
+            style="margin:12px 0 14px; padding:10px 12px; border-radius:12px; border:1px solid #fee2e2; background:#fff1f2; color:#991b1b; text-align:left; font-size:12px;">
             <div style="font-weight:700; margin-bottom:4px;">Configuración de Firebase incompleta</div>
             <div>Faltan variables para iniciar sesión con Google:</div>
             <ul style="margin:6px 0 0 18px;">
@@ -114,7 +115,8 @@
         </div>
         {% endif %}
 
-        <button id="btnGoogle" class="btn-google" {% if firebase_web_missing and (firebase_web_missing|length) > 0 %}disabled style="opacity:.55; cursor:not-allowed;"{% endif %}>
+        <button id="btnGoogle" class="btn-google" {% if firebase_web_missing and (firebase_web_missing|length)> 0
+            %}disabled style="opacity:.55; cursor:not-allowed;"{% endif %}>
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
             <span>Continuar con Google</span>
         </button>
@@ -136,6 +138,6 @@
 </script>
 
 <!-- ✅ Cargar SOLO acá, como módulo -->
-<script type="module" src="{{ url_for('static', filename='js/firebase_google_auth.js') }}?v=7"></script>
+<script type="module" src="{{ url_for('static', filename='js/firebase_google_auth.js') }}?v=8"></script>
 
 {% endblock %}
