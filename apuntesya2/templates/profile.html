@@ -328,6 +328,20 @@
           <button type="button" class="btn-pill" onclick="document.getElementById('pf-file').click()">📸 Cambiar
             foto</button>
         </form>
+
+        {# Link público del vendedor (mini-tienda) #}
+        {% set store_url = url_for('seller_profile', seller_id=current_user.id, _external=True) %}
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button type="button" class="btn-pill ghost" data-store-url="{{ store_url }}" onclick="apyShareStore(this)">
+            🔗 Compartir mi tienda
+          </button>
+          <a class="btn-pill" href="{{ url_for('seller_profile', seller_id=current_user.id) }}" target="_blank" rel="noopener">
+            👀 Ver mi tienda
+          </a>
+        </div>
+        <div class="muted" style="margin-top:6px;font-size:12px;">
+          Copiá el link para enviarlo por WhatsApp o redes y mostrar tu catálogo.
+        </div>
       </div>
       <div>
         <h1 class="profile-name">{{ current_user.name or "Usuario sin nombre" }}</h1>
@@ -514,4 +528,51 @@
     </div>
   </div>
 
-  {% endblock %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Compartir / Copiar link de tienda (perfil público del vendedor)
+  async function apyShareStore(btn) {
+    try {
+      var url = (btn && btn.dataset && btn.dataset.storeUrl) ? btn.dataset.storeUrl : '';
+      if (!url) return;
+
+      // En móviles compatibles: abrir hoja de compartir
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Mi tienda en ApuntesYa',
+          text: 'Te comparto mi perfil para que veas mi catálogo de apuntes.',
+          url: url
+        });
+        apyToast('✅ Compartido.');
+        return;
+      }
+
+      // Fallback: copiar al portapapeles
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        apyToast('✅ Link copiado.');
+        return;
+      }
+
+      // Último recurso
+      window.prompt('Copiá este link:', url);
+    } catch (e) {
+      // Si falla share o clipboard, caemos a prompt
+      try {
+        var url2 = (btn && btn.dataset && btn.dataset.storeUrl) ? btn.dataset.storeUrl : '';
+        if (url2) window.prompt('Copiá este link:', url2);
+      } catch (_) {}
+    }
+  }
+
+  function apyToast(msg) {
+    var t = document.getElementById('apy-toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.style.display = 'block';
+    setTimeout(function () { t.style.display = 'none'; }, 2500);
+  }
+</script>
+{% endblock %}
