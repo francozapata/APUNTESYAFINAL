@@ -675,7 +675,7 @@ def r2_download_to_temp(key: str, suffix: str = ".pdf") -> str:
 # -----------------------------------------------------------------------------
 # Modelos e inicio de sesión
 # -----------------------------------------------------------------------------
-Base.metadata.create_all(engine)
+# Base.metadata.create_all(engine)
 
 
 def _ensure_schema(engine):
