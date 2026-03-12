@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .admin-v2{max-width:1180px;margin:24px auto 40px;padding:0 16px}
+  .admin-banner{background:linear-gradient(90deg,#2563eb,#4f46e5);color:#fff;border-radius:18px;padding:22px 24px;box-shadow:0 12px 28px rgba(37,99,235,.22)}
+  .admin-banner-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+  .admin-banner h1{margin:0;font-size:30px;line-height:1.1}
+  .admin-banner p{margin:8px 0 0;opacity:.94;max-width:760px}
+  .role-badge{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:10px 14px;font-weight:800;font-size:13px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.25)}
+  .role-badge.super{background:#fde68a;color:#3b2f09;border-color:#f8d777}
+  .stat-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px;margin:18px 0 18px}
+  .stat-card{background:#fff;border:1px solid #e5e7f5;border-radius:18px;padding:16px;box-shadow:0 8px 22px rgba(15,23,42,.05)}
+  .stat-card .lbl{font-size:12px;color:#64748b;font-weight:700}
+  .stat-card .val{margin-top:6px;font-size:28px;font-weight:900;color:#0f172a}
+  .stat-card .sub{font-size:12px;color:#64748b;margin-top:4px}
+  .money-val{font-size:22px!important}
+  .tab-row,.subtab-row{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+  .tab-pill,.subtab-pill,.link-pill{display:inline-flex;align-items:center;gap:8px;text-decoration:none;padding:10px 14px;border-radius:999px;background:#eef2ff;border:1px solid #dbe3ff;color:#25418d;font-weight:800;font-size:14px}
+  .tab-pill.active{background:#2563eb;color:#fff;box-shadow:0 8px 18px rgba(37,99,235,.22)}
+  .subtab-pill{background:#fff;color:#334155}
+  .subtab-pill.active{background:#eff6ff;color:#1d4ed8;border-color:#93c5fd}
+  .breadcrumb-wrap{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:6px 0 6px}
+  .breadcrumb{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px;color:#64748b}
+  .breadcrumb a{color:#2563eb;text-decoration:none;font-weight:700}
+  .filter-card,.panel-card{background:#fff;border:1px solid #e5e7f5;border-radius:18px;padding:16px;box-shadow:0 8px 22px rgba(15,23,42,.05)}
+  .filter-grid{display:grid;grid-template-columns:2fr repeat(3,1fr) auto auto;gap:10px;align-items:end}
+  .filter-grid input,.filter-grid select{width:100%;padding:11px 12px;border:1px solid #d9ddea;border-radius:12px;background:#fff;font-size:14px}
+  .btn-primary,.btn-ghost,.btn-danger{display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;border:none;border-radius:12px;padding:10px 14px;font-weight:800;font-size:14px;cursor:pointer}
+  .btn-primary{background:#2563eb;color:#fff}
+  .btn-ghost{background:#f8fafc;color:#334155;border:1px solid #dbe3ff}
+  .btn-danger{background:#ef4444;color:#fff}
+  .section-title{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  .section-title h2{margin:0;font-size:22px;color:#0f172a}
+  .section-title p{margin:6px 0 0;color:#64748b}
+  .table-wrap{overflow:auto;border:1px solid #edf0f7;border-radius:16px}
+  table.admin-table{width:100%;border-collapse:collapse;background:#fff}
+  .admin-table th,.admin-table td{padding:12px 14px;border-bottom:1px solid #eef2f7;font-size:14px;vertical-align:top}
+  .admin-table th{background:#f8fafc;color:#334155;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .admin-table tr:hover td{background:#fafcff}
+  .muted{color:#64748b;font-size:13px}
+  .status-pill{display:inline-flex;align-items:center;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:800;border:1px solid #dbe3ff;background:#f8fafc;color:#334155}
+  .status-pill.success{background:#ecfdf5;color:#047857;border-color:#a7f3d0}
+  .status-pill.warn{background:#fff7ed;color:#c2410c;border-color:#fdba74}
+  .status-pill.danger{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+  .status-pill.info{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+  .status-pill.dark{background:#f1f5f9;color:#0f172a;border-color:#cbd5e1}
+  .split-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}
+  .mini-list{display:grid;gap:10px}
+  .mini-item{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid #eef2f7;border-radius:14px;background:#fafcff}
+  .kpi-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+  .empty{padding:28px 16px;text-align:center;color:#64748b}
+  .export-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .export-box{background:#fff;border:1px solid #e5e7f5;border-radius:18px;padding:16px}
+  .sys-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+  @media (max-width:1100px){.stat-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.filter-grid{grid-template-columns:1fr 1fr}.split-grid,.export-grid,.sys-grid,.kpi-row{grid-template-columns:1fr 1fr}}
+  @media (max-width:700px){.stat-grid,.split-grid,.export-grid,.sys-grid,.kpi-row{grid-template-columns:1fr}.filter-grid{grid-template-columns:1fr}.admin-banner h1{font-size:24px}}
+</style>
+
+{% macro money(cents) -%}
+  ${{ "{:,.0f}".format((cents or 0)/100).replace(",", ".") }}
+{%- endmacro %}
+
+{% macro status_class(val) -%}
+  {%- set v = (val or '')|lower -%}
+  {%- if v in ['activo','approved','aprobado','pagada','gratis','resuelto','closed','auto_published'] -%}success
+  {%- elif v in ['pendiente','pending','in_review','new','open','published_flagged','revisión requerida'] -%}warn
+  {%- elif v in ['bloqueado','suspendido','eliminado','rejected','rechazado','fallidas','fallida','failed','cancelled'] -%}danger
+  {%- elif v in ['sistema','info','paga','pago'] -%}info
+  {%- else -%}dark{%- endif -%}
+{%- endmacro %}
+
+{% set role_name = 'Superadmin' if current_user.is_superadmin else 'Admin' %}
+{% set summary_mode = (tab == 'resumen') %}
+
+<div class="admin-v2">
+  <div class="admin-banner">
+    <div class="admin-banner-top">
+      <div>
+        <h1>Panel de Administración</h1>
+        <p>Gestioná usuarios, actividad, archivos, tickets y configuraciones del sistema desde un solo panel.</p>
+      </div>
+      <div class="role-badge {% if current_user.is_superadmin %}super{% endif %}">
+        {% if current_user.is_superadmin %}🟨{% else %}🟦{% endif %} {{ role_name }}
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="lbl">Usuarios hoy</div><div class="val">{{ stats.users_today }}</div><div class="sub">Nuevos registros del día</div></div>
+    <div class="stat-card"><div class="lbl">Compras hoy</div><div class="val">{{ stats.sales_today }}</div><div class="sub">Compras pagas</div></div>
+    <div class="stat-card"><div class="lbl">Descargas hoy</div><div class="val">{{ stats.downloads_today }}</div><div class="sub">Totales</div></div>
+    <div class="stat-card"><div class="lbl">Archivos subidos</div><div class="val">{{ stats.files_today }}</div><div class="sub">Nuevos apuntes</div></div>
+    <div class="stat-card"><div class="lbl">Tickets abiertos</div><div class="val">{{ stats.tickets_open }}</div><div class="sub">Soporte pendiente</div></div>
+    <div class="stat-card"><div class="lbl">Reportes pendientes</div><div class="val">{{ stats.reports_pending }}</div><div class="sub">Denuncias</div></div>
+    <div class="stat-card"><div class="lbl">Ingresos del día</div><div class="val money-val">{{ money(stats.income_today_cents) }}</div><div class="sub">Ventas aprobadas</div></div>
+  </div>
+
+  <div class="tab-row">
+    {% for key,label in [('resumen','Resumen'),('usuarios','Usuarios'),('actividad','Actividad'),('compras','Compras'),('descargas','Descargas'),('archivos','Archivos'),('tickets','Tickets'),('reportes','Reportes')] %}
+      <a class="tab-pill {% if tab == key %}active{% endif %}" href="{{ url_for('admin_hub', tab=key) }}">{{ label }}</a>
+    {% endfor %}
+    {% if current_user.is_superadmin %}
+      <a class="tab-pill {% if tab == 'moderacion' %}active{% endif %}" href="{{ url_for('admin_hub', tab='moderacion') }}">Moderación</a>
+      <a class="tab-pill {% if tab == 'sistema' %}active{% endif %}" href="{{ url_for('admin_hub', tab='sistema') }}">Sistema</a>
+      <a class="tab-pill {% if tab == 'exportar' %}active{% endif %}" href="{{ url_for('admin_hub', tab='exportar') }}">Exportar</a>
+    {% endif %}
+  </div>
+
+  <div class="breadcrumb-wrap">
+    <div class="breadcrumb">
+      <a href="{{ url_for('admin_hub', tab='resumen') }}">Administración</a>
+      {% if tab != 'resumen' %}<span>/</span><a href="{{ url_for('admin_hub', tab=tab) }}">{{ tab|replace('_',' ')|capitalize }}</a>{% endif %}
+      {% if subtab %}<span>/</span><span>{{ subtab|replace('_',' ')|capitalize }}</span>{% endif %}
+    </div>
+    {% if subtab %}
+      <a class="btn-ghost" href="{{ url_for('admin_hub', tab=tab, q=q, **{'from': date_from, 'to': date_to}) }}">← Volver a {{ tab|capitalize }}</a>
+    {% elif tab != 'resumen' %}
+      <a class="btn-ghost" href="{{ url_for('admin_hub', tab='resumen') }}">← Volver al panel</a>
+    {% endif %}
+  </div>
+
+  {% if tab == 'usuarios' %}
+    <div class="subtab-row">
+      {% for key,label in [('todos','Todos'),('nuevos','Nuevos'),('activos','Activos'),('bloqueados','Bloqueados'),('suspendidos','Suspendidos'),('eliminados','Eliminados'),('admins','Admins')] %}
+        <a class="subtab-pill {% if (subtab or 'todos') == key %}active{% endif %}" href="{{ url_for('admin_hub', tab='usuarios', subtab=key, q=q, **{'from': date_from, 'to': date_to}) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  {% elif tab == 'compras' %}
+    <div class="subtab-row">
+      {% for key,label in [('pagadas','Pagadas'),('pendientes','Pendientes'),('fallidas','Fallidas'),('reembolsadas','Reembolsadas')] %}
+        <a class="subtab-pill {% if (subtab or 'pagadas') == key %}active{% endif %}" href="{{ url_for('admin_hub', tab='compras', subtab=key, q=q, **{'from': date_from, 'to': date_to}) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  {% elif tab == 'descargas' %}
+    <div class="subtab-row">
+      {% for key,label in [('gratis','Gratis'),('pagas','Pagas'),('totales','Totales')] %}
+        <a class="subtab-pill {% if (subtab or 'gratis') == key %}active{% endif %}" href="{{ url_for('admin_hub', tab='descargas', subtab=key, q=q, **{'from': date_from, 'to': date_to}) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  {% elif tab == 'archivos' %}
+    <div class="subtab-row">
+      {% for key,label in [('subidos','Subidos'),('aprobados','Aprobados'),('rechazados','Rechazados'),('ocultos','Ocultos'),('eliminados','Eliminados')] %}
+        <a class="subtab-pill {% if (subtab or 'subidos') == key %}active{% endif %}" href="{{ url_for('admin_hub', tab='archivos', subtab=key, q=q, **{'from': date_from, 'to': date_to}) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  {% elif tab == 'tickets' %}
+    <div class="subtab-row">
+      {% for key,label in [('abierto','Abierto'),('en_revision','En revisión'),('resuelto','Resuelto'),('cerrado','Cerrado')] %}
+        <a class="subtab-pill {% if subtab == key %}active{% endif %}" href="{{ url_for('admin_hub', tab='tickets', subtab=key, q=q, **{'from': date_from, 'to': date_to}) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  {% elif tab == 'moderacion' and current_user.is_superadmin %}
+    <div class="subtab-row">
+      {% for key,label in [('cuentas_bloqueadas','Cuentas bloqueadas'),('cuentas_suspendidas','Cuentas suspendidas'),('cuentas_eliminadas','Cuentas eliminadas'),('acciones_admin','Acciones de admin')] %}
+        <a class="subtab-pill {% if (subtab or 'acciones_admin') == key %}active{% endif %}" href="{{ url_for('admin_hub', tab='moderacion', subtab=key, q=q, **{'from': date_from, 'to': date_to}) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  {% elif tab == 'sistema' and current_user.is_superadmin %}
+    <div class="subtab-row">
+      {% for key,label in [('estado','Estado'),('mantenimiento','Mantenimiento'),('catalogos','Catálogos'),('procesos','Procesos'),('logs','Logs')] %}
+        <a class="subtab-pill {% if (subtab or 'estado') == key %}active{% endif %}" href="{{ url_for('admin_hub', tab='sistema', subtab=key, q=q, **{'from': date_from, 'to': date_to}) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if tab not in ['resumen','exportar','sistema'] or (tab == 'sistema' and subtab == 'logs') %}
+  <div class="filter-card" style="margin-bottom:14px;">
+    <form method="get" class="filter-grid">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      {% if subtab %}<input type="hidden" name="subtab" value="{{ subtab }}">{% endif %}
+      <div><label class="muted">Buscar</label><input type="text" name="q" value="{{ q }}" placeholder="Nombre, email, ID, título..."></div>
+      <div><label class="muted">Fecha desde</label><input type="date" name="from" value="{{ date_from }}"></div>
+      <div><label class="muted">Fecha hasta</label><input type="date" name="to" value="{{ date_to }}"></div>
+      <div><label class="muted">Estado</label><select name="status"><option value="">Todos</option><option value="open" {% if status_filter == 'open' %}selected{% endif %}>Abierto</option><option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Aprobado</option><option value="blocked" {% if status_filter == 'blocked' %}selected{% endif %}>Bloqueado</option></select></div>
+      <button class="btn-primary" type="submit">Aplicar</button>
+      <a class="btn-ghost" href="{{ url_for('admin_hub', tab=tab, subtab=subtab if subtab else None) }}">Limpiar</a>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if summary_mode %}
+    <div class="split-grid">
+      <div class="panel-card">
+        <div class="section-title"><div><h2>Resumen</h2><p>Vista rápida del estado de la plataforma.</p></div></div>
+        <div class="kpi-row">
+          <div class="stat-card"><div class="lbl">Usuarios hoy</div><div class="val">{{ stats.users_today }}</div></div>
+          <div class="stat-card"><div class="lbl">Compras hoy</div><div class="val">{{ stats.sales_today }}</div></div>
+          <div class="stat-card"><div class="lbl">Descargas hoy</div><div class="val">{{ stats.downloads_today }}</div></div>
+          <div class="stat-card"><div class="lbl">Tickets abiertos</div><div class="val">{{ stats.tickets_open }}</div></div>
+        </div>
+        <div style="margin-top:14px" class="mini-list">
+          <div class="mini-item"><div><strong>Últimos eventos del sistema</strong><div class="muted">Actividad reciente para auditoría rápida.</div></div><div class="muted">{{ summary.recent_events|length }} ítems</div></div>
+          {% for item in summary.recent_events[:5] %}
+            <div class="mini-item"><div><strong>{{ item.type|replace('_',' ')|capitalize }}</strong><div class="muted">{{ item.user }} · {{ item.detail }}</div></div><div class="muted">{{ item.date.strftime('%d/%m/%Y %H:%M') if item.date else '—' }}</div></div>
+          {% else %}<div class="empty">Sin eventos recientes.</div>{% endfor %}
+        </div>
+      </div>
+      <div class="mini-list">
+        <div class="panel-card">
+          <div class="section-title"><div><h2>Últimas compras</h2><p>Compras aprobadas recientes.</p></div></div>
+          {% for item in summary.recent_purchases[:5] %}
+            <div class="mini-item"><div><strong>{{ item.title }}</strong><div class="muted">{{ item.buyer }}</div></div><div><strong>{{ money(item.amount_cents) }}</strong><div class="muted">{{ item.date.strftime('%d/%m %H:%M') if item.date else '—' }}</div></div></div>
+          {% else %}<div class="empty">Sin compras recientes.</div>{% endfor %}
+        </div>
+        <div class="panel-card">
+          <div class="section-title"><div><h2>Archivos recientes</h2><p>Nuevos apuntes cargados.</p></div></div>
+          {% for item in summary.recent_files[:5] %}
+            <div class="mini-item"><div><strong>{{ item.title }}</strong><div class="muted">{{ item.seller }}</div></div><span class="status-pill {{ status_class(item.status) }}">{{ item.status|replace('_',' ') }}</span></div>
+          {% else %}<div class="empty">Sin archivos recientes.</div>{% endfor %}
+        </div>
+        <div class="panel-card">
+          <div class="section-title"><div><h2>Tickets recientes</h2><p>Seguimiento de soporte y reportes.</p></div></div>
+          {% for item in summary.recent_tickets[:5] %}
+            <div class="mini-item"><div><strong>{{ item.code }}</strong><div class="muted">{{ item.reporter }} · {{ item.reason }}</div></div><span class="status-pill {{ status_class(item.status) }}">{{ item.status }}</span></div>
+          {% else %}<div class="empty">Sin tickets recientes.</div>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+  {% elif tab == 'usuarios' %}
+    <div class="panel-card">
+      <div class="section-title"><div><h2>Usuarios</h2><p>Gestión completa de cuentas.</p></div><div class="muted">{{ row_count }} resultados</div></div>
+      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Email</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th>Acción</th></tr></thead><tbody>
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td><strong>{{ r.user }}</strong><div class="muted">ID {{ r.id }}</div></td><td>{{ r.email }}</td><td>{{ r.role }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status }}</span></td><td>{{ r.last.strftime('%d/%m/%Y %H:%M') if r.last else '—' }}</td><td><a class="link-pill" href="{{ r.detail_url }}">Ver perfil</a></td></tr>{% else %}<tr><td colspan="7" class="empty">No hay usuarios para mostrar.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+
+  {% elif tab == 'actividad' %}
+    <div class="panel-card">
+      <div class="section-title"><div><h2>Actividad</h2><p>Historial general del sistema.</p></div><div class="muted">{{ row_count }} eventos</div></div>
+      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Usuario</th><th>Email</th><th>Detalle</th><th>Acción</th></tr></thead><tbody>
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.type|replace('_',' ') }}</td><td>{{ r.user }}</td><td>{{ r.email }}</td><td>{{ r.detail }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status }}</span></td></tr>{% else %}<tr><td colspan="6" class="empty">Sin actividad para este filtro.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+
+  {% elif tab == 'compras' %}
+    <div class="panel-card"><div class="section-title"><div><h2>Compras</h2><p>Auditoría de transacciones.</p></div><div class="muted">{{ row_count }} resultados</div></div>
+      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Comprador</th><th>Email</th><th>Apunte</th><th>Vendedor</th><th>Precio</th><th>Comisión</th><th>Estado</th></tr></thead><tbody>
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.buyer }}</td><td>{{ r.email }}</td><td>{{ r.title }}</td><td>{{ r.seller }}</td><td>{{ money(r.gross_cents) }}</td><td>{{ money(r.platform_fee_cents) }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status }}</span></td></tr>{% else %}<tr><td colspan="8" class="empty">Sin compras para mostrar.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+
+  {% elif tab == 'descargas' %}
+    <div class="panel-card"><div class="section-title"><div><h2>Descargas</h2><p>Actividad de descargas y consumo de contenido.</p></div><div class="muted">{{ row_count }} resultados</div></div>
+      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Email</th><th>Archivo</th><th>Tipo</th><th>Vendedor</th></tr></thead><tbody>
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.user }}</td><td>{{ r.email }}</td><td>{{ r.title }}</td><td><span class="status-pill {{ status_class(r.type) }}">{{ r.type }}</span></td><td>{{ r.seller }}</td></tr>{% else %}<tr><td colspan="6" class="empty">Sin descargas para mostrar.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+
+  {% elif tab == 'archivos' %}
+    <div class="panel-card"><div class="section-title"><div><h2>Archivos</h2><p>Gestión de apuntes y archivos publicados.</p></div><div class="muted">{{ row_count }} resultados</div></div>
+      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Autor</th><th>Email</th><th>Archivo</th><th>Tipo</th><th>Precio</th><th>Descargas</th><th>Estado</th></tr></thead><tbody>
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.author }}</td><td>{{ r.email }}</td><td>{{ r.title }}</td><td>{{ r.type }}</td><td>{{ money(r.price_cents) }}</td><td>{{ r.downloads }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status|replace('_',' ') }}</span></td></tr>{% else %}<tr><td colspan="8" class="empty">Sin archivos para mostrar.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+
+  {% elif tab == 'tickets' %}
+    <div class="panel-card"><div class="section-title"><div><h2>Tickets</h2><p>Soporte y seguimiento administrativo.</p></div><div class="muted">{{ row_count }} resultados</div></div>
+      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Email</th><th>Asunto</th><th>Categoría</th><th>Estado</th><th>Última actualización</th><th>Acción</th></tr></thead><tbody>
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.user }}</td><td>{{ r.email }}</td><td>{{ r.subject }}</td><td>{{ r.category }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status }}</span></td><td>{{ r.updated_at.strftime('%d/%m/%Y %H:%M') if r.updated_at else '—' }}</td><td><a class="link-pill" href="{{ r.detail_url }}">Ver</a></td></tr>{% else %}<tr><td colspan="8" class="empty">Sin tickets para mostrar.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+
+  {% elif tab == 'reportes' %}
+    <div class="panel-card"><div class="section-title"><div><h2>Reportes</h2><p>Denuncias y revisiones de contenido.</p></div><div class="muted">{{ row_count }} resultados</div></div>
+      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Reportante</th><th>Email</th><th>Objeto reportado</th><th>Motivo</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.reporter }}</td><td>{{ r.email }}</td><td>{{ r.object }}</td><td>{{ r.reason }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status }}</span></td><td><a class="link-pill" href="{{ r.detail_url }}">Ver</a></td></tr>{% else %}<tr><td colspan="7" class="empty">Sin reportes para mostrar.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+
+  {% elif tab == 'moderacion' and current_user.is_superadmin %}
+    <div class="panel-card"><div class="section-title"><div><h2>Moderación</h2><p>Acciones sensibles y seguimiento de cuentas.</p></div><div class="muted">{{ row_count }} resultados</div></div>
+      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Email</th><th>Acción</th><th>Admin responsable</th><th>Motivo</th></tr></thead><tbody>
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.user }}</td><td>{{ r.email }}</td><td>{{ r.action|replace('_',' ') }}</td><td>{{ r.admin }}</td><td>{{ r.reason }}</td></tr>{% else %}<tr><td colspan="6" class="empty">Sin acciones para mostrar.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+
+  {% elif tab == 'sistema' and current_user.is_superadmin %}
+    <div class="panel-card">
+      <div class="section-title"><div><h2>Sistema</h2><p>Herramientas técnicas y catálogos.</p></div></div>
+      {% set st = system or {} %}
+      {% if (subtab or 'estado') == 'estado' %}
+        <div class="sys-grid">
+          <div class="stat-card"><div class="lbl">Modo mantenimiento</div><div class="val" style="font-size:18px">{{ 'Activo' if st.maintenance_on else 'Inactivo' }}</div></div>
+          <div class="stat-card"><div class="lbl">Ventas</div><div class="val" style="font-size:18px">{{ 'Habilitadas' if st.sales_enabled else 'Pausadas' }}</div></div>
+          <div class="stat-card"><div class="lbl">Previews pendientes</div><div class="val">{{ st.preview_pending or 0 }}</div></div>
+          <div class="stat-card"><div class="lbl">Archivos sin preview</div><div class="val">{{ st.files_no_preview or 0 }}</div></div>
+        </div>
+        <div class="sys-grid">
+          <div class="stat-card"><div class="lbl">Universidades</div><div class="val">{{ st.universities or 0 }}</div></div>
+          <div class="stat-card"><div class="lbl">Facultades</div><div class="val">{{ st.faculties or 0 }}</div></div>
+          <div class="stat-card"><div class="lbl">Carreras</div><div class="val">{{ st.careers or 0 }}</div></div>
+          <div class="stat-card"><div class="lbl">Acciones rápidas</div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><a class="link-pill" href="{{ url_for('admin_maintenance') }}">Mantenimiento</a><a class="link-pill" href="{{ url_for('admin_tools') }}">Herramientas</a></div></div>
+        </div>
+      {% elif (subtab or 'estado') == 'mantenimiento' %}
+        <div class="mini-list">
+          <div class="mini-item"><div><strong>Modo mantenimiento</strong><div class="muted">Activar o desactivar el sitio para usuarios finales.</div></div><a class="link-pill" href="{{ url_for('admin_maintenance') }}">Abrir panel</a></div>
+          <div class="mini-item"><div><strong>Herramientas técnicas</strong><div class="muted">Previews, reset y herramientas masivas.</div></div><a class="link-pill" href="{{ url_for('admin_tools') }}">Abrir herramientas</a></div>
+        </div>
+      {% elif (subtab or 'estado') == 'catalogos' %}
+        <div class="table-wrap"><table class="admin-table"><thead><tr><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Última actualización</th><th>Cantidad</th></tr></thead><tbody>
+        {% for r in rows %}<tr><td>{{ r.name }}</td><td>{{ r.type }}</td><td><span class="status-pill success">{{ r.status }}</span></td><td>{{ r.updated or '—' }}</td><td>{{ r.count }}</td></tr>{% else %}<tr><td colspan="5" class="empty">Sin catálogos para mostrar.</td></tr>{% endfor %}
+        </tbody></table></div>
+      {% elif (subtab or 'estado') == 'procesos' %}
+        <div class="table-wrap"><table class="admin-table"><thead><tr><th>Proceso</th><th>Tipo</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+        {% for r in rows %}<tr><td>{{ r.name }}</td><td>{{ r.type }}</td><td><span class="status-pill info">{{ r.status }}</span></td><td>{% if r.action_url %}<form method="post" action="{{ r.action_url }}" style="display:inline">{% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}<button class="btn-primary" type="submit">Ejecutar</button></form>{% else %}—{% endif %}</td></tr>{% else %}<tr><td colspan="4" class="empty">Sin procesos.</td></tr>{% endfor %}
+        </tbody></table></div>
+      {% else %}
+        <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Nombre</th><th>Tipo</th><th>Estado</th></tr></thead><tbody>
+        {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.name }}</td><td>{{ r.type }}</td><td>{{ r.status }}</td></tr>{% else %}<tr><td colspan="4" class="empty">Sin logs técnicos.</td></tr>{% endfor %}
+        </tbody></table></div>
+      {% endif %}
+    </div>
+
+  {% elif tab == 'exportar' and current_user.is_superadmin %}
+    <div class="export-grid">
+      <div class="export-box">
+        <div class="section-title"><div><h2>Exportar por sección</h2><p>Descargá CSV o Excel por pestaña.</p></div></div>
+        <div class="mini-list">
+          {% for t,label in [('usuarios','Usuarios'),('actividad','Actividad'),('compras','Compras'),('descargas','Descargas'),('archivos','Archivos'),('tickets','Tickets'),('reportes','Reportes'),('moderacion','Moderación'),('sistema','Sistema')] %}
+            <div class="mini-item"><div><strong>{{ label }}</strong><div class="muted">Exportación filtrada de la sección.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="link-pill" href="{{ url_for('admin_export_panel_csv', tab=t, q=q, **{'from': date_from, 'to': date_to}) }}">CSV</a><a class="link-pill" href="{{ url_for('admin_export_panel_xlsx', tab=t, q=q, **{'from': date_from, 'to': date_to}) }}">Excel</a></div></div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="export-box">
+        <div class="section-title"><div><h2>Exportar todo</h2><p>Archivo consolidado con varias hojas.</p></div></div>
+        <div class="mini-list">
+          <div class="mini-item"><div><strong>Excel completo</strong><div class="muted">Incluye usuarios, actividad, compras, descargas, archivos, tickets, reportes y más.</div></div><a class="btn-primary" href="{{ url_for('admin_export_panel_xlsx', tab='todo', q=q, **{'from': date_from, 'to': date_to}) }}">Descargar .xlsx</a></div>
+          <div class="mini-item"><div><strong>CSV legacy</strong><div class="muted">Descargas rápidas ya existentes.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="link-pill" href="/admin/export/movements.csv">Movimientos</a><a class="link-pill" href="/admin/export/events.csv">Eventos</a><a class="link-pill" href="/admin/export/tickets.csv">Tickets</a></div></div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

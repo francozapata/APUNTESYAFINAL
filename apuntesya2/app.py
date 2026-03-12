@@ -6170,12 +6170,628 @@ def help_commissions():
 # -----------------------------------------------------------------------------
 # HUB DE ADMIN + MINI APIs
 # -----------------------------------------------------------------------------
+def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
+    """Build datasets for the v2 admin panel without touching legacy APIs."""
+    q = (q or "").strip().lower()
+
+    def _parse_date(s, end=False):
+        if not s:
+            return None
+        try:
+            dt = datetime.fromisoformat(s)
+            if end:
+                return dt + timedelta(days=1)
+            return dt
+        except Exception:
+            return None
+
+    dt_from = _parse_date(date_from)
+    dt_to = _parse_date(date_to, end=True)
+    today = datetime.utcnow().date()
+    now = datetime.utcnow()
+
+    def _match_date(col, stmt):
+        if dt_from:
+            stmt = stmt.where(col >= dt_from)
+        if dt_to:
+            stmt = stmt.where(col < dt_to)
+        return stmt
+
+    def _safe_status_user(u):
+        if getattr(u, "deleted_at", None):
+            return "Eliminado"
+        if getattr(u, "is_suspended", False):
+            return "Suspendido"
+        if not bool(getattr(u, "is_active", True)):
+            return "Bloqueado"
+        return "Activo"
+
+    ctx = {
+        "stats": {
+            "users_today": 0,
+            "sales_today": 0,
+            "downloads_today": 0,
+            "files_today": 0,
+            "tickets_open": 0,
+            "reports_pending": 0,
+            "income_today_cents": 0,
+        },
+        "summary": {
+            "recent_events": [],
+            "recent_purchases": [],
+            "recent_files": [],
+            "recent_tickets": [],
+        },
+        "rows": [],
+        "row_count": 0,
+        "system": {},
+    }
+
+    with Session() as s:
+        # KPIs
+        try:
+            ctx["stats"]["users_today"] = int(s.execute(select(func.count(User.id)).where(cast(User.created_at, Date) == today)).scalar_one() or 0)
+        except Exception:
+            pass
+        try:
+            ctx["stats"]["sales_today"] = int(s.execute(select(func.count(Purchase.id)).where(Purchase.status == "approved", cast(Purchase.created_at, Date) == today)).scalar_one() or 0)
+        except Exception:
+            pass
+        try:
+            ctx["stats"]["downloads_today"] = int(s.execute(select(func.count(DownloadLog.id)).where(cast(DownloadLog.created_at, Date) == today)).scalar_one() or 0)
+        except Exception:
+            pass
+        try:
+            ctx["stats"]["files_today"] = int(s.execute(select(func.count(Note.id)).where(cast(Note.created_at, Date) == today)).scalar_one() or 0)
+        except Exception:
+            pass
+        try:
+            ctx["stats"]["tickets_open"] = int(s.execute(select(func.count(Ticket.id)).where(Ticket.status.in_(["new", "open", "pending", "in_review"]))).scalar_one() or 0)
+        except Exception:
+            pass
+        try:
+            ctx["stats"]["reports_pending"] = int(s.execute(select(func.count(Ticket.id)).where(Ticket.status.in_(["new", "open", "pending", "in_review"]))).scalar_one() or 0)
+        except Exception:
+            pass
+        try:
+            ctx["stats"]["income_today_cents"] = int(s.execute(select(func.coalesce(func.sum(Purchase.gross_cents), 0)).where(Purchase.status == "approved", cast(Purchase.created_at, Date) == today)).scalar_one() or 0)
+        except Exception:
+            pass
+
+        # Summary cards / recent activity
+        try:
+            evs = s.execute(select(AuditEvent).order_by(AuditEvent.created_at.desc()).limit(8)).scalars().all()
+            for ev in evs:
+                meta = ev.meta or {}
+                ctx["summary"]["recent_events"].append({
+                    "date": ev.created_at,
+                    "type": ev.action,
+                    "user": meta.get("target_email") or meta.get("buyer_email") or meta.get("seller_email") or f"ID {ev.actor_user_id or '-'}",
+                    "detail": meta.get("title") or meta.get("note_title") or meta.get("combo_title") or ev.target_type or "",
+                })
+        except Exception:
+            pass
+        try:
+            prs = s.execute(select(Purchase).where(Purchase.status == "approved").order_by(Purchase.created_at.desc()).limit(8)).scalars().all()
+            note_ids = [p.note_id for p in prs if getattr(p, 'note_id', None)]
+            titles = {}
+            if note_ids:
+                for nid, ttl in s.execute(select(Note.id, Note.title).where(Note.id.in_(note_ids))).all():
+                    titles[nid] = ttl
+            for p in prs:
+                ctx["summary"]["recent_purchases"].append({
+                    "date": p.created_at,
+                    "buyer": p.buyer_email or f"Usuario #{p.buyer_id}",
+                    "title": titles.get(p.note_id) or f"Compra #{p.id}",
+                    "amount_cents": int(getattr(p, 'gross_cents', 0) or getattr(p, 'amount_cents', 0) or 0),
+                    "status": p.status,
+                })
+        except Exception:
+            pass
+        try:
+            nts = s.execute(select(Note).order_by(Note.created_at.desc()).limit(8)).scalars().all()
+            seller_ids = [n.seller_id for n in nts if n.seller_id]
+            seller_map = {}
+            if seller_ids:
+                for u in s.execute(select(User).where(User.id.in_(seller_ids))).scalars().all():
+                    seller_map[u.id] = u
+            for n in nts:
+                seller = seller_map.get(n.seller_id)
+                ctx["summary"]["recent_files"].append({
+                    "date": n.created_at,
+                    "title": n.title,
+                    "seller": (seller.name if seller else None) or (seller.email if seller else None) or f"ID {n.seller_id}",
+                    "status": n.moderation_status,
+                })
+        except Exception:
+            pass
+        try:
+            tks = s.execute(select(Ticket).order_by(Ticket.created_at.desc()).limit(8)).scalars().all()
+            reporter_ids = [t.reporter_user_id for t in tks if t.reporter_user_id]
+            rep_map = {}
+            if reporter_ids:
+                for u in s.execute(select(User).where(User.id.in_(reporter_ids))).scalars().all():
+                    rep_map[u.id] = u
+            for t in tks:
+                ru = rep_map.get(t.reporter_user_id)
+                ctx["summary"]["recent_tickets"].append({
+                    "date": t.created_at,
+                    "code": t.code,
+                    "reporter": (ru.name if ru else None) or (ru.email if ru else None) or "—",
+                    "reason": t.reason,
+                    "status": t.status,
+                })
+        except Exception:
+            pass
+
+        # Users tab
+        if tab == "usuarios":
+            stmt = select(User).order_by(User.created_at.desc())
+            stmt = _match_date(User.created_at, stmt)
+            if q:
+                like = f"%{q}%"
+                stmt = stmt.where(or_(func.lower(User.name).like(like), func.lower(User.email).like(like), cast(User.id, String).like(f"%{q}%")))
+            if subtab == "nuevos":
+                stmt = stmt.where(User.created_at >= now - timedelta(days=7))
+            elif subtab == "activos":
+                stmt = stmt.where(User.deleted_at.is_(None), User.is_suspended == False, User.is_active == True)
+            elif subtab == "bloqueados":
+                stmt = stmt.where(User.deleted_at.is_(None), User.is_active == False)
+            elif subtab == "suspendidos":
+                stmt = stmt.where(User.is_suspended == True, User.deleted_at.is_(None))
+            elif subtab == "eliminados":
+                stmt = stmt.where(User.deleted_at.isnot(None))
+            elif subtab == "admins":
+                stmt = stmt.where(User.role.in_(["admin", "superadmin"]))
+            users = s.execute(stmt.limit(150)).scalars().all()
+            ctx["rows"] = [{
+                "date": u.created_at,
+                "user": u.name,
+                "email": u.email,
+                "role": u.role,
+                "status": _safe_status_user(u),
+                "last": getattr(u, 'suspended_at', None) or getattr(u, 'created_at', None),
+                "detail_url": url_for("admin_user_detail_page", user_id=u.id),
+                "id": u.id,
+            } for u in users]
+            ctx["row_count"] = len(ctx["rows"])
+
+        elif tab == "actividad":
+            stmt = select(AuditEvent).order_by(AuditEvent.created_at.desc())
+            stmt = _match_date(AuditEvent.created_at, stmt)
+            if q:
+                like = f"%{q}%"
+                stmt = stmt.where(or_(func.lower(AuditEvent.code).like(like), func.lower(AuditEvent.action).like(like), cast(AuditEvent.target_id, String).like(f"%{q}%")))
+            rows = s.execute(stmt.limit(150)).scalars().all()
+            ctx["rows"] = [{
+                "date": r.created_at,
+                "type": r.action,
+                "user": (r.meta or {}).get("buyer_email") or (r.meta or {}).get("seller_email") or (r.meta or {}).get("target_email") or f"Actor #{r.actor_user_id or '-'}",
+                "email": (r.meta or {}).get("buyer_email") or (r.meta or {}).get("seller_email") or (r.meta or {}).get("target_email") or "—",
+                "detail": (r.meta or {}).get("title") or (r.meta or {}).get("note_title") or (r.meta or {}).get("combo_title") or r.code,
+                "status": r.target_type or "—",
+                "meta": r.meta or {},
+            } for r in rows]
+            ctx["row_count"] = len(ctx["rows"])
+
+        elif tab == "compras":
+            stmt = select(Purchase).order_by(Purchase.created_at.desc())
+            stmt = _match_date(Purchase.created_at, stmt)
+            if subtab == "pagadas":
+                stmt = stmt.where(Purchase.status == "approved")
+            elif subtab == "pendientes":
+                stmt = stmt.where(Purchase.status == "pending")
+            elif subtab == "fallidas":
+                stmt = stmt.where(Purchase.status.in_(["rejected", "cancelled", "failed"]))
+            elif subtab == "reembolsadas":
+                stmt = stmt.where(Purchase.status.in_(["refunded", "charged_back"]))
+            if q:
+                like = f"%{q}%"
+                stmt = stmt.where(or_(func.lower(func.coalesce(Purchase.buyer_email, "")).like(like), cast(Purchase.id, String).like(f"%{q}%"), cast(Purchase.payment_id, String).like(f"%{q}%")))
+            purchases = s.execute(stmt.limit(150)).scalars().all()
+            note_ids = [p.note_id for p in purchases if p.note_id]
+            seller_ids = [p.seller_id for p in purchases if getattr(p, 'seller_id', None)]
+            note_map = {nid: ttl for nid, ttl in s.execute(select(Note.id, Note.title).where(Note.id.in_(note_ids))).all()} if note_ids else {}
+            user_map = {}
+            ids = list(set(seller_ids + [p.buyer_id for p in purchases if p.buyer_id]))
+            if ids:
+                for u in s.execute(select(User).where(User.id.in_(ids))).scalars().all():
+                    user_map[u.id] = u
+            rows=[]
+            for p in purchases:
+                buyer = user_map.get(p.buyer_id)
+                seller = user_map.get(getattr(p, 'seller_id', None))
+                rows.append({
+                    "date": p.created_at,
+                    "buyer": (buyer.name if buyer else None) or p.buyer_email or f"Usuario #{p.buyer_id}",
+                    "email": p.buyer_email or (buyer.email if buyer else "—"),
+                    "title": note_map.get(p.note_id) or (f"Compra #{p.id}"),
+                    "seller": (seller.name if seller else None) or (seller.email if seller else "—"),
+                    "gross_cents": int(getattr(p, 'gross_cents', 0) or getattr(p, 'amount_cents', 0) or 0),
+                    "platform_fee_cents": int(getattr(p, 'platform_fee_cents', 0) or 0),
+                    "status": p.status,
+                })
+            ctx["rows"] = rows
+            ctx["row_count"] = len(rows)
+
+        elif tab == "descargas":
+            stmt = select(DownloadLog).order_by(DownloadLog.created_at.desc())
+            stmt = _match_date(DownloadLog.created_at, stmt)
+            if subtab == "gratis":
+                stmt = stmt.where(or_(DownloadLog.was_free == True, DownloadLog.is_free == True))
+            elif subtab == "pagas":
+                stmt = stmt.where(and_(or_(DownloadLog.was_free == False, DownloadLog.was_free.is_(None)), or_(DownloadLog.is_free == False, DownloadLog.is_free.is_(None))))
+            if q:
+                stmt = stmt.where(cast(DownloadLog.user_id, String).like(f"%{q}%"))
+            dls = s.execute(stmt.limit(150)).scalars().all()
+            note_ids = [d.note_id for d in dls if d.note_id]
+            user_ids = [d.user_id for d in dls if d.user_id]
+            note_map = {}
+            seller_map = {}
+            if note_ids:
+                notes = s.execute(select(Note).where(Note.id.in_(note_ids))).scalars().all()
+                note_map = {n.id: n for n in notes}
+                seller_ids = [n.seller_id for n in notes if n.seller_id]
+                if seller_ids:
+                    for u in s.execute(select(User).where(User.id.in_(seller_ids))).scalars().all():
+                        seller_map[u.id] = u
+            user_map = {}
+            if user_ids:
+                for u in s.execute(select(User).where(User.id.in_(user_ids))).scalars().all():
+                    user_map[u.id] = u
+            rows=[]
+            for d in dls:
+                u = user_map.get(d.user_id)
+                n = note_map.get(d.note_id)
+                seller = seller_map.get(getattr(n, 'seller_id', None)) if n else None
+                was_free = bool(getattr(d, 'was_free', False) or getattr(d, 'is_free', False))
+                rows.append({
+                    "date": d.created_at,
+                    "user": (u.name if u else None) or f"Usuario #{d.user_id}",
+                    "email": (u.email if u else "—"),
+                    "title": (n.title if n else f"Apunte #{d.note_id}"),
+                    "type": "Gratis" if was_free else "Paga",
+                    "seller": (seller.name if seller else None) or (seller.email if seller else "—"),
+                })
+            ctx["rows"] = rows
+            ctx["row_count"] = len(rows)
+
+        elif tab == "archivos":
+            stmt = select(Note).order_by(Note.created_at.desc())
+            stmt = _match_date(Note.created_at, stmt)
+            if subtab == "subidos":
+                pass
+            elif subtab == "aprobados":
+                stmt = stmt.where(Note.moderation_status.in_(["auto_published", "published_flagged", "approved"]))
+            elif subtab == "rechazados":
+                stmt = stmt.where(Note.moderation_status == "rejected")
+            elif subtab == "ocultos":
+                stmt = stmt.where(or_(Note.is_active == False, Note.is_archived == True))
+            elif subtab == "eliminados":
+                stmt = stmt.where(Note.deleted_at.isnot(None))
+            if q:
+                like = f"%{q}%"
+                stmt = stmt.where(or_(func.lower(Note.title).like(like), func.lower(Note.description).like(like), func.lower(Note.university).like(like), func.lower(Note.faculty).like(like), func.lower(Note.career).like(like), cast(Note.id, String).like(f"%{q}%")))
+            notes = s.execute(stmt.limit(150)).scalars().all()
+            seller_ids = [n.seller_id for n in notes if n.seller_id]
+            seller_map = {}
+            if seller_ids:
+                for u in s.execute(select(User).where(User.id.in_(seller_ids))).scalars().all():
+                    seller_map[u.id] = u
+            note_ids = [n.id for n in notes]
+            purchases_count = {}
+            if note_ids:
+                for nid, cnt in s.execute(select(Purchase.note_id, func.count(Purchase.id)).where(Purchase.note_id.in_(note_ids), Purchase.status == "approved").group_by(Purchase.note_id)).all():
+                    purchases_count[nid] = int(cnt)
+                dl_counts = {nid: int(cnt) for nid, cnt in s.execute(select(DownloadLog.note_id, func.count(DownloadLog.id)).where(DownloadLog.note_id.in_(note_ids)).group_by(DownloadLog.note_id)).all()}
+            else:
+                dl_counts = {}
+            rows=[]
+            for n in notes:
+                seller = seller_map.get(n.seller_id)
+                status = "Eliminado" if n.deleted_at else ("Oculto" if (not n.is_active or n.is_archived) else n.moderation_status)
+                rows.append({
+                    "date": n.created_at,
+                    "author": (seller.name if seller else None) or f"Usuario #{n.seller_id}",
+                    "email": (seller.email if seller else "—"),
+                    "title": n.title,
+                    "type": "Pago" if int(getattr(n, 'price_cents', 0) or 0) > 0 else "Gratis",
+                    "price_cents": int(getattr(n, 'price_cents', 0) or 0),
+                    "downloads": int(dl_counts.get(n.id, 0)),
+                    "status": status,
+                })
+            ctx["rows"] = rows
+            ctx["row_count"] = len(rows)
+
+        elif tab == "tickets":
+            stmt = select(Ticket).order_by(Ticket.updated_at.desc())
+            stmt = _match_date(Ticket.created_at, stmt)
+            if subtab in ("abierto", "en_revision", "resuelto", "cerrado"):
+                map_status = {"abierto": ["new", "open"], "en_revision": ["pending", "in_review"], "resuelto": ["resolved"], "cerrado": ["closed"]}
+                stmt = stmt.where(Ticket.status.in_(map_status[subtab]))
+            if q:
+                like = f"%{q}%"
+                stmt = stmt.where(or_(func.lower(Ticket.code).like(like), func.lower(Ticket.reason).like(like), cast(Ticket.id, String).like(f"%{q}%")))
+            tickets = s.execute(stmt.limit(150)).scalars().all()
+            reporter_ids = [t.reporter_user_id for t in tickets if t.reporter_user_id]
+            reporter_map = {}
+            if reporter_ids:
+                for u in s.execute(select(User).where(User.id.in_(reporter_ids))).scalars().all():
+                    reporter_map[u.id] = u
+            ctx["rows"] = [{
+                "date": t.created_at,
+                "user": (reporter_map.get(t.reporter_user_id).name if reporter_map.get(t.reporter_user_id) else None) or "—",
+                "email": (reporter_map.get(t.reporter_user_id).email if reporter_map.get(t.reporter_user_id) else "—"),
+                "subject": t.code,
+                "category": t.reason,
+                "status": t.status,
+                "updated_at": t.updated_at,
+                "detail_url": f"/admin/tickets/{t.id}",
+            } for t in tickets]
+            ctx["row_count"] = len(ctx["rows"])
+
+        elif tab == "reportes":
+            stmt = select(Ticket).order_by(Ticket.created_at.desc())
+            stmt = _match_date(Ticket.created_at, stmt)
+            if q:
+                like = f"%{q}%"
+                stmt = stmt.where(or_(func.lower(Ticket.reason).like(like), func.lower(func.coalesce(Ticket.details, "")).like(like), func.lower(Ticket.code).like(like)))
+            tickets = s.execute(stmt.limit(150)).scalars().all()
+            reporter_ids = [t.reporter_user_id for t in tickets if t.reporter_user_id]
+            reporter_map = {}
+            if reporter_ids:
+                for u in s.execute(select(User).where(User.id.in_(reporter_ids))).scalars().all():
+                    reporter_map[u.id] = u
+            ctx["rows"] = [{
+                "date": t.created_at,
+                "reporter": (reporter_map.get(t.reporter_user_id).name if reporter_map.get(t.reporter_user_id) else None) or "—",
+                "email": (reporter_map.get(t.reporter_user_id).email if reporter_map.get(t.reporter_user_id) else "—"),
+                "object": f"Apunte #{t.note_id}",
+                "reason": t.reason,
+                "status": t.status,
+                "detail_url": f"/admin/tickets/{t.id}",
+            } for t in tickets]
+            ctx["row_count"] = len(ctx["rows"])
+
+        elif tab == "moderacion":
+            # Combine current states + admin actions for a readable moderation panel
+            rows = []
+            blocked = s.execute(select(User).where(User.is_active == False, User.deleted_at.is_(None)).order_by(User.created_at.desc()).limit(80)).scalars().all()
+            suspended = s.execute(select(User).where(User.is_suspended == True, User.deleted_at.is_(None)).order_by(User.created_at.desc()).limit(80)).scalars().all()
+            deleted = s.execute(select(User).where(User.deleted_at.isnot(None)).order_by(User.deleted_at.desc()).limit(80)).scalars().all()
+            if subtab == "cuentas_bloqueadas":
+                sel = blocked
+                action_name = "Cuenta bloqueada"
+            elif subtab == "cuentas_suspendidas":
+                sel = suspended
+                action_name = "Cuenta suspendida"
+            elif subtab == "cuentas_eliminadas":
+                sel = deleted
+                action_name = "Cuenta eliminada"
+            else:
+                sel = []
+            if subtab and subtab != "acciones_admin":
+                for u in sel:
+                    rows.append({
+                        "date": getattr(u, 'deleted_at', None) or getattr(u, 'suspended_at', None) or getattr(u, 'created_at', None),
+                        "user": u.name,
+                        "email": u.email,
+                        "action": action_name,
+                        "admin": "—",
+                        "reason": "—",
+                    })
+            else:
+                acts = s.execute(select(AdminAction).order_by(AdminAction.created_at.desc()).limit(120)).scalars().all()
+                admin_ids = [a.admin_id for a in acts if a.admin_id]
+                admin_map = {}
+                if admin_ids:
+                    for u in s.execute(select(User).where(User.id.in_(admin_ids))).scalars().all():
+                        admin_map[u.id] = u
+                for a in acts:
+                    adm = admin_map.get(a.admin_id)
+                    rows.append({
+                        "date": a.created_at,
+                        "user": f"{a.target_type} #{a.target_id}",
+                        "email": "—",
+                        "action": a.action,
+                        "admin": (adm.name if adm else None) or (adm.email if adm else "—"),
+                        "reason": a.reason or "—",
+                    })
+            ctx["rows"] = rows
+            ctx["row_count"] = len(rows)
+
+        elif tab == "sistema":
+            maintenance_on = (s.get(SiteSetting, "maintenance_mode").value if s.get(SiteSetting, "maintenance_mode") else "off")
+            sales_enabled = (s.get(SiteSetting, "sales_enabled").value if s.get(SiteSetting, "sales_enabled") else "on")
+            preview_pending = int(s.execute(select(func.count(Note.id)).where(or_(Note.preview_pages.is_(None), Note.preview_images.is_(None)))).scalar_one() or 0)
+            files_no_preview = preview_pending
+            uni_count = int(s.execute(select(func.count(University.id))).scalar_one() or 0)
+            fac_count = int(s.execute(select(func.count(Faculty.id))).scalar_one() or 0)
+            car_count = int(s.execute(select(func.count(Career.id))).scalar_one() or 0)
+            ctx["system"] = {
+                "maintenance_on": str(maintenance_on).lower() in ("1", "true", "on", "yes"),
+                "sales_enabled": str(sales_enabled).lower() in ("1", "true", "on", "yes"),
+                "preview_pending": preview_pending,
+                "files_no_preview": files_no_preview,
+                "universities": uni_count,
+                "faculties": fac_count,
+                "careers": car_count,
+            }
+            if subtab == "catalogos":
+                ctx["rows"] = [
+                    {"name": "Universidades", "type": "Catálogo", "status": "Activo", "updated": None, "count": uni_count},
+                    {"name": "Facultades", "type": "Catálogo", "status": "Activo", "updated": None, "count": fac_count},
+                    {"name": "Carreras", "type": "Catálogo", "status": "Activo", "updated": None, "count": car_count},
+                ]
+            elif subtab == "procesos":
+                ctx["rows"] = [
+                    {"name": "Generar previews faltantes", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_rebuild_previews")},
+                    {"name": "Sembrar UNC", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_seed_unc")},
+                ]
+            elif subtab == "logs":
+                acts = s.execute(select(AdminAction).order_by(AdminAction.created_at.desc()).limit(80)).scalars().all()
+                ctx["rows"] = [{"date": a.created_at, "name": a.action, "type": a.target_type, "status": a.reason or "—", "action_url": None} for a in acts]
+
+    return ctx
+
+
 @app.get("/admin/hub")
 @login_required
 @staff_required
 def admin_hub():
-    from datetime import datetime
-    return render_template("admin/hub.html", today_str=datetime.utcnow().strftime('%Y-%m-%d'))
+    tab = (request.args.get("tab") or "resumen").strip().lower()
+    subtab = (request.args.get("subtab") or "").strip().lower()
+    q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("from") or "").strip()
+    date_to = (request.args.get("to") or "").strip()
+    status_filter = (request.args.get("status") or "").strip().lower()
+
+    allowed_tabs = {"resumen","usuarios","actividad","compras","descargas","archivos","tickets","reportes","moderacion","sistema","exportar"}
+    if tab not in allowed_tabs:
+        tab = "resumen"
+    if tab in {"moderacion","sistema","exportar"} and not getattr(current_user, "is_superadmin", False):
+        tab = "resumen"
+
+    panel = _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter)
+    return render_template(
+        "admin/panel_v2.html",
+        today_str=datetime.utcnow().strftime('%Y-%m-%d'),
+        tab=tab,
+        subtab=subtab,
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+        status_filter=status_filter,
+        **panel,
+    )
+
+
+@app.get("/admin/export/panel.csv")
+@login_required
+@staff_required
+def admin_export_panel_csv():
+    import io, csv as _csv
+    tab = (request.args.get("tab") or "usuarios").strip().lower()
+    subtab = (request.args.get("subtab") or "").strip().lower()
+    q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("from") or "").strip()
+    date_to = (request.args.get("to") or "").strip()
+    status_filter = (request.args.get("status") or "").strip().lower()
+    panel = _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter)
+    rows = panel.get("rows") or []
+    output = io.StringIO()
+    w = _csv.writer(output)
+    if tab == "usuarios":
+        w.writerow(["fecha", "usuario", "email", "rol", "estado", "detalle_url", "id"])
+        for r in rows:
+            w.writerow([r.get("date"), r.get("user"), r.get("email"), r.get("role"), r.get("status"), r.get("detail_url"), r.get("id")])
+    elif tab == "actividad":
+        w.writerow(["fecha", "tipo", "usuario", "email", "detalle", "estado"])
+        for r in rows:
+            w.writerow([r.get("date"), r.get("type"), r.get("user"), r.get("email"), r.get("detail"), r.get("status")])
+    elif tab == "compras":
+        w.writerow(["fecha", "comprador", "email", "apunte", "vendedor", "precio_cents", "comision_cents", "estado"])
+        for r in rows:
+            w.writerow([r.get("date"), r.get("buyer"), r.get("email"), r.get("title"), r.get("seller"), r.get("gross_cents"), r.get("platform_fee_cents"), r.get("status")])
+    elif tab == "descargas":
+        w.writerow(["fecha", "usuario", "email", "archivo", "tipo", "vendedor"])
+        for r in rows:
+            w.writerow([r.get("date"), r.get("user"), r.get("email"), r.get("title"), r.get("type"), r.get("seller")])
+    elif tab == "archivos":
+        w.writerow(["fecha", "autor", "email", "archivo", "tipo", "precio_cents", "descargas", "estado"])
+        for r in rows:
+            w.writerow([r.get("date"), r.get("author"), r.get("email"), r.get("title"), r.get("type"), r.get("price_cents"), r.get("downloads"), r.get("status")])
+    elif tab == "tickets":
+        w.writerow(["fecha", "usuario", "email", "asunto", "categoria", "estado", "ultima_actualizacion", "detalle_url"])
+        for r in rows:
+            w.writerow([r.get("date"), r.get("user"), r.get("email"), r.get("subject"), r.get("category"), r.get("status"), r.get("updated_at"), r.get("detail_url")])
+    elif tab == "reportes":
+        w.writerow(["fecha", "reportante", "email", "objeto", "motivo", "estado", "detalle_url"])
+        for r in rows:
+            w.writerow([r.get("date"), r.get("reporter"), r.get("email"), r.get("object"), r.get("reason"), r.get("status"), r.get("detail_url")])
+    elif tab == "moderacion":
+        w.writerow(["fecha", "usuario", "email", "accion", "admin", "motivo"])
+        for r in rows:
+            w.writerow([r.get("date"), r.get("user"), r.get("email"), r.get("action"), r.get("admin"), r.get("reason")])
+    elif tab == "sistema":
+        w.writerow(["nombre", "tipo", "estado", "actualizado", "count", "action_url"])
+        for r in rows:
+            w.writerow([r.get("name"), r.get("type"), r.get("status"), r.get("updated"), r.get("count"), r.get("action_url")])
+    else:
+        w.writerow(["section", "info"])
+        w.writerow([tab, "Sin exportación tabular directa"])
+    csv_bytes = output.getvalue().encode("utf-8")
+    resp = make_response(csv_bytes)
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = f'attachment; filename="admin_{tab}_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv"'
+    return resp
+
+
+@app.get("/admin/export/panel.xlsx")
+@login_required
+@staff_required
+def admin_export_panel_xlsx():
+    try:
+        from openpyxl import Workbook
+    except Exception:
+        flash("Falta openpyxl para exportar Excel.", "warning")
+        return redirect(url_for("admin_hub", tab=request.args.get("tab") or "exportar"))
+
+    tab = (request.args.get("tab") or "usuarios").strip().lower()
+    q = (request.args.get("q") or "").strip()
+    subtab = (request.args.get("subtab") or "").strip().lower()
+    date_from = (request.args.get("from") or "").strip()
+    date_to = (request.args.get("to") or "").strip()
+    status_filter = (request.args.get("status") or "").strip().lower()
+    tabs = ["usuarios", "actividad", "compras", "descargas", "archivos", "tickets", "reportes"]
+    if getattr(current_user, "is_superadmin", False):
+        tabs += ["moderacion", "sistema"]
+    if tab != "todo":
+        tabs = [tab]
+
+    wb = Workbook()
+    first = True
+    for t in tabs:
+        panel = _admin_panel_collect(t, "", q, date_from, date_to, status_filter)
+        rows = panel.get("rows") or []
+        ws = wb.active if first else wb.create_sheet(title=t[:31])
+        ws.title = t[:31]
+        first = False
+        ws.append(["Sección", t])
+        ws.append(["Exportado", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")])
+        ws.append([])
+        if t == "usuarios":
+            ws.append(["Fecha", "Usuario", "Email", "Rol", "Estado", "Último acceso", "Detalle"])
+            for r in rows: ws.append([str(r.get("date") or ""), r.get("user"), r.get("email"), r.get("role"), r.get("status"), str(r.get("last") or ""), r.get("detail_url")])
+        elif t == "actividad":
+            ws.append(["Fecha", "Tipo", "Usuario", "Email", "Detalle", "Acción/Estado"])
+            for r in rows: ws.append([str(r.get("date") or ""), r.get("type"), r.get("user"), r.get("email"), r.get("detail"), r.get("status")])
+        elif t == "compras":
+            ws.append(["Fecha", "Comprador", "Email", "Apunte", "Vendedor", "Precio", "Comisión", "Estado"])
+            for r in rows: ws.append([str(r.get("date") or ""), r.get("buyer"), r.get("email"), r.get("title"), r.get("seller"), r.get("gross_cents"), r.get("platform_fee_cents"), r.get("status")])
+        elif t == "descargas":
+            ws.append(["Fecha", "Usuario", "Email", "Archivo", "Tipo", "Vendedor"])
+            for r in rows: ws.append([str(r.get("date") or ""), r.get("user"), r.get("email"), r.get("title"), r.get("type"), r.get("seller")])
+        elif t == "archivos":
+            ws.append(["Fecha", "Autor", "Email", "Archivo", "Tipo", "Precio", "Descargas", "Estado"])
+            for r in rows: ws.append([str(r.get("date") or ""), r.get("author"), r.get("email"), r.get("title"), r.get("type"), r.get("price_cents"), r.get("downloads"), r.get("status")])
+        elif t == "tickets":
+            ws.append(["Fecha", "Usuario", "Email", "Asunto", "Categoría", "Estado", "Actualizado", "Detalle"])
+            for r in rows: ws.append([str(r.get("date") or ""), r.get("user"), r.get("email"), r.get("subject"), r.get("category"), r.get("status"), str(r.get("updated_at") or ""), r.get("detail_url")])
+        elif t == "reportes":
+            ws.append(["Fecha", "Reportante", "Email", "Objeto", "Motivo", "Estado", "Detalle"])
+            for r in rows: ws.append([str(r.get("date") or ""), r.get("reporter"), r.get("email"), r.get("object"), r.get("reason"), r.get("status"), r.get("detail_url")])
+        elif t == "moderacion":
+            ws.append(["Fecha", "Usuario", "Email", "Acción", "Admin", "Motivo"])
+            for r in rows: ws.append([str(r.get("date") or ""), r.get("user"), r.get("email"), r.get("action"), r.get("admin"), r.get("reason")])
+        elif t == "sistema":
+            ws.append(["Nombre", "Tipo", "Estado", "Actualizado", "Cantidad", "Acción"])
+            for r in rows: ws.append([r.get("name"), r.get("type"), r.get("status"), str(r.get("updated") or ""), r.get("count"), r.get("action_url")])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return send_file(bio, as_attachment=True, download_name=f"admin_{tab}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 # -----------------------------------------------------------------------------

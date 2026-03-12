@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .shell{max-width:980px;margin:32px auto;padding:0 16px}
+  .card{background:#fff;border:1px solid #e5e7f5;border-radius:16px;padding:22px 20px;box-shadow:0 10px 30px rgba(15,23,42,.05)}
+  .h1{margin:0 0 8px;font-size:22px;font-weight:1000;color:#111827}
+  .sub{margin:0 0 14px;color:#6b7280;font-size:13px}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+  .box{flex:1;min-width:280px;border:1px solid #e5e7f5;border-radius:14px;background:#fafbff;padding:14px}
+  .label{font-size:12px;font-weight:900;color:#334;margin-bottom:6px}
+  .val{font-size:14px;color:#111827;font-weight:800}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid #dfe4ff;background:#f3f6ff;font-weight:900;font-size:12px;color:#334}
+  .warn{border-color:#fde68a;background:#fffbeb}
+  .ok{border-color:#86efac;background:#ecfdf5}
+  .btn{padding:10px 16px;border:0;border-radius:999px;background:#4478ff;color:#fff;font-weight:900;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+  .btn.ghost{background:#f3f6ff;color:#334;border:1px solid #dfe4ff}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(68,120,255,.25)}
+  .check{display:flex;gap:10px;align-items:flex-start;padding:12px 12px;border:1px solid #e5e7f5;border-radius:14px;background:#fff}
+  .check input{margin-top:3px}
+  .small{font-size:12px;color:#6b7280;line-height:1.35}
+  .radio{display:flex;gap:10px;align-items:flex-start;padding:12px 12px;border:1px solid #e5e7f5;border-radius:14px;background:#fff;margin-top:10px}
+  .radio input{margin-top:3px}
+  .links a{font-weight:900;text-decoration:none}
+  .links a:hover{text-decoration:underline}
+  .total{font-size:18px;font-weight:1000;color:#111827}
+  .muted{color:#6b7280}
+</style>
+
+<div class="shell">
+  <div class="card">
+    <div class="h1">🖨️ Confirmar pedido de impresión</div>
+    <div class="sub">Elegí la opción, revisá el detalle y pagá con Mercado Pago.</div>
+
+    <div class="row">
+      <div class="box">
+        <div class="label">Archivo</div>
+        <div class="val">{{ note.title }}</div>
+        <div class="small" style="margin-top:6px">Imprenta: <b>{{ seller.name }}</b></div>
+      </div>
+
+      <div class="box">
+        <div class="label">Retiro</div>
+        <div class="val">Presencial en el comercio</div>
+        <div class="small" style="margin-top:6px">Una vez acreditado el pago, la imprenta prepara el pedido.</div>
+      </div>
+    </div>
+
+    {% if print_specs %}
+    <div style="margin-top:12px" class="box">
+      <div class="label">Cómo se imprimirá</div>
+      <div class="small">{{ print_specs }}</div>
+    </div>
+    {% endif %}
+
+    <div style="margin-top:14px" class="pill warn">📌 El PDF es gratuito para descargar. Este pago corresponde al servicio de impresión.</div>
+
+    <form method="post" action="{{ url_for('buy_print', note_id=note.id) }}" style="margin-top:14px">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="box">
+        <div class="label">Elegí opción</div>
+
+        <label class="radio">
+          <input type="radio" name="with_binding" value="0" checked>
+          <div>
+            <div class="val">Sin anillado</div>
+            <div class="small muted">Total a pagar: <span class="total" id="totalNo">${{ pub_no_bind_ars }}</span></div>
+          </div>
+        </label>
+
+        <label class="radio">
+          <input type="radio" name="with_binding" value="1">
+          <div>
+            <div class="val">Con anillado</div>
+            <div class="small muted">Total a pagar: <span class="total" id="totalYes">${{ pub_bind_ars }}</span></div>
+          </div>
+        </label>
+
+        <div class="small" style="margin-top:8px;">
+          Los totales ya incluyen comisión de Mercado Pago y de ApuntesYa.
+        </div>
+      </div>
+
+      <div style="margin-top:12px" class="box">
+        <div class="label">Condiciones y políticas</div>
+        <div class="small links">
+          Al continuar, confirmás que leíste y aceptás:
+          <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Términos</a>,
+          <a href="{{ url_for('privacy') }}" target="_blank" rel="noopener">Privacidad</a> y
+          <a href="{{ url_for('security') }}" target="_blank" rel="noopener">Seguridad</a>.
+          (Versión: <b>{{ legal_version or '—' }}</b>)
+        </div>
+      </div>
+
+      <div style="margin-top:12px" class="check">
+        <input type="checkbox" id="ack" name="ack" value="1" required>
+        <label for="ack" class="small">
+          Confirmo que el retiro es presencial y que este pago es por un servicio físico de impresión. 
+          La preparación del pedido puede demorar según disponibilidad del comercio.
+        </label>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+        <a class="btn ghost" href="{{ url_for('note_detail', note_id=note.id) }}">⬅️ Volver</a>
+        <button class="btn" type="submit">💳 Continuar a Mercado Pago</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container" style="max-width: 1120px; margin: 0 auto; padding: 18px 16px;">
+  <h2 style="margin: 6px 0 10px; font-size: 22px;">Mis pedidos de impresión</h2>
+
+  <div style="margin: 0 0 14px; color:#475569; font-size:13px;">
+    Acá ves el estado de tus pedidos de impresión (retiro presencial en la imprenta).
+  </div>
+
+  <div class="card" style="background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:14px;margin-bottom:14px;">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
+      <form method="get" action="{{ url_for('my_print_orders') }}" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;">
+        <div>
+          <label style="display:block;font-size:12px;color:#64748b;margin-bottom:4px;">Pago (MP)</label>
+          <select name="pay" style="padding:9px 10px;border:1px solid #e2e8f0;border-radius:12px;min-width:180px;">
+            <option value="" {{ '' == (pay_filter or '') and 'selected' or '' }}>Todos</option>
+            <option value="approved" {{ 'approved' == (pay_filter or '') and 'selected' or '' }}>Aprobado</option>
+            <option value="pending" {{ 'pending' == (pay_filter or '') and 'selected' or '' }}>Pendiente</option>
+            <option value="in_process" {{ 'in_process' == (pay_filter or '') and 'selected' or '' }}>En proceso</option>
+            <option value="rejected" {{ 'rejected' == (pay_filter or '') and 'selected' or '' }}>Rechazado</option>
+            <option value="cancelled" {{ 'cancelled' == (pay_filter or '') and 'selected' or '' }}>Cancelado</option>
+            <option value="failed" {{ 'failed' == (pay_filter or '') and 'selected' or '' }}>Fallido</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="display:block;font-size:12px;color:#64748b;margin-bottom:4px;">Estado impresión</label>
+          <select name="print" style="padding:9px 10px;border:1px solid #e2e8f0;border-radius:12px;min-width:180px;">
+            <option value="" {{ '' == (print_filter or '') and 'selected' or '' }}>Todos</option>
+            <option value="pendiente" {{ 'pendiente' == (print_filter or '') and 'selected' or '' }}>Pendiente</option>
+            <option value="en_proceso" {{ 'en_proceso' == (print_filter or '') and 'selected' or '' }}>En proceso</option>
+            <option value="listo" {{ 'listo' == (print_filter or '') and 'selected' or '' }}>Listo</option>
+            <option value="retirado" {{ 'retirado' == (print_filter or '') and 'selected' or '' }}>Retirado</option>
+            <option value="cancelado" {{ 'cancelado' == (print_filter or '') and 'selected' or '' }}>Cancelado</option>
+          </select>
+        </div>
+
+        <button type="submit" style="padding:10px 14px;border-radius:12px;border:1px solid #2563eb;background:#2563eb;color:#fff;font-weight:700;">
+          Filtrar
+        </button>
+
+        <a href="{{ url_for('my_print_orders') }}" style="padding:10px 14px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;color:#0f172a;font-weight:700;text-decoration:none;">
+          Limpiar
+        </a>
+      </form>
+
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <span style="font-size:12px;color:#64748b;">Pagos (totales):</span>
+        {% for k,v in (pay_counts or {}).items() %}
+          <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#f1f5f9;color:#0f172a;font-weight:700;font-size:12px;">
+            {{ (k or '—')|upper }}: {{ v }}
+          </span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+      <span style="font-size:12px;color:#64748b;">Impresión (solo pagos APROBADOS):</span>
+      {% set cps = counts_paid or {} %}
+      <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#1e40af;font-weight:800;font-size:12px;">PENDIENTE: {{ cps.get('pendiente',0) }}</span>
+      <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#fff7ed;color:#9a3412;font-weight:800;font-size:12px;">EN PROCESO: {{ cps.get('en_proceso',0) }}</span>
+      <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#dcfce7;color:#166534;font-weight:800;font-size:12px;">LISTO: {{ cps.get('listo',0) }}</span>
+      <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#e2e8f0;color:#0f172a;font-weight:800;font-size:12px;">RETIRADO: {{ cps.get('retirado',0) }}</span>
+      <span style="display:inline-block;padding:6px 10px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:800;font-size:12px;">CANCELADO: {{ cps.get('cancelado',0) }}</span>
+    </div>
+  </div>
+
+  <div class="card" style="background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:14px;">
+    {% if not rows %}
+      <p style="margin:0;color:#334155;">Todavía no tenés pedidos de impresión.</p>
+    {% else %}
+      <div style="overflow:auto;">
+        <table style="width:100%;border-collapse:collapse;min-width:980px;">
+          <thead>
+            <tr style="text-align:left;border-bottom:1px solid #e5e7eb;">
+              <th style="padding:10px 8px;">Fecha</th>
+              <th style="padding:10px 8px;">Apunte</th>
+              <th style="padding:10px 8px;">Imprenta</th>
+              <th style="padding:10px 8px;">Anillado</th>
+              <th style="padding:10px 8px;">Total</th>
+              <th style="padding:10px 8px;">Pago</th>
+              <th style="padding:10px 8px;">Impresión</th>
+              <th style="padding:10px 8px;">MP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:10px 8px;white-space:nowrap;">
+                {{ (r.created_at|string)[:16].replace('T',' ') if r.created_at else '' }}
+              </td>
+              <td style="padding:10px 8px;">
+                <a href="{{ url_for('note_detail', note_id=r.note_id) }}" style="font-weight:700;color:#0f172a;text-decoration:none;">{{ r.note_title }}</a>
+                <div style="font-size:12px;color:#64748b;">Pedido #{{ r.id }}</div>
+              </td>
+              <td style="padding:10px 8px;">
+                <div style="font-weight:600;color:#0f172a;">{{ r.imprenta_name }}</div>
+                <div style="font-size:12px;color:#64748b;">Retiro presencial</div>
+              </td>
+              <td style="padding:10px 8px;">{{ "Sí" if r.with_binding else "No" }}</td>
+              <td style="padding:10px 8px;white-space:nowrap;">$ {{ r.gross_ars }}</td>
+
+              <td style="padding:10px 8px;white-space:nowrap;">
+                {% set st = (r.pay_status or 'pending') %}
+                {% if st in ['approved','paid','succeeded'] %}
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#dcfce7;color:#166534;font-weight:700;font-size:12px;">APROBADO</span>
+                {% elif st in ['pending','in_process'] %}
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#fff7ed;color:#9a3412;font-weight:700;font-size:12px;">PENDIENTE</span>
+                {% elif st in ['rejected','cancelled','canceled','failed'] %}
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:700;font-size:12px;">{{ st|upper }}</span>
+                {% else %}
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#e2e8f0;color:#0f172a;font-weight:700;font-size:12px;">{{ st|upper }}</span>
+                {% endif %}
+              </td>
+
+              <td style="padding:10px 8px;white-space:nowrap;">
+                {% set ps = (r.print_status or 'pendiente') %}
+                {% if ps == 'pendiente' %}
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#eef2ff;color:#1e40af;font-weight:800;font-size:12px;">PENDIENTE</span>
+                {% elif ps == 'en_proceso' %}
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#fff7ed;color:#9a3412;font-weight:800;font-size:12px;">EN PROCESO</span>
+                {% elif ps == 'listo' %}
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#dcfce7;color:#166534;font-weight:800;font-size:12px;">LISTO</span>
+                {% elif ps == 'retirado' %}
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#e2e8f0;color:#0f172a;font-weight:800;font-size:12px;">RETIRADO</span>
+                {% elif ps == 'cancelado' %}
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:800;font-size:12px;">CANCELADO</span>
+                {% else %}
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#e2e8f0;color:#0f172a;font-weight:800;font-size:12px;">{{ ps|upper }}</span>
+                {% endif %}
+              </td>
+
+              <td style="padding:10px 8px;">
+                {% if r.payment_id %}
+                  <span style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size:12px; color:#334155;">{{ r.payment_id }}</span>
+                {% else %}
+                  <span style="color:#94a3b8;">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
