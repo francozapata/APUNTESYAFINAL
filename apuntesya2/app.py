@@ -6635,8 +6635,7 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
                 ]
             elif subtab == "procesos":
                 ctx["rows"] = [
-                    {"name": "Generar previews faltantes", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_rebuild_previews")},
-                    {"name": "Sembrar UNC", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_seed_unc")},
+                    {"name": "Generar previews faltantes", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_previews_rebuild")},                    {"name": "Sembrar UNC", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_seed_unc")},
                 ]
             elif subtab == "logs":
                 try:
