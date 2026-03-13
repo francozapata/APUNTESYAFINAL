@@ -85,6 +85,7 @@ from apuntesya2.models import (
     AnalyticsEvent,
     Ticket,
     TicketEvent,
+    AdminAction,
 )
 
 from apuntesya2.seed_unc_academics import seed_unc
@@ -6225,6 +6226,7 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
         "rows": [],
         "row_count": 0,
         "system": {},
+        "maintenance_on": False,
     }
 
     with Session() as s:
@@ -6257,6 +6259,11 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
             ctx["stats"]["income_today_cents"] = int(s.execute(select(func.coalesce(func.sum(Purchase.gross_cents), 0)).where(Purchase.status == "approved", cast(Purchase.created_at, Date) == today)).scalar_one() or 0)
         except Exception:
             pass
+        try:
+            mm = s.get(SiteSetting, "maintenance_mode")
+            ctx["maintenance_on"] = str(mm.value if mm else "0").lower() in ("1", "true", "on", "yes")
+        except Exception:
+            ctx["maintenance_on"] = False
 
         # Summary cards / recent activity
         try:
@@ -6581,7 +6588,10 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
                         "reason": "—",
                     })
             else:
-                acts = s.execute(select(AdminAction).order_by(AdminAction.created_at.desc()).limit(120)).scalars().all()
+                try:
+                    acts = s.execute(select(AdminAction).order_by(AdminAction.created_at.desc()).limit(120)).scalars().all()
+                except Exception:
+                    acts = []
                 admin_ids = [a.admin_id for a in acts if a.admin_id]
                 admin_map = {}
                 if admin_ids:
@@ -6629,7 +6639,10 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
                     {"name": "Sembrar UNC", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_seed_unc")},
                 ]
             elif subtab == "logs":
-                acts = s.execute(select(AdminAction).order_by(AdminAction.created_at.desc()).limit(80)).scalars().all()
+                try:
+                    acts = s.execute(select(AdminAction).order_by(AdminAction.created_at.desc()).limit(80)).scalars().all()
+                except Exception:
+                    acts = []
                 ctx["rows"] = [{"date": a.created_at, "name": a.action, "type": a.target_type, "status": a.reason or "—", "action_url": None} for a in acts]
 
     return ctx
