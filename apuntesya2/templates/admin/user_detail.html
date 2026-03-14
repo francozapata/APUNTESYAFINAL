@@ -205,6 +205,7 @@
 
         <div class="action-bar">
             <form method="post" action="{{ url_for('admin_user_set_role', user_id=user_id) }}" class="action-group">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ request.path }}">
                 <select name="role" class="admin-select">
                     {% for role in role_options %}
@@ -216,11 +217,13 @@
 
             {% if user_obj and (user_obj.is_active and not user_obj.is_suspended) %}
             <form method="post" action="{{ url_for('admin_user_block_form', user_id=user_id) }}" class="action-group">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ request.path }}">
                 <button type="submit" class="btn-soft-warn">Bloquear cuenta</button>
             </form>
             {% else %}
             <form method="post" action="{{ url_for('admin_user_unblock_form', user_id=user_id) }}" class="action-group">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="next" value="{{ request.path }}">
                 <button type="submit" class="btn-soft">Desbloquear cuenta</button>
             </form>
@@ -228,6 +231,7 @@
 
             {% if user_obj and not user_obj.is_superadmin %}
             <form method="post" action="{{ url_for('admin_user_delete_form', user_id=user_id) }}" class="action-group" onsubmit="return confirm('¿Seguro que querés marcar esta cuenta como eliminada?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">   
                 <input type="hidden" name="next" value="{{ request.path }}">
                 <button type="submit" class="btn-soft-danger">Eliminar cuenta</button>
             </form>
