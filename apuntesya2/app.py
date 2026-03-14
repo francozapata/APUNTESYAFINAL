@@ -6226,7 +6226,6 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
         "rows": [],
         "row_count": 0,
         "system": {},
-        "maintenance_on": False,
     }
 
     with Session() as s:
@@ -6259,11 +6258,6 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
             ctx["stats"]["income_today_cents"] = int(s.execute(select(func.coalesce(func.sum(Purchase.gross_cents), 0)).where(Purchase.status == "approved", cast(Purchase.created_at, Date) == today)).scalar_one() or 0)
         except Exception:
             pass
-        try:
-            mm = s.get(SiteSetting, "maintenance_mode")
-            ctx["maintenance_on"] = str(mm.value if mm else "0").lower() in ("1", "true", "on", "yes")
-        except Exception:
-            ctx["maintenance_on"] = False
 
         # Summary cards / recent activity
         try:
@@ -6359,6 +6353,11 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
                 "status": _safe_status_user(u),
                 "last": getattr(u, 'suspended_at', None) or getattr(u, 'created_at', None),
                 "detail_url": url_for("admin_user_detail_page", user_id=u.id),
+                "block_url": url_for("admin_api_users_block", user_id=u.id),
+                "unblock_url": url_for("admin_api_users_unblock", user_id=u.id),
+                "delete_url": url_for("admin_api_users_delete", user_id=u.id),
+                "can_block": bool(getattr(u, 'role', 'user') != 'superadmin'),
+                "can_delete": bool(getattr(u, 'role', 'user') not in ('admin', 'superadmin') and u.id != getattr(current_user, 'id', None)),
                 "id": u.id,
             } for u in users]
             ctx["row_count"] = len(ctx["rows"])
@@ -6588,10 +6587,7 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
                         "reason": "—",
                     })
             else:
-                try:
-                    acts = s.execute(select(AdminAction).order_by(AdminAction.created_at.desc()).limit(120)).scalars().all()
-                except Exception:
-                    acts = []
+                acts = s.execute(select(AdminAction).order_by(AdminAction.created_at.desc()).limit(120)).scalars().all()
                 admin_ids = [a.admin_id for a in acts if a.admin_id]
                 admin_map = {}
                 if admin_ids:
@@ -6635,13 +6631,11 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
                 ]
             elif subtab == "procesos":
                 ctx["rows"] = [
-                    {"name": "Generar previews faltantes", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_previews_rebuild")},                    {"name": "Sembrar UNC", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_seed_unc")},
+                    {"name": "Generar previews faltantes", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_previews_rebuild")},
+                    {"name": "Sembrar UNC", "type": "Proceso", "status": "Disponible", "action_url": url_for("admin_seed_unc")},
                 ]
             elif subtab == "logs":
-                try:
-                    acts = s.execute(select(AdminAction).order_by(AdminAction.created_at.desc()).limit(80)).scalars().all()
-                except Exception:
-                    acts = []
+                acts = s.execute(select(AdminAction).order_by(AdminAction.created_at.desc()).limit(80)).scalars().all()
                 ctx["rows"] = [{"date": a.created_at, "name": a.action, "type": a.target_type, "status": a.reason or "—", "action_url": None} for a in acts]
 
     return ctx
@@ -7604,24 +7598,30 @@ def admin_api_user_detail(user_id):
 @login_required
 @admin_required
 def admin_api_users_block(user_id):
+    is_json = bool(request.is_json)
     data = request.get_json(silent=True) or {}
-    reason = (data.get("reason") or "").strip()
+    reason = (data.get("reason") or request.form.get("reason") or "").strip()
 
     with Session() as s:
         u = s.get(User, user_id)
         if not u:
-            return jsonify({"ok": False, "error": "not_found"}), 404
+            if is_json:
+                return jsonify({"ok": False, "error": "not_found"}), 404
+            flash("Usuario no encontrado.", "danger")
+            return redirect(url_for("admin_hub", tab="usuarios"))
 
         # No permitir bloquearse a uno mismo
         if u.id == current_user.id:
-            return jsonify({"ok": False, "error": "cannot_block_self"}), 400
+            if is_json:
+                return jsonify({"ok": False, "error": "cannot_block_self"}), 400
+            flash("No podés bloquearte a vos mismo.", "warning")
+            return redirect(url_for("admin_hub", tab="usuarios"))
 
         u.is_active = False
         if hasattr(u, "is_blocked"):
             u.is_blocked = True
         s.commit()
 
-        # Gestión / auditoría
         ticket = None
         try:
             ticket = log_audit_event(
@@ -7638,20 +7638,27 @@ def admin_api_users_block(user_id):
         except Exception:
             ticket = None
 
-    return jsonify({"ok": True, "status": "blocked", "ticket": ticket})
+    if is_json:
+        return jsonify({"ok": True, "status": "blocked", "ticket": ticket})
+    flash("Cuenta bloqueada correctamente.", "success")
+    return redirect(url_for("admin_hub", tab="usuarios", subtab="bloqueados"))
 
 
 @app.post("/admin/api/users/<int:user_id>/unblock")
 @login_required
 @admin_required
 def admin_api_users_unblock(user_id):
+    is_json = bool(request.is_json)
     data = request.get_json(silent=True) or {}
-    reason = (data.get("reason") or "").strip()
+    reason = (data.get("reason") or request.form.get("reason") or "").strip()
 
     with Session() as s:
         u = s.get(User, user_id)
         if not u:
-            return jsonify({"ok": False, "error": "not_found"}), 404
+            if is_json:
+                return jsonify({"ok": False, "error": "not_found"}), 404
+            flash("Usuario no encontrado.", "danger")
+            return redirect(url_for("admin_hub", tab="usuarios"))
 
         u.is_active = True
         if hasattr(u, "is_blocked"):
@@ -7674,35 +7681,48 @@ def admin_api_users_unblock(user_id):
         except Exception:
             ticket = None
 
-    return jsonify({"ok": True, "status": "unblocked", "ticket": ticket})
+    if is_json:
+        return jsonify({"ok": True, "status": "unblocked", "ticket": ticket})
+    flash("Cuenta reactivada correctamente.", "success")
+    return redirect(url_for("admin_hub", tab="usuarios", subtab="activos"))
 
 
 @app.post("/admin/api/users/<int:user_id>/delete")
 @login_required
 @admin_required
 def admin_api_users_delete(user_id):
+    is_json = bool(request.is_json)
     data = request.get_json(silent=True) or {}
-    reason = (data.get("reason") or "").strip()
+    reason = (data.get("reason") or request.form.get("reason") or "").strip()
 
     with Session() as s:
         u = s.get(User, user_id)
         if not u:
-            return jsonify({"ok": False, "error": "not_found"}), 404
+            if is_json:
+                return jsonify({"ok": False, "error": "not_found"}), 404
+            flash("Usuario no encontrado.", "danger")
+            return redirect(url_for("admin_hub", tab="usuarios"))
 
-        # No permitir borrarse a uno mismo ni borrar admins
         if u.id == current_user.id:
-            return jsonify({"ok": False, "error": "cannot_delete_self"}), 400
+            if is_json:
+                return jsonify({"ok": False, "error": "cannot_delete_self"}), 400
+            flash("No podés eliminarte a vos mismo.", "warning")
+            return redirect(url_for("admin_hub", tab="usuarios"))
         if getattr(u, "is_admin", False):
-            return jsonify({"ok": False, "error": "cannot_delete_admin"}), 400
-
-        # Si tiene apuntes o compras asociadas, mejor bloquear en vez de borrar
-        has_notes = bool(getattr(u, "notes", []) or [])
-        has_purchases = bool(getattr(u, "purchases", []) or [])
-        if has_notes or has_purchases:
-            return jsonify({"ok": False, "error": "has_related_data"}), 400
+            if is_json:
+                return jsonify({"ok": False, "error": "cannot_delete_admin"}), 400
+            flash("No se puede eliminar una cuenta admin desde este panel.", "warning")
+            return redirect(url_for("admin_hub", tab="usuarios"))
 
         target_email = getattr(u, "email", None)
-        s.delete(u)
+        # soft delete para no romper relaciones históricas
+        if hasattr(u, 'deleted_at'):
+            u.deleted_at = datetime.utcnow()
+        u.is_active = False
+        if hasattr(u, 'is_blocked'):
+            u.is_blocked = True
+        if hasattr(u, 'is_suspended'):
+            u.is_suspended = True
         s.commit()
 
         ticket = None
@@ -7721,7 +7741,10 @@ def admin_api_users_delete(user_id):
         except Exception:
             ticket = None
 
-    return jsonify({"ok": True, "status": "deleted", "ticket": ticket})
+    if is_json:
+        return jsonify({"ok": True, "status": "deleted", "ticket": ticket})
+    flash("Cuenta eliminada correctamente.", "success")
+    return redirect(url_for("admin_hub", tab="usuarios", subtab="eliminados"))
 
 
 @app.get("/admin/api/notes")
