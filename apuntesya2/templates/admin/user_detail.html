@@ -25,7 +25,7 @@
     .admin-title {
         margin: 0;
         font-size: 20px;
-        font-weight: 700;
+        font-weight: 500;
         color: #111827;
     }
 
@@ -42,7 +42,7 @@
         padding: 4px 10px;
         border-radius: 999px;
         font-size: 12px;
-        font-weight: 600;
+        font-weight: 500;
         border: 1px solid transparent;
     }
 
@@ -81,7 +81,7 @@
     }
 
     .admin-basic strong {
-        font-weight: 600;
+        font-weight: 500;
         color: #111827;
     }
 
@@ -112,7 +112,7 @@
 
     .stat-value {
         font-size: 18px;
-        font-weight: 700;
+        font-weight: 500;
         margin-top: 2px;
         color: #111827;
     }
@@ -135,8 +135,49 @@
     }
 
     .summary-box strong {
-        font-weight: 600;
+        font-weight: 500;
     }
+
+
+    .action-bar {
+        margin-top: 16px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .action-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .admin-select {
+        height: 40px;
+        border: 1px solid #dbe3ff;
+        border-radius: 10px;
+        padding: 0 12px;
+        font-size: 14px;
+        color: #334155;
+        background: #fff;
+    }
+
+    .btn-soft, .btn-soft-danger, .btn-soft-warn {
+        border: 1px solid #dbe3ff;
+        background: #fff;
+        color: #25418d;
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        text-decoration: none;
+    }
+
+    .btn-soft-warn { color: #9a3412; border-color: #fed7aa; background: #fff7ed; }
+    .btn-soft-danger { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
 
     @media (max-width: 720px) {
         .admin-card {
@@ -160,6 +201,37 @@
             <div id="userStatusPills">
                 <!-- Se rellenan desde JS usando el estado del usuario -->
             </div>
+        </div>
+
+        <div class="action-bar">
+            <form method="post" action="{{ url_for('admin_user_set_role', user_id=user_id) }}" class="action-group">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <select name="role" class="admin-select">
+                    {% for role in role_options %}
+                      <option value="{{ role }}" {% if user_obj and (user_obj.role or 'user') == role %}selected{% endif %}>{{ role|capitalize }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn-soft">Actualizar rol</button>
+            </form>
+
+            {% if user_obj and (user_obj.is_active and not user_obj.is_suspended) %}
+            <form method="post" action="{{ url_for('admin_user_block_form', user_id=user_id) }}" class="action-group">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" class="btn-soft-warn">Bloquear cuenta</button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('admin_user_unblock_form', user_id=user_id) }}" class="action-group">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" class="btn-soft">Desbloquear cuenta</button>
+            </form>
+            {% endif %}
+
+            {% if user_obj and not user_obj.is_superadmin %}
+            <form method="post" action="{{ url_for('admin_user_delete_form', user_id=user_id) }}" class="action-group" onsubmit="return confirm('¿Seguro que querés marcar esta cuenta como eliminada?');">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" class="btn-soft-danger">Eliminar cuenta</button>
+            </form>
+            {% endif %}
         </div>
 
         <div class="stat-grid" id="userStats" style="display:none;">
@@ -227,7 +299,9 @@
 
             const created = u.created_at ? new Date(u.created_at).toLocaleString() : 'N/D';
             const statusParts = [];
+            if (u.role) statusParts.push('Rol: ' + u.role);
             if (u.is_admin) statusParts.push('Admin');
+            if (u.is_suspended) statusParts.push('Suspendido');
             if (u.is_blocked || !u.is_active) statusParts.push('Bloqueado');
             if (!statusParts.length) statusParts.push('Activo');
 
@@ -243,10 +317,22 @@
             const pillsRoot = document.getElementById('userStatusPills');
             if (pillsRoot) {
                 pillsRoot.innerHTML = '';
+                if (u.role) {
+                    const pill = document.createElement('span');
+                    pill.className = 'status-pill admin';
+                    pill.textContent = 'Rol: ' + u.role;
+                    pillsRoot.appendChild(pill);
+                }
                 if (u.is_admin) {
                     const pill = document.createElement('span');
                     pill.className = 'status-pill admin';
                     pill.textContent = 'Admin';
+                    pillsRoot.appendChild(pill);
+                }
+                if (u.is_suspended) {
+                    const pill = document.createElement('span');
+                    pill.className = 'status-pill blocked';
+                    pill.textContent = 'Suspendido';
                     pillsRoot.appendChild(pill);
                 }
                 if (u.is_blocked || !u.is_active) {
