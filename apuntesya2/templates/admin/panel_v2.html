@@ -15,7 +15,7 @@
   .stat-card .sub{font-size:12px;color:#64748b;margin-top:4px}
   .money-val{font-size:22px!important}
   .tab-row,.subtab-row{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
-  .tab-pill,.subtab-pill,.link-pill{display:inline-flex;align-items:center;gap:8px;text-decoration:none;padding:10px 14px;border-radius:999px;background:#eef2ff;border:1px solid #dbe3ff;color:#25418d;font-weight:600;font-size:14px}
+  .tab-pill,.subtab-pill,.link-pill{display:inline-flex;align-items:center;gap:8px;text-decoration:none;padding:10px 14px;border-radius:999px;background:#eef2ff;border:1px solid #dbe3ff;color:#25418d;font-weight:500;font-size:14px}
   .tab-pill.active{background:#2563eb;color:#fff;box-shadow:0 8px 18px rgba(37,99,235,.22)}
   .subtab-pill{background:#fff;color:#334155}
   .subtab-pill.active{background:#eff6ff;color:#1d4ed8;border-color:#93c5fd}
@@ -192,7 +192,7 @@
         <div style="margin-top:14px" class="mini-list">
           <div class="mini-item"><div><strong>Últimos eventos del sistema</strong><div class="muted">Actividad reciente para auditoría rápida.</div></div><div class="muted">{{ summary.recent_events|length }} ítems</div></div>
           {% for item in summary.recent_events[:5] %}
-            <div class="mini-item"><div><strong>{{ item.type|replace('_',' ')|capitalize }}</strong><div class="muted">{{ item.user }} · {{ item.detail }}</div></div><div class="muted">{{ item.date.strftime('%d/%m/%Y %H:%M') if item.date else '—' }}</div></div>
+            <div class="mini-item"><div><div style="font-weight:500;color:#0f172a">{{ item.type }}</div><div class="muted">{{ item.detail }}</div></div><div class="muted">{{ item.date.strftime('%d/%m/%Y %H:%M') if item.date else '—' }}</div></div>
           {% else %}<div class="empty">Sin eventos recientes.</div>{% endfor %}
         </div>
       </div>
@@ -222,15 +222,15 @@
     <div class="panel-card">
       <div class="section-title"><div><h2>Usuarios</h2><p>Gestión completa de cuentas.</p></div><div class="muted">{{ row_count }} resultados</div></div>
       <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Usuario</th><th>Email</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th>Acción</th></tr></thead><tbody>
-      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td><strong style="font-weight:600">{{ r.user }}</strong><div class="muted">ID {{ r.id }}</div></td><td>{{ r.email }}</td><td>{{ r.role }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status }}</span></td><td>{{ r.last.strftime('%d/%m/%Y %H:%M') if r.last else '—' }}</td><td><div class="action-stack"><a class="link-pill small" href="{{ r.detail_url }}">Ver perfil</a>{% if r.can_block %}<form method="post" action="{{ r.block_url }}"><input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn-ghost" type="submit">{{ 'Desbloquear' if r.is_blocked else 'Bloquear' }}</button></form>{% endif %}{% if r.can_delete %}<form method="post" action="{{ r.delete_url }}" onsubmit="return confirm('¿Eliminar esta cuenta?');"><input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn-danger" type="submit">Eliminar</button></form>{% endif %}</div></td></tr>{% else %}<tr><td colspan="7" class="empty">No hay usuarios para mostrar.</td></tr>{% endfor %}
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td><div style="font-weight:500;color:#0f172a">{{ r.user }}</div><div class="muted">ID {{ r.id }}</div></td><td>{{ r.email }}</td><td>{{ r.role }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status }}</span></td><td>{{ r.last.strftime('%d/%m/%Y %H:%M') if r.last else '—' }}</td><td><div class="action-stack"><a class="link-pill small" href="{{ r.detail_url }}">Ver perfil</a>{% if r.can_block %}<form method="post" action="{{ r.block_url }}">{% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn-ghost" type="submit">{{ 'Desbloquear' if r.is_blocked else 'Bloquear' }}</button></form>{% endif %}{% if r.can_delete %}<form method="post" action="{{ r.delete_url }}" onsubmit="return confirm('¿Eliminar esta cuenta?');">{% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn-danger" type="submit">Eliminar</button></form>{% endif %}</div></td></tr>{% else %}<tr><td colspan="7" class="empty">No hay usuarios para mostrar.</td></tr>{% endfor %}
       </tbody></table></div>
     </div>
 
   {% elif tab == 'actividad' %}
     <div class="panel-card">
-      <div class="section-title"><div><h2>Actividad</h2><p>Historial general del sistema.</p></div><div class="muted">{{ row_count }} eventos</div></div>
-      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Usuario</th><th>Email</th><th>Detalle</th><th>Acción</th></tr></thead><tbody>
-      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.type|replace('_',' ') }}</td><td>{{ r.user }}</td><td>{{ r.email }}</td><td>{{ r.detail }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status }}</span></td></tr>{% else %}<tr><td colspan="6" class="empty">Sin actividad para este filtro.</td></tr>{% endfor %}
+      <div class="section-title"><div><h2>Actividad</h2><p>Historial general del sistema, expresado en lenguaje más claro.</p></div><div class="muted">{{ row_count }} eventos</div></div>
+      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Acción</th><th>Quién</th><th>Afectado</th><th>Código</th><th>Estado</th></tr></thead><tbody>
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td><div style="font-weight:500;color:#0f172a">{{ r.type }}</div><div class="muted">{{ r.detail }}</div></td><td>{{ r.user }}<div class="muted">{{ r.email }}</div></td><td>{{ r.affected or '—' }}</td><td><span class="muted">{{ r.code or '—' }}</span></td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status }}</span></td></tr>{% else %}<tr><td colspan="6" class="empty">Sin actividad para este filtro.</td></tr>{% endfor %}
       </tbody></table></div>
     </div>
 
@@ -249,9 +249,9 @@
     </div>
 
   {% elif tab == 'archivos' %}
-    <div class="panel-card"><div class="section-title"><div><h2>Archivos</h2><p>Gestión de apuntes y archivos publicados.</p></div><div class="muted">{{ row_count }} resultados</div></div>
-      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Autor</th><th>Email</th><th>Archivo</th><th>Tipo</th><th>Precio</th><th>Descargas</th><th>Estado</th></tr></thead><tbody>
-      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.author }}</td><td>{{ r.email }}</td><td>{{ r.title }}</td><td>{{ r.type }}</td><td>{{ money(r.price_cents) }}</td><td>{{ r.downloads }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status|replace('_',' ') }}</span></td></tr>{% else %}<tr><td colspan="8" class="empty">Sin archivos para mostrar.</td></tr>{% endfor %}
+    <div class="panel-card"><div class="section-title"><div><h2>Archivos</h2><p>Gestión y moderación de apuntes.</p></div><div class="muted">{{ row_count }} resultados</div></div>
+      <div class="table-wrap"><table class="admin-table"><thead><tr><th>Fecha</th><th>Autor</th><th>Email</th><th>Archivo</th><th>Tipo</th><th>Precio</th><th>Descargas</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
+      {% for r in rows %}<tr><td>{{ r.date.strftime('%d/%m/%Y %H:%M') if r.date else '—' }}</td><td>{{ r.author }}</td><td>{{ r.email }}</td><td><div style="font-weight:500;color:#0f172a">{{ r.title }}</div>{% if r.ticket_count %}<div class="muted">{{ r.ticket_count }} ticket(s) abiertos</div>{% endif %}</td><td>{{ r.type }}</td><td>{{ money(r.price_cents) }}</td><td>{{ r.downloads }}</td><td><span class="status-pill {{ status_class(r.status) }}">{{ r.status|replace('_',' ') }}</span></td><td><div class="action-stack">{% if r.can_approve %}<form method="post" action="{{ r.approve_url }}">{% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn-primary" type="submit">Aprobar</button></form>{% endif %}{% if r.can_suspend %}<form method="post" action="{{ r.suspend_url }}">{% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn-ghost" type="submit">Suspender</button></form>{% endif %}{% if r.can_reactivate %}<form method="post" action="{{ r.reactivate_url }}">{% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn-ghost" type="submit">Reactivar</button></form>{% endif %}<form method="post" action="{{ r.delete_url }}" onsubmit="return confirm('¿Eliminar este apunte?');">{% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}<input type="hidden" name="next" value="{{ request.full_path }}"><button class="btn-danger" type="submit">Eliminar</button></form></div></td></tr>{% else %}<tr><td colspan="9" class="empty">Sin archivos para mostrar.</td></tr>{% endfor %}
       </tbody></table></div>
     </div>
 

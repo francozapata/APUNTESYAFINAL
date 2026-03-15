@@ -6171,6 +6171,84 @@ def help_commissions():
 # -----------------------------------------------------------------------------
 # HUB DE ADMIN + MINI APIs
 # -----------------------------------------------------------------------------
+
+
+def _humanize_admin_activity(action: str, actor_name: str | None = None, target_type: str | None = None, target_label: str | None = None, meta: dict | None = None) -> dict:
+    """Return human-friendly Spanish labels for admin/activity rows without DB changes."""
+    meta = meta or {}
+    action = (action or '').strip().lower()
+    actor = actor_name or meta.get('actor_name') or 'Sistema'
+    target = target_label or meta.get('target_email') or meta.get('buyer_email') or meta.get('seller_email') or meta.get('title') or meta.get('note_title') or meta.get('combo_title') or (f"{target_type} #{meta.get('target_id')}" if meta.get('target_id') else None) or '—'
+    status = meta.get('status') or meta.get('to') or target_type or '—'
+
+    if action == 'set_role':
+        old_role = meta.get('from') or 'sin rol'
+        new_role = meta.get('to') or meta.get('role') or status
+        msg = f"{actor} cambió el rol de {target} de {old_role} a {new_role}."
+        short = 'Cambio de rol'
+        affected = target
+    elif action in ('toggle_maintenance', 'toggle_sales'):
+        mode = meta.get('mode') or meta.get('sales_enabled')
+        on = str(mode) in ('1','true','True','yes','on')
+        what = 'el modo mantenimiento' if action == 'toggle_maintenance' else 'las ventas'
+        msg = f"{actor} {'activó' if on else 'desactivó'} {what} del sitio."
+        short = 'Configuración del sitio'
+        affected = 'Sitio'
+        status = 'Activo' if on else 'Inactivo'
+    elif action in ('admin_delete_note', 'user_delete_note'):
+        msg = f"{actor} eliminó el apunte {target}."
+        short = 'Apunte eliminado'
+        affected = target
+    elif action in ('note_uploaded', 'note_created'):
+        msg = f"{actor} subió el apunte {target}."
+        short = 'Apunte subido'
+        affected = target
+    elif action in ('note_moderation', 'note_approved'):
+        decision = meta.get('status') or meta.get('decision') or status
+        msg = f"{actor} actualizó el estado del apunte {target} a {decision}."
+        short = 'Moderación de apunte'
+        affected = target
+    elif action == 'purchase_approved' or action == 'purchase_paid' or action == 'purchase_created':
+        amount = meta.get('amount_cents') or meta.get('gross_cents')
+        if amount is not None:
+            try:
+                amount_txt = f" (${int(amount)/100:,.2f})"
+            except Exception:
+                amount_txt = ''
+        else:
+            amount_txt = ''
+        msg = f"{actor} registró una compra de {target}{amount_txt}."
+        short = 'Compra'
+        affected = target
+    elif action in ('free_download', 'paid_download', 'download_created'):
+        kind = 'gratuita' if 'free' in action else ('paga' if 'paid' in action else 'registrada')
+        msg = f"{actor} realizó una descarga {kind} de {target}."
+        short = 'Descarga'
+        affected = target
+    elif action in ('ticket_created', 'note_reported'):
+        msg = f"{actor} creó un reporte sobre {target}."
+        short = 'Ticket / reporte'
+        affected = target
+    elif action in ('user_suspend', 'user_blocked', 'user_deleted'):
+        verb = {'user_suspend':'suspendió','user_blocked':'bloqueó','user_deleted':'eliminó'}.get(action, 'actualizó')
+        msg = f"{actor} {verb} la cuenta de {target}."
+        short = 'Acción sobre usuario'
+        affected = target
+    else:
+        code = meta.get('code') or action or 'evento'
+        msg = f"{actor} realizó la acción '{code}' sobre {target}."
+        short = (action or 'evento').replace('_',' ').capitalize()
+        affected = target
+
+    return {
+        'short': short,
+        'message': msg,
+        'actor': actor,
+        'affected': affected,
+        'status': status,
+    }
+
+
 def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
     """Build datasets for the v2 admin panel without touching legacy APIs."""
     q = (q or "").strip().lower()
@@ -6262,13 +6340,22 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
         # Summary cards / recent activity
         try:
             evs = s.execute(select(AuditEvent).order_by(AuditEvent.created_at.desc()).limit(8)).scalars().all()
+            actor_ids = [ev.actor_user_id for ev in evs if ev.actor_user_id]
+            actor_map = {}
+            if actor_ids:
+                for u in s.execute(select(User).where(User.id.in_(actor_ids))).scalars().all():
+                    actor_map[u.id] = u
             for ev in evs:
                 meta = ev.meta or {}
+                actor_u = actor_map.get(ev.actor_user_id)
+                actor_name = (actor_u.name if actor_u else None) or (actor_u.email if actor_u else None) or meta.get('actor_name') or f"Usuario #{ev.actor_user_id}" if ev.actor_user_id else 'Sistema'
+                target_label = meta.get("target_email") or meta.get("buyer_email") or meta.get("seller_email") or meta.get("title") or meta.get("note_title") or meta.get("combo_title") or (f"{ev.target_type} #{ev.target_id}" if ev.target_type and ev.target_id else ev.target_type) or ""
+                human = _humanize_admin_activity(ev.action, actor_name, ev.target_type, target_label, meta)
                 ctx["summary"]["recent_events"].append({
                     "date": ev.created_at,
-                    "type": ev.action,
-                    "user": meta.get("target_email") or meta.get("buyer_email") or meta.get("seller_email") or f"ID {ev.actor_user_id or '-'}",
-                    "detail": meta.get("title") or meta.get("note_title") or meta.get("combo_title") or ev.target_type or "",
+                    "type": human['short'],
+                    "user": human['actor'],
+                    "detail": human['message'],
                 })
         except Exception:
             pass
@@ -6368,16 +6455,46 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
             if q:
                 like = f"%{q}%"
                 stmt = stmt.where(or_(func.lower(AuditEvent.code).like(like), func.lower(AuditEvent.action).like(like), cast(AuditEvent.target_id, String).like(f"%{q}%")))
-            rows = s.execute(stmt.limit(150)).scalars().all()
-            ctx["rows"] = [{
-                "date": r.created_at,
-                "type": r.action,
-                "user": (r.meta or {}).get("buyer_email") or (r.meta or {}).get("seller_email") or (r.meta or {}).get("target_email") or f"Actor #{r.actor_user_id or '-'}",
-                "email": (r.meta or {}).get("buyer_email") or (r.meta or {}).get("seller_email") or (r.meta or {}).get("target_email") or "—",
-                "detail": (r.meta or {}).get("title") or (r.meta or {}).get("note_title") or (r.meta or {}).get("combo_title") or r.code,
-                "status": r.target_type or "—",
-                "meta": r.meta or {},
-            } for r in rows]
+            audit_rows = s.execute(stmt.limit(150)).scalars().all()
+            actor_ids = [r.actor_user_id for r in audit_rows if r.actor_user_id]
+            actor_map = {}
+            if actor_ids:
+                for u in s.execute(select(User).where(User.id.in_(actor_ids))).scalars().all():
+                    actor_map[u.id] = u
+            note_ids = [r.target_id for r in audit_rows if r.target_type == 'note' and r.target_id]
+            user_target_ids = [r.target_id for r in audit_rows if r.target_type == 'user' and r.target_id]
+            note_map = {}
+            if note_ids:
+                for n in s.execute(select(Note).where(Note.id.in_(note_ids))).scalars().all():
+                    note_map[n.id] = n
+            target_user_map = {}
+            if user_target_ids:
+                for u in s.execute(select(User).where(User.id.in_(user_target_ids))).scalars().all():
+                    target_user_map[u.id] = u
+            built=[]
+            for r in audit_rows:
+                meta = r.meta or {}
+                actor_u = actor_map.get(r.actor_user_id)
+                actor_name = (actor_u.name if actor_u else None) or (actor_u.email if actor_u else None) or (f"Usuario #{r.actor_user_id}" if r.actor_user_id else 'Sistema')
+                if r.target_type == 'note' and r.target_id in note_map:
+                    target_label = f"apunte '{note_map[r.target_id].title}'"
+                elif r.target_type == 'user' and r.target_id in target_user_map:
+                    tu = target_user_map[r.target_id]
+                    target_label = tu.name or tu.email or f"usuario #{tu.id}"
+                else:
+                    target_label = meta.get('target_email') or meta.get('buyer_email') or meta.get('seller_email') or meta.get('title') or meta.get('note_title') or meta.get('combo_title') or (f"{r.target_type} #{r.target_id}" if r.target_type and r.target_id else r.target_type)
+                human = _humanize_admin_activity(r.action, actor_name, r.target_type, target_label, meta)
+                built.append({
+                    "date": r.created_at,
+                    "type": human['short'],
+                    "user": human['actor'],
+                    "email": (actor_u.email if actor_u else None) or '—',
+                    "detail": human['message'],
+                    "status": human['status'],
+                    "affected": human['affected'],
+                    "code": r.code,
+                })
+            ctx["rows"] = built
             ctx["row_count"] = len(ctx["rows"])
 
         elif tab == "compras":
@@ -6486,17 +6603,25 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
                     seller_map[u.id] = u
             note_ids = [n.id for n in notes]
             purchases_count = {}
+            ticket_counts = {}
             if note_ids:
                 for nid, cnt in s.execute(select(Purchase.note_id, func.count(Purchase.id)).where(Purchase.note_id.in_(note_ids), Purchase.status == "approved").group_by(Purchase.note_id)).all():
                     purchases_count[nid] = int(cnt)
                 dl_counts = {nid: int(cnt) for nid, cnt in s.execute(select(DownloadLog.note_id, func.count(DownloadLog.id)).where(DownloadLog.note_id.in_(note_ids)).group_by(DownloadLog.note_id)).all()}
+                open_statuses = ["new", "open", "pending", "in_review", "need_seller_action"]
+                ticket_counts = {nid: int(cnt) for nid, cnt in s.execute(select(Ticket.note_id, func.count(Ticket.id)).where(Ticket.note_id.in_(note_ids), Ticket.status.in_(open_statuses)).group_by(Ticket.note_id)).all()}
             else:
                 dl_counts = {}
             rows=[]
             for n in notes:
                 seller = seller_map.get(n.seller_id)
                 status = "Eliminado" if n.deleted_at else ("Oculto" if (not n.is_active or n.is_archived) else n.moderation_status)
+                moderation_status = (getattr(n, 'moderation_status', '') or '').strip()
+                can_approve = moderation_status in ('pending_manual','blocked_review','rejected') or (not getattr(n,'is_active',True) and not n.deleted_at)
+                can_suspend = bool(getattr(n,'is_active',True)) and not n.deleted_at
+                can_reactivate = (not getattr(n,'is_active',True)) and not n.deleted_at
                 rows.append({
+                    "id": n.id,
                     "date": n.created_at,
                     "author": (seller.name if seller else None) or f"Usuario #{n.seller_id}",
                     "email": (seller.email if seller else "—"),
@@ -6505,6 +6630,14 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
                     "price_cents": int(getattr(n, 'price_cents', 0) or 0),
                     "downloads": int(dl_counts.get(n.id, 0)),
                     "status": status,
+                    "ticket_count": int(ticket_counts.get(n.id, 0)),
+                    "approve_url": url_for('admin_note_approve_form', note_id=n.id),
+                    "suspend_url": url_for('admin_note_suspend_form', note_id=n.id),
+                    "reactivate_url": url_for('admin_note_reactivate_form', note_id=n.id),
+                    "delete_url": url_for('admin_note_delete_form', note_id=n.id),
+                    "can_approve": can_approve,
+                    "can_suspend": can_suspend,
+                    "can_reactivate": can_reactivate,
                 })
             ctx["rows"] = rows
             ctx["row_count"] = len(rows)
@@ -6642,6 +6775,88 @@ def _admin_panel_collect(tab, subtab, q, date_from, date_to, status_filter):
                 ctx["rows"] = [{"date": a.created_at, "name": a.action, "type": a.target_type, "status": a.reason or "—", "action_url": None} for a in acts]
 
     return ctx
+
+
+
+
+@app.post("/admin/note/<int:note_id>/approve")
+@login_required
+@staff_required
+def admin_note_approve_form(note_id):
+    next_url = request.form.get("next") or url_for("admin_hub", tab="archivos")
+    with Session() as s:
+        n = s.get(Note, note_id)
+        if not n:
+            flash("Apunte no encontrado.", "warning")
+            return redirect(next_url)
+        n.is_active = True
+        if hasattr(n, 'is_archived'):
+            n.is_archived = False
+        if hasattr(n, 'moderation_status'):
+            n.moderation_status = 'approved'
+        if hasattr(n, 'moderation_reason'):
+            n.moderation_reason = None
+        s.commit()
+        _audit('note_moderation', target_type='note', target_id=n.id, meta={'status':'approved', 'title': n.title})
+        flash('Apunte aprobado.', 'success')
+    return redirect(next_url)
+
+
+@app.post("/admin/note/<int:note_id>/suspend")
+@login_required
+@staff_required
+def admin_note_suspend_form(note_id):
+    next_url = request.form.get("next") or url_for("admin_hub", tab="archivos")
+    with Session() as s:
+        n = s.get(Note, note_id)
+        if not n:
+            flash("Apunte no encontrado.", "warning")
+            return redirect(next_url)
+        n.is_active = False
+        if hasattr(n, 'moderation_status'):
+            n.moderation_status = 'blocked_review'
+        s.commit()
+        _audit('note_moderation', target_type='note', target_id=n.id, meta={'status':'suspended', 'title': n.title})
+        flash('Apunte suspendido.', 'success')
+    return redirect(next_url)
+
+
+@app.post("/admin/note/<int:note_id>/reactivate")
+@login_required
+@staff_required
+def admin_note_reactivate_form(note_id):
+    next_url = request.form.get("next") or url_for("admin_hub", tab="archivos")
+    with Session() as s:
+        n = s.get(Note, note_id)
+        if not n:
+            flash("Apunte no encontrado.", "warning")
+            return redirect(next_url)
+        n.is_active = True
+        if hasattr(n, 'is_archived'):
+            n.is_archived = False
+        if hasattr(n, 'moderation_status') and (not getattr(n, 'moderation_status', None) or n.moderation_status in ('blocked_review','rejected','pending_manual')):
+            n.moderation_status = 'approved'
+        s.commit()
+        _audit('note_moderation', target_type='note', target_id=n.id, meta={'status':'reactivated', 'title': n.title})
+        flash('Apunte reactivado.', 'success')
+    return redirect(next_url)
+
+
+@app.post("/admin/note/<int:note_id>/delete")
+@login_required
+@staff_required
+def admin_note_delete_form(note_id):
+    next_url = request.form.get("next") or url_for("admin_hub", tab="archivos")
+    with Session() as s:
+        n = s.get(Note, note_id)
+        if not n:
+            flash("Apunte no encontrado.", "warning")
+            return redirect(next_url)
+        _admin_soft_delete_note(s, n)
+        s.commit()
+        _audit('admin_delete_note', target_type='note', target_id=n.id, meta={'title': n.title})
+        flash('Apunte eliminado.', 'success')
+    return redirect(next_url)
 
 
 @app.get("/admin/hub")
