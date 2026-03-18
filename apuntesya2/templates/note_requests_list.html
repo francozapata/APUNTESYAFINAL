@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="padding:18px;">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+    <div>
+      <h1 style="margin:0 0 6px;">Pedidos de apuntes</h1>
+      <p class="muted" style="margin:0;">Si no encontraste un material en el catálogo, acá podés ver lo que otros usuarios están necesitando.</p>
+    </div>
+    <a class="btn primary" href="{{ url_for('note_request_new') if current_user.is_authenticated else url_for('login') }}">Pedir apunte</a>
+  </div>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
+    {% for value, label in [('open','Abiertos'), ('has_offers','Con propuestas'), ('price_agreed','Precio acordado'), ('resolved','Resueltos'), ('closed','Cerrados')] %}
+      <a class="btn {% if current_status == value %}primary{% else %}ghost{% endif %}" href="{{ url_for('note_requests_list', status=value) }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="notes-grid" style="margin-top:18px;">
+  {% for r in requests %}
+  <article class="note-card card">
+    <header class="note-card__header">
+      <a href="{{ url_for('note_request_detail', request_id=r.id) }}" class="note-title link-strong">{{ r.title }}</a>
+    </header>
+    <p class="note-card__desc">{{ r.description }}</p>
+    <div class="note-card__meta">
+      <span>{{ r.subject }}</span>
+      <span>{{ r.career }}</span>
+      {% if r.university %}<span>{{ r.university }}</span>{% endif %}
+    </div>
+    <div class="note-card__meta">
+      <span class="badge">{{ request_type_label(r.material_type) }}</span>
+      <span>Estado: {{ request_status_label(r.status) }}</span>
+    </div>
+    <footer class="note-card__footer">
+      <span class="price-tag">${{ r.offered_price or 0 }}</span>
+      <a class="btn secondary" href="{{ url_for('note_request_detail', request_id=r.id) }}">Ver pedido</a>
+    </footer>
+  </article>
+  {% else %}
+  <div class="card" style="padding:18px;">
+    <p class="muted" style="margin:0;">No hay pedidos en esta categoría todavía.</p>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

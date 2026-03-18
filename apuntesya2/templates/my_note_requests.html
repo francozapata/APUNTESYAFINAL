@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="padding:18px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+  <div>
+    <h1 style="margin:0 0 6px;">Mis pedidos</h1>
+    <p class="muted" style="margin:0;">Seguimiento de los materiales que pediste a la comunidad.</p>
+  </div>
+  <a class="btn primary" href="{{ url_for('note_request_new') }}">Nuevo pedido</a>
+</div>
+
+<div class="notes-grid" style="margin-top:18px;">
+  {% for r in requests %}
+  <article class="note-card card">
+    <header class="note-card__header">
+      <a href="{{ url_for('note_request_detail', request_id=r.id) }}" class="note-title link-strong">{{ r.title }}</a>
+    </header>
+    <p class="note-card__desc">{{ r.description }}</p>
+    <div class="note-card__meta">
+      <span>{{ r.subject }}</span>
+      <span class="badge">{{ request_type_label(r.material_type) }}</span>
+      <span>Estado: {{ request_status_label(r.status) }}</span>
+    </div>
+    <footer class="note-card__footer">
+      <span class="price-tag">${{ r.offered_price or 0 }}</span>
+      <a class="btn secondary" href="{{ url_for('note_request_detail', request_id=r.id) }}">Ver detalle</a>
+    </footer>
+  </article>
+  {% else %}
+  <div class="card" style="padding:18px;">
+    <p class="muted" style="margin:0;">Todavía no publicaste pedidos.</p>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

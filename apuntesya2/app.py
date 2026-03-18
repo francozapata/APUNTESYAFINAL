@@ -86,6 +86,8 @@ from apuntesya2.models import (
     Ticket,
     TicketEvent,
     AdminAction,
+    NoteRequest,
+    NoteRequestOffer,
 )
 
 from apuntesya2.seed_unc_academics import seed_unc
@@ -763,6 +765,13 @@ def _ensure_schema(engine):
                     conn.execute(text(stmt))
                 except Exception:
                     pass
+
+        # note_requests / note_request_offers
+        try:
+            NoteRequest.__table__.create(bind=engine, checkfirst=True)
+            NoteRequestOffer.__table__.create(bind=engine, checkfirst=True)
+        except Exception:
+            pass
 
         # New tables: reviews unique/constraint already in model; download_logs
         # create_all already handled table creation, but some DBs might have been created earlier.
@@ -2477,6 +2486,16 @@ def index():
                 except Exception:
                     pass
 
+    # Requests card for home
+    home_requests = []
+    with Session() as s2:
+        home_requests = s2.execute(
+            select(NoteRequest)
+            .where(NoteRequest.status.in_(("open", "has_offers")))
+            .order_by(desc(NoteRequest.created_at))
+            .limit(3)
+        ).scalars().all()
+
     return render_template(
         "index.html",
         notes=notes,
@@ -2487,7 +2506,369 @@ def index():
         q="",
         filters={},
         show_tab="quick",
+        home_requests=home_requests,
+        request_type_label=_request_type_label,
     )
+
+
+# ------------------------------
+# PEDIDOS DE APUNTES
+# ------------------------------
+
+REQUEST_MATERIAL_TYPES = [
+    ("resumen", "Resumen"),
+    ("apunte", "Apunte completo"),
+    ("parcial", "Parcial resuelto"),
+    ("guia", "Guía / práctico"),
+    ("preguntas", "Preguntas de examen"),
+]
+
+
+def _request_type_label(value: str) -> str:
+    for key, label in REQUEST_MATERIAL_TYPES:
+        if key == value:
+            return label
+    return value or "Sin especificar"
+
+
+def _request_status_label(value: str) -> str:
+    mapping = {
+        "open": "Abierto",
+        "has_offers": "Con propuestas",
+        "resolved": "Resuelto",
+        "closed": "Cerrado",
+        "price_agreed": "Precio acordado",
+    }
+    return mapping.get(value, value or "Sin estado")
+
+
+def _offer_status_label(value: str) -> str:
+    mapping = {
+        "pending": "Pendiente de revisión",
+        "countered": "Con contraoferta",
+        "accepted": "Aceptada",
+        "rejected": "Rechazada",
+        "purchased": "Comprada",
+        "cancelled": "Cancelada",
+    }
+    return mapping.get(value, value or "Sin estado")
+
+
+@app.get("/requests")
+def note_requests_list():
+    status = (request.args.get("status") or "open").strip().lower()
+    with Session() as s:
+        stmt = select(NoteRequest).order_by(desc(NoteRequest.created_at))
+        if status in {"open", "has_offers", "resolved", "closed", "price_agreed"}:
+            stmt = stmt.where(NoteRequest.status == status)
+        else:
+            stmt = stmt.where(NoteRequest.status.in_(("open", "has_offers")))
+        items = s.execute(stmt.limit(100)).scalars().all()
+    return render_template(
+        "note_requests_list.html",
+        requests=items,
+        current_status=status,
+        request_material_types=REQUEST_MATERIAL_TYPES,
+        request_type_label=_request_type_label,
+        request_status_label=_request_status_label,
+    )
+
+
+@app.route("/requests/new", methods=["GET", "POST"])
+@login_required
+def note_request_new():
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()
+        career = (request.form.get("career") or current_user.career or "").strip()
+        subject = (request.form.get("subject") or "").strip()
+        university = (request.form.get("university") or current_user.university or "").strip()
+        faculty = (request.form.get("faculty") or current_user.faculty or "").strip()
+        professor = (request.form.get("professor") or "").strip()
+        material_type = (request.form.get("material_type") or "resumen").strip()
+        exam_date_text = (request.form.get("exam_date_text") or "").strip()
+        description = (request.form.get("description") or "").strip()
+        accept_similar = bool(request.form.get("accept_similar"))
+        price_raw = (request.form.get("offered_price") or "0").strip().replace(",", ".")
+        try:
+            offered_price = max(0, int(round(float(price_raw))))
+        except Exception:
+            offered_price = 0
+
+        errors = []
+        if not title:
+            errors.append("El título es obligatorio.")
+        if not subject:
+            errors.append("La materia es obligatoria.")
+        if not career:
+            errors.append("La carrera es obligatoria.")
+        if not description or len(description) < 20:
+            errors.append("La descripción debe tener al menos 20 caracteres.")
+        if material_type not in {k for k, _ in REQUEST_MATERIAL_TYPES}:
+            errors.append("Elegí un tipo de material válido.")
+
+        if errors:
+            for err in errors:
+                flash(err)
+        else:
+            with Session() as s:
+                nr = NoteRequest(
+                    buyer_id=current_user.id,
+                    title=title,
+                    career=career,
+                    subject=subject,
+                    university=university,
+                    faculty=faculty,
+                    professor=professor or None,
+                    material_type=material_type,
+                    exam_date_text=exam_date_text or None,
+                    description=description,
+                    offered_price=offered_price,
+                    accept_similar=accept_similar,
+                    status="open",
+                )
+                s.add(nr)
+                s.commit()
+                s.refresh(nr)
+            flash("Tu pedido fue publicado.")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+
+    return render_template(
+        "note_request_new.html",
+        request_material_types=REQUEST_MATERIAL_TYPES,
+    )
+
+
+@app.get("/requests/<int:request_id>")
+def note_request_detail(request_id: int):
+    with Session() as s:
+        nr = s.get(NoteRequest, request_id)
+        if not nr:
+            abort(404)
+        offers = s.execute(
+            select(NoteRequestOffer)
+            .where(NoteRequestOffer.request_id == nr.id)
+            .order_by(desc(NoteRequestOffer.created_at))
+        ).scalars().all()
+        is_owner = current_user.is_authenticated and current_user.id == nr.buyer_id
+        my_offer = None
+        if current_user.is_authenticated and not is_owner:
+            my_offer = s.execute(
+                select(NoteRequestOffer).where(
+                    NoteRequestOffer.request_id == nr.id,
+                    NoteRequestOffer.seller_id == current_user.id,
+                )
+            ).scalar_one_or_none()
+    return render_template(
+        "note_request_detail.html",
+        note_request=nr,
+        offers=offers,
+        is_owner=is_owner,
+        my_offer=my_offer,
+        request_type_label=_request_type_label,
+        request_status_label=_request_status_label,
+        offer_status_label=_offer_status_label,
+    )
+
+
+@app.route("/requests/<int:request_id>/offer", methods=["GET", "POST"])
+@login_required
+def note_request_offer_new(request_id: int):
+    with Session() as s:
+        nr = s.get(NoteRequest, request_id)
+        if not nr:
+            abort(404)
+        if nr.buyer_id == current_user.id:
+            flash("No podés responder tu propio pedido.")
+            return redirect(url_for("note_request_detail", request_id=request_id))
+        existing = s.execute(
+            select(NoteRequestOffer).where(
+                NoteRequestOffer.request_id == request_id,
+                NoteRequestOffer.seller_id == current_user.id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            flash("Ya enviaste una propuesta para este pedido.")
+            return redirect(url_for("note_request_detail", request_id=request_id))
+
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()
+        description = (request.form.get("description") or "").strip()
+        material_type = (request.form.get("material_type") or "resumen").strip()
+        professor = (request.form.get("professor") or "").strip()
+        year_text = (request.form.get("year_text") or "").strip()
+        page_count_raw = (request.form.get("page_count") or "").strip()
+        seller_price_raw = (request.form.get("seller_price") or "0").strip().replace(",", ".")
+        allow_publish_after_sale = bool(request.form.get("allow_publish_after_sale"))
+        confirm_match = bool(request.form.get("confirm_match"))
+        try:
+            page_count = int(page_count_raw) if page_count_raw else None
+        except Exception:
+            page_count = None
+        try:
+            seller_price = max(0, int(round(float(seller_price_raw))))
+        except Exception:
+            seller_price = 0
+
+        errors = []
+        if not title:
+            errors.append("El título de la propuesta es obligatorio.")
+        if not description or len(description) < 20:
+            errors.append("La descripción de la propuesta debe tener al menos 20 caracteres.")
+        if material_type not in {k for k, _ in REQUEST_MATERIAL_TYPES}:
+            errors.append("Elegí un tipo de material válido.")
+        if seller_price <= 0:
+            errors.append("Indicá un precio válido para tu propuesta.")
+        if not confirm_match:
+            errors.append("Tenés que confirmar que tu propuesta coincide razonablemente con el pedido.")
+
+        if errors:
+            for err in errors:
+                flash(err)
+        else:
+            with Session() as s:
+                nr = s.get(NoteRequest, request_id)
+                off = NoteRequestOffer(
+                    request_id=request_id,
+                    seller_id=current_user.id,
+                    title=title,
+                    description=description,
+                    material_type=material_type,
+                    professor=professor or None,
+                    year_text=year_text or None,
+                    page_count=page_count,
+                    allow_publish_after_sale=allow_publish_after_sale,
+                    seller_price=seller_price,
+                    agreed_price=None,
+                    status="pending",
+                )
+                s.add(off)
+                if nr and nr.status == "open":
+                    nr.status = "has_offers"
+                s.commit()
+            flash("Tu propuesta fue enviada.")
+            return redirect(url_for("note_request_detail", request_id=request_id))
+
+    return render_template(
+        "note_request_offer_new.html",
+        note_request=nr,
+        request_material_types=REQUEST_MATERIAL_TYPES,
+        request_type_label=_request_type_label,
+    )
+
+
+@app.post("/request-offers/<int:offer_id>/buyer-action")
+@login_required
+def note_request_offer_buyer_action(offer_id: int):
+    action = (request.form.get("action") or "").strip().lower()
+    counter_raw = (request.form.get("buyer_counter_price") or "").strip().replace(",", ".")
+    with Session() as s:
+        off = s.get(NoteRequestOffer, offer_id)
+        if not off:
+            abort(404)
+        nr = s.get(NoteRequest, off.request_id)
+        if not nr or nr.buyer_id != current_user.id:
+            abort(403)
+        if action == "accept":
+            off.status = "accepted"
+            off.agreed_price = off.buyer_counter_price or off.seller_price
+            nr.status = "price_agreed"
+            flash("Aceptaste la propuesta. El siguiente paso será habilitar la compra.")
+        elif action == "reject":
+            off.status = "rejected"
+            # if no active offers remain, reopen request
+            active = s.execute(select(func.count()).select_from(NoteRequestOffer).where(
+                NoteRequestOffer.request_id == nr.id,
+                NoteRequestOffer.status.in_(("pending", "countered", "accepted"))
+            )).scalar() or 0
+            nr.status = "has_offers" if active > 0 else "open"
+            flash("Rechazaste la propuesta.")
+        elif action == "counter":
+            try:
+                counter_price = max(0, int(round(float(counter_raw))))
+            except Exception:
+                counter_price = 0
+            if counter_price <= 0:
+                flash("Ingresá una contraoferta válida.")
+                return redirect(url_for("note_request_detail", request_id=nr.id))
+            off.buyer_counter_price = counter_price
+            off.status = "countered"
+            nr.status = "has_offers"
+            flash("Enviaste una contraoferta. El vendedor debe aceptarla o rechazarla.")
+        else:
+            flash("Acción no válida.")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+        s.commit()
+    return redirect(url_for("note_request_detail", request_id=nr.id))
+
+
+@app.post("/request-offers/<int:offer_id>/seller-action")
+@login_required
+def note_request_offer_seller_action(offer_id: int):
+    action = (request.form.get("action") or "").strip().lower()
+    with Session() as s:
+        off = s.get(NoteRequestOffer, offer_id)
+        if not off:
+            abort(404)
+        nr = s.get(NoteRequest, off.request_id)
+        if off.seller_id != current_user.id:
+            abort(403)
+        if action == "accept_counter":
+            if off.status != "countered" or not off.buyer_counter_price:
+                flash("No hay una contraoferta pendiente para aceptar.")
+                return redirect(url_for("note_request_detail", request_id=nr.id))
+            off.status = "accepted"
+            off.agreed_price = off.buyer_counter_price
+            nr.status = "price_agreed"
+            flash("Aceptaste la contraoferta. El próximo paso será la compra.")
+        elif action == "reject_counter":
+            off.status = "rejected"
+            active = s.execute(select(func.count()).select_from(NoteRequestOffer).where(
+                NoteRequestOffer.request_id == nr.id,
+                NoteRequestOffer.status.in_(("pending", "countered", "accepted"))
+            )).scalar() or 0
+            nr.status = "has_offers" if active > 0 else "open"
+            flash("Rechazaste la contraoferta.")
+        else:
+            flash("Acción no válida.")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+        s.commit()
+    return redirect(url_for("note_request_detail", request_id=nr.id))
+
+
+@app.get("/my-requests")
+@login_required
+def my_note_requests():
+    with Session() as s:
+        items = s.execute(
+            select(NoteRequest)
+            .where(NoteRequest.buyer_id == current_user.id)
+            .order_by(desc(NoteRequest.created_at))
+        ).scalars().all()
+    return render_template(
+        "my_note_requests.html",
+        requests=items,
+        request_type_label=_request_type_label,
+        request_status_label=_request_status_label,
+    )
+
+
+@app.get("/my-request-offers")
+@login_required
+def my_note_request_offers():
+    with Session() as s:
+        items = s.execute(
+            select(NoteRequestOffer)
+            .where(NoteRequestOffer.seller_id == current_user.id)
+            .order_by(desc(NoteRequestOffer.created_at))
+        ).scalars().all()
+    return render_template(
+        "my_note_request_offers.html",
+        offers=items,
+        request_type_label=_request_type_label,
+        offer_status_label=_offer_status_label,
+        request_status_label=_request_status_label,
+    )
+
 
 # ------------------------------
 # BÚSQUEDA

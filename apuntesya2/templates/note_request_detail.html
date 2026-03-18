@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="padding:18px;">
+  <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+    <div>
+      <div class="muted" style="font-size:13px;margin-bottom:6px;">Pedido #{{ note_request.id }} · {{ request_status_label(note_request.status) }}</div>
+      <h1 style="margin:0 0 8px;">{{ note_request.title }}</h1>
+      <div class="note-card__meta">
+        <span>{{ note_request.subject }}</span>
+        <span>{{ note_request.career }}</span>
+        {% if note_request.university %}<span>{{ note_request.university }}</span>{% endif %}
+        <span class="badge">{{ request_type_label(note_request.material_type) }}</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      {% if current_user.is_authenticated and not is_owner and not my_offer %}
+      <a class="btn primary" href="{{ url_for('note_request_offer_new', request_id=note_request.id) }}">Responder pedido</a>
+      {% endif %}
+      <a class="btn ghost" href="{{ url_for('note_requests_list') }}">Ver todos</a>
+    </div>
+  </div>
+
+  <div class="grid-2 gap" style="margin-top:18px;align-items:start;">
+    <div class="card" style="padding:16px;">
+      <h3 style="margin-top:0;">Detalle</h3>
+      <p style="white-space:pre-wrap;">{{ note_request.description }}</p>
+      <div class="note-card__meta">
+        {% if note_request.professor %}<span>Cátedra: {{ note_request.professor }}</span>{% endif %}
+        {% if note_request.exam_date_text %}<span>{{ note_request.exam_date_text }}</span>{% endif %}
+        <span>{% if note_request.accept_similar %}Acepta propuestas similares{% else %}Busca coincidencia alta{% endif %}</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px;">
+      <h3 style="margin-top:0;">Resumen del pedido</h3>
+      <div class="note-card__meta" style="display:grid;gap:8px;">
+        <span>Precio sugerido por comprador: <strong>${{ note_request.offered_price or 0 }}</strong></span>
+        <span>Propuestas recibidas: <strong>{{ offers|length }}</strong></span>
+        <span>Publicado: <strong>{{ note_request.created_at.strftime('%d/%m/%Y %H:%M') if note_request.created_at else '-' }}</strong></span>
+        <span>Estado: <strong>{{ request_status_label(note_request.status) }}</strong></span>
+      </div>
+      {% if is_owner %}
+      <div style="margin-top:12px;padding:12px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;">
+        <strong>Este pedido es tuyo.</strong>
+        <div class="muted" style="margin-top:4px;">Ahora ya podés aceptar, rechazar o contraofertar cada propuesta.</div>
+      </div>
+      {% elif my_offer %}
+      <div style="margin-top:12px;padding:12px;border-radius:12px;background:#ecfeff;border:1px solid #a5f3fc;">
+        <strong>Ya enviaste una propuesta.</strong>
+        <div class="muted" style="margin-top:4px;">Estado actual: {{ offer_status_label(my_offer.status) }}.</div>
+        {% if my_offer.status == 'countered' and my_offer.buyer_counter_price %}
+        <div style="margin-top:8px;">Contraoferta del comprador: <strong>${{ my_offer.buyer_counter_price }}</strong></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          <form method="post" action="{{ url_for('note_request_offer_seller_action', offer_id=my_offer.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="accept_counter">
+            <button class="btn primary" type="submit">Aceptar contraoferta</button>
+          </form>
+          <form method="post" action="{{ url_for('note_request_offer_seller_action', offer_id=my_offer.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="reject_counter">
+            <button class="btn ghost" type="submit">Rechazar contraoferta</button>
+          </form>
+        </div>
+        {% elif my_offer.status == 'accepted' %}
+        <div style="margin-top:8px;">Precio acordado: <strong>${{ my_offer.agreed_price or my_offer.seller_price }}</strong></div>
+        <div class="muted" style="margin-top:6px;">La compra se conectará en la próxima etapa.</div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="card" style="padding:18px;margin-top:18px;">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+    <h2 style="margin:0;">Propuestas recibidas</h2>
+    <span class="muted">MVP etapa 2: negociación básica de precio y aceptación previa a compra</span>
+  </div>
+
+  <div class="notes-grid" style="margin-top:16px;">
+    {% for off in offers %}
+    <article class="note-card card">
+      <header class="note-card__header">
+        <div class="note-title">{{ off.title }}</div>
+      </header>
+      <p class="note-card__desc">{{ off.description }}</p>
+      <div class="note-card__meta">
+        <span>{{ request_type_label(off.material_type) }}</span>
+        {% if off.page_count %}<span>{{ off.page_count }} páginas</span>{% endif %}
+        {% if off.year_text %}<span>{{ off.year_text }}</span>{% endif %}
+      </div>
+      <div class="note-card__meta" style="display:grid;gap:6px;margin-top:6px;">
+        <span>Estado: <strong>{{ offer_status_label(off.status) }}</strong></span>
+        <span>Precio pedido por comprador: <strong>${{ note_request.offered_price or 0 }}</strong></span>
+        <span>Precio propuesto por vendedor: <strong>${{ off.seller_price or 0 }}</strong></span>
+        {% if off.buyer_counter_price %}<span>Contraoferta del comprador: <strong>${{ off.buyer_counter_price }}</strong></span>{% endif %}
+        {% if off.agreed_price %}<span>Precio acordado: <strong>${{ off.agreed_price }}</strong></span>{% endif %}
+        <span>Enviada: {{ off.created_at.strftime('%d/%m/%Y') if off.created_at else '-' }}</span>
+      </div>
+      {% if is_owner %}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        {% if off.status in ['pending','countered'] %}
+        <form method="post" action="{{ url_for('note_request_offer_buyer_action', offer_id=off.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="accept">
+          <button class="btn primary" type="submit">Aceptar propuesta</button>
+        </form>
+        <form method="post" action="{{ url_for('note_request_offer_buyer_action', offer_id=off.id) }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="counter">
+          <input class="input" style="max-width:140px;" type="number" min="1" step="1" name="buyer_counter_price" placeholder="Contraoferta">
+          <button class="btn secondary" type="submit">Contraofertar</button>
+        </form>
+        <form method="post" action="{{ url_for('note_request_offer_buyer_action', offer_id=off.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="reject">
+          <button class="btn ghost" type="submit">Rechazar</button>
+        </form>
+        {% elif off.status == 'accepted' %}
+        <div style="padding:10px 12px;border-radius:12px;background:#ecfdf5;border:1px solid #86efac;">
+          <strong>Precio acordado.</strong>
+          <div class="muted" style="margin-top:4px;">Siguiente paso: conectar compra y liberación del archivo.</div>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </article>
+    {% else %}
+    <div class="card" style="padding:18px;">
+      <p class="muted" style="margin:0;">Todavía no llegaron propuestas para este pedido.</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

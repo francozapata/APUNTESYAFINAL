@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="padding:18px;max-width:920px;margin:0 auto;">
+  <h1 style="margin-top:0;">Responder pedido</h1>
+  <p class="muted">Tu propuesta quedará asociada al pedido y el comprador podrá revisarla antes de avanzar.</p>
+
+  <div class="card" style="padding:14px;background:#f8fbff;border:1px solid #dbeafe;margin-bottom:16px;">
+    <strong>{{ note_request.title }}</strong>
+    <div class="note-card__meta" style="margin-top:6px;">
+      <span>{{ note_request.subject }}</span>
+      <span>{{ note_request.career }}</span>
+      <span class="badge">{{ request_type_label(note_request.material_type) }}</span>
+      <span>Comprador propone ${{ note_request.offered_price or 0 }}</span>
+    </div>
+  </div>
+
+  <form method="post" class="stack gap">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="grid-2 gap">
+      <div class="field">
+        <label>Título de tu propuesta</label>
+        <input class="input" type="text" name="title" required value="{{ request.form.get('title','') }}">
+      </div>
+      <div class="field">
+        <label>Tipo de material</label>
+        <select class="input" name="material_type">
+          {% for key, label in request_material_types %}
+          <option value="{{ key }}" {% if request.form.get('material_type', note_request.material_type) == key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Descripción</label>
+      <textarea class="input" name="description" rows="6" required placeholder="Ej: Resumen de 18 páginas, enfocado en memoria y atención, orientado a final 2024.">{{ request.form.get('description','') }}</textarea>
+    </div>
+
+    <div class="grid-2 gap">
+      <div class="field">
+        <label>Cátedra / profesor</label>
+        <input class="input" type="text" name="professor" value="{{ request.form.get('professor','') }}">
+      </div>
+      <div class="field">
+        <label>Año del material</label>
+        <input class="input" type="text" name="year_text" value="{{ request.form.get('year_text','') }}" placeholder="Ej: 2024">
+      </div>
+    </div>
+
+    <div class="grid-2 gap">
+      <div class="field">
+        <label>Cantidad de páginas</label>
+        <input class="input" type="number" min="1" step="1" name="page_count" value="{{ request.form.get('page_count','') }}">
+      </div>
+      <div class="field">
+        <label>Precio que proponés</label>
+        <input class="input" type="number" min="1" step="1" name="seller_price" value="{{ request.form.get('seller_price', note_request.offered_price or '') }}" placeholder="Ej: 3500">
+      </div>
+    </div>
+
+    <label style="display:flex;gap:8px;align-items:center;">
+      <input type="checkbox" name="allow_publish_after_sale" value="1" {% if request.form.get('allow_publish_after_sale', '1') %}checked{% endif %}>
+      Acepto que este material pueda publicarse luego en la plataforma si se concreta la compra.
+    </label>
+
+    <label style="display:flex;gap:8px;align-items:center;">
+      <input type="checkbox" name="confirm_match" value="1" {% if request.form.get('confirm_match') %}checked{% endif %}>
+      Confirmo que mi propuesta coincide razonablemente con el pedido.
+    </label>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Enviar propuesta</button>
+      <a class="btn ghost" href="{{ url_for('note_request_detail', request_id=note_request.id) }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

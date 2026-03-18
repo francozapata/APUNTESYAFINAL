@@ -94,6 +94,16 @@ class User(Base, UserMixin):
     contact_visible_buyers: Mapped[bool] = mapped_column(Boolean, default=True)
 
     notes = relationship("Note", back_populates="seller")
+    note_requests = relationship(
+        "NoteRequest",
+        foreign_keys="NoteRequest.buyer_id",
+        back_populates="buyer",
+    )
+    note_request_offers = relationship(
+        "NoteRequestOffer",
+        foreign_keys="NoteRequestOffer.seller_id",
+        back_populates="seller",
+    )
 
     # Combos creados por este vendedor
     combos = relationship(
@@ -197,6 +207,66 @@ class Note(Base):
 
     deleted_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+
+
+class NoteRequest(Base):
+    __tablename__ = "note_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    career: Mapped[str] = mapped_column(String(120), nullable=False)
+    subject: Mapped[str] = mapped_column(String(120), nullable=False)
+    university: Mapped[str] = mapped_column(String(120), nullable=True)
+    faculty: Mapped[str] = mapped_column(String(120), nullable=True)
+    professor: Mapped[str] = mapped_column(String(120), nullable=True)
+    material_type: Mapped[str] = mapped_column(String(40), nullable=False, default="resumen")
+    exam_date_text: Mapped[str] = mapped_column(String(80), nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    offered_price: Mapped[int] = mapped_column(Integer, default=0)
+    accept_similar: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(24), default="open", nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    buyer = relationship("User", back_populates="note_requests")
+    offers = relationship(
+        "NoteRequestOffer",
+        back_populates="request_obj",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class NoteRequestOffer(Base):
+    __tablename__ = "note_request_offers"
+    __table_args__ = (
+        UniqueConstraint("request_id", "seller_id", name="uq_request_offer_seller"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("note_requests.id", ondelete="CASCADE"), nullable=False, index=True)
+    seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    material_type: Mapped[str] = mapped_column(String(40), nullable=False, default="resumen")
+    professor: Mapped[str] = mapped_column(String(120), nullable=True)
+    year_text: Mapped[str] = mapped_column(String(80), nullable=True)
+    page_count: Mapped[int] = mapped_column(Integer, nullable=True)
+    allow_publish_after_sale: Mapped[bool] = mapped_column(Boolean, default=True)
+    seller_price: Mapped[int] = mapped_column(Integer, default=0)
+    buyer_counter_price: Mapped[int] = mapped_column(Integer, nullable=True)
+    agreed_price: Mapped[int] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="pending", nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    request_obj = relationship("NoteRequest", back_populates="offers")
+    seller = relationship("User", back_populates="note_request_offers")
 
 
 class Combo(Base):

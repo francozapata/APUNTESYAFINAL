@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="padding:18px;max-width:920px;margin:0 auto;">
+  <h1 style="margin-top:0;">Crear pedido</h1>
+  <p class="muted">Describí bien lo que necesitás para recibir propuestas más precisas.</p>
+
+  <form method="post" class="stack gap" id="noteRequestForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="grid-2 gap">
+      <div class="field">
+        <label>Título</label>
+        <input class="input" type="text" name="title" required value="{{ request.form.get('title','') }}" placeholder="Ej: Resumen de Psicología Cognitiva para final">
+      </div>
+      <div class="field">
+        <label>Materia</label>
+        <input class="input" type="text" name="subject" required value="{{ request.form.get('subject','') }}">
+      </div>
+    </div>
+
+    <div class="grid-3 gap">
+      {% set prefix = 'nr' %}
+      {% set names = {'university':'university','faculty':'faculty','career':'career'} %}
+      {% include 'components/academics_selects.html' %}
+    </div>
+    <p class="muted" style="margin-top:-6px;">Usá los mismos selectores académicos de la plataforma para que el pedido quede mejor clasificado.</p>
+
+    <div class="grid-3 gap">
+      <div class="field">
+        <label>Cátedra / profesor</label>
+        <input class="input" type="text" name="professor" value="{{ request.form.get('professor','') }}">
+      </div>
+      <div class="field">
+        <label>Tipo de material</label>
+        <select class="input" name="material_type">
+          {% for key, label in request_material_types %}
+          <option value="{{ key }}" {% if request.form.get('material_type','resumen') == key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Año / fecha</label>
+        <input class="input" type="text" name="exam_date_text" value="{{ request.form.get('exam_date_text','') }}" placeholder="Ej: Final 2024">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Descripción</label>
+      <textarea class="input" name="description" rows="6" required placeholder="Contá qué necesitás, temas, unidad, orientación del final, etc.">{{ request.form.get('description','') }}</textarea>
+    </div>
+
+    <div class="grid-2 gap">
+      <div class="field">
+        <label>Precio ofrecido (ARS)</label>
+        <input class="input" type="number" min="0" step="1" name="offered_price" value="{{ request.form.get('offered_price','0') }}">
+      </div>
+      <div class="field" style="display:flex;align-items:flex-end;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input type="checkbox" name="accept_similar" value="1" {% if request.form.get('accept_similar') %}checked{% endif %}>
+          Acepto propuestas similares si no coinciden al 100%
+        </label>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn primary" type="submit">Publicar pedido</button>
+      <a class="btn ghost" href="{{ url_for('note_requests_list') }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=3"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    const api = await window.initAcademicsSelects({
+      prefix: 'nr',
+      enableCreate: true
+    });
+
+    const form = document.getElementById('noteRequestForm');
+    if (form && api && typeof api.resolveHidden === 'function') {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await api.resolveHidden();
+        form.submit();
+      });
+    }
+  });
+</script>
+{% endblock %}

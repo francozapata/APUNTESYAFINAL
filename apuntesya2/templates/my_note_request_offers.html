@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="padding:18px;">
+  <h1 style="margin:0 0 6px;">Mis propuestas</h1>
+  <p class="muted" style="margin:0;">Acá ves los pedidos a los que ya respondiste.</p>
+</div>
+
+<div class="notes-grid" style="margin-top:18px;">
+  {% for off in offers %}
+  <article class="note-card card">
+    <header class="note-card__header">
+      <div class="note-title">{{ off.title }}</div>
+    </header>
+    <p class="note-card__desc">{{ off.description }}</p>
+    <div class="note-card__meta">
+      <span class="badge">{{ request_type_label(off.material_type) }}</span>
+      <span>Estado: {{ offer_status_label(off.status) }}</span>
+      <span>Precio: ${{ off.agreed_price or off.buyer_counter_price or off.seller_price or 0 }}</span>
+      {% if off.year_text %}<span>{{ off.year_text }}</span>{% endif %}
+    </div>
+    <footer class="note-card__footer">
+      <span class="muted">{{ off.created_at.strftime('%d/%m/%Y') if off.created_at else '-' }}</span>
+      <a class="btn secondary" href="{{ url_for('note_request_detail', request_id=off.request_id) }}">Ver pedido</a>
+    </footer>
+  </article>
+  {% else %}
+  <div class="card" style="padding:18px;">
+    <p class="muted" style="margin:0;">Todavía no enviaste propuestas.</p>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
