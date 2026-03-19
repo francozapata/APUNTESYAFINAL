@@ -33,8 +33,10 @@
 
     <div class="card" style="padding:16px;">
       <h3 style="margin-top:0;">Resumen del pedido</h3>
+      {% set req_fee = fee_breakdown_from_net(amount_to_cents(note_request.offered_price or 0)) %}
       <div class="note-card__meta" style="display:grid;gap:8px;">
-        <span>Precio sugerido por comprador: <strong>${{ note_request.offered_price or 0 }}</strong></span>
+        <span>Referencia neta del comprador: <strong>${{ note_request.offered_price or 0 }}</strong></span>
+        <span>Total final estimado con comisiones: <strong>${{ req_fee.published }}</strong></span>
         <span>Propuestas recibidas: <strong>{{ offers|length }}</strong></span>
         <span>Publicado: <strong>{{ note_request.created_at.strftime('%d/%m/%Y %H:%M') if note_request.created_at else '-' }}</strong></span>
         <span>Estado: <strong>{{ request_status_label(note_request.status) }}</strong></span>
@@ -49,7 +51,9 @@
         <strong>Ya enviaste una propuesta.</strong>
         <div class="muted" style="margin-top:4px;">Estado actual: {{ offer_status_label(my_offer.status) }}.</div>
         {% if my_offer.status == 'countered' and my_offer.buyer_counter_price %}
-        <div style="margin-top:8px;">Contraoferta del comprador: <strong>${{ my_offer.buyer_counter_price }}</strong></div>
+        {% set my_counter_fee = fee_breakdown_from_net(amount_to_cents(my_offer.buyer_counter_price)) %}
+        <div style="margin-top:8px;">Contraoferta neta del comprador: <strong>${{ my_offer.buyer_counter_price }}</strong></div>
+        <div class="muted" style="margin-top:4px;">Total final comprador aprox.: <strong>${{ my_counter_fee.published }}</strong> · Vos recibirías: <strong>${{ my_counter_fee.seller_net }}</strong></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
           <form method="post" action="{{ url_for('note_request_offer_seller_action', offer_id=my_offer.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -63,8 +67,11 @@
           </form>
         </div>
         {% elif my_offer.status == 'accepted' %}
-        <div style="margin-top:8px;">Precio acordado: <strong>${{ my_offer.agreed_price or my_offer.seller_price }}</strong></div>
-        <div class="muted" style="margin-top:6px;">La compra se conectará en la próxima etapa.</div>
+        {% set agreed_fee = fee_breakdown_from_net(amount_to_cents(my_offer.agreed_price or my_offer.seller_price or 0)) %}
+        <div style="margin-top:8px;">Precio neto acordado: <strong>${{ my_offer.agreed_price or my_offer.seller_price }}</strong></div>
+        <div class="muted" style="margin-top:6px;">El comprador ya puede avanzar con el pago. Total comprador aprox.: <strong>${{ agreed_fee.published }}</strong></div>
+        {% elif my_offer.status == 'purchased' %}
+        <div style="margin-top:8px;">✅ Esta propuesta ya fue comprada.</div>
         {% endif %}
       </div>
       {% endif %}
@@ -75,7 +82,7 @@
 <div class="card" style="padding:18px;margin-top:18px;">
   <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
     <h2 style="margin:0;">Propuestas recibidas</h2>
-    <span class="muted">MVP etapa 2: negociación básica de precio y aceptación previa a compra</span>
+    <span class="muted">Etapa 3: acuerdo de precio + compra por Mercado Pago</span>
   </div>
 
   <div class="notes-grid" style="margin-top:16px;">
@@ -90,12 +97,15 @@
         {% if off.page_count %}<span>{{ off.page_count }} páginas</span>{% endif %}
         {% if off.year_text %}<span>{{ off.year_text }}</span>{% endif %}
       </div>
+      {% set off_net = off.agreed_price or off.buyer_counter_price or off.seller_price or 0 %}
+      {% set off_fee = fee_breakdown_from_net(amount_to_cents(off_net)) %}
       <div class="note-card__meta" style="display:grid;gap:6px;margin-top:6px;">
         <span>Estado: <strong>{{ offer_status_label(off.status) }}</strong></span>
-        <span>Precio pedido por comprador: <strong>${{ note_request.offered_price or 0 }}</strong></span>
-        <span>Precio propuesto por vendedor: <strong>${{ off.seller_price or 0 }}</strong></span>
-        {% if off.buyer_counter_price %}<span>Contraoferta del comprador: <strong>${{ off.buyer_counter_price }}</strong></span>{% endif %}
-        {% if off.agreed_price %}<span>Precio acordado: <strong>${{ off.agreed_price }}</strong></span>{% endif %}
+        <span>Referencia neta comprador: <strong>${{ note_request.offered_price or 0 }}</strong></span>
+        <span>Precio neto propuesto por vendedor: <strong>${{ off.seller_price or 0 }}</strong></span>
+        {% if off.buyer_counter_price %}<span>Contraoferta neta del comprador: <strong>${{ off.buyer_counter_price }}</strong></span>{% endif %}
+        {% if off.agreed_price %}<span>Precio neto acordado: <strong>${{ off.agreed_price }}</strong></span>{% endif %}
+        <span>Total final estimado comprador: <strong>${{ off_fee.published }}</strong></span>
         <span>Enviada: {{ off.created_at.strftime('%d/%m/%Y') if off.created_at else '-' }}</span>
       </div>
       {% if is_owner %}
@@ -109,8 +119,9 @@
         <form method="post" action="{{ url_for('note_request_offer_buyer_action', offer_id=off.id) }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="action" value="counter">
-          <input class="input" style="max-width:140px;" type="number" min="1" step="1" name="buyer_counter_price" placeholder="Contraoferta">
+          <input class="input js-net-price" style="max-width:140px;" data-target="#counterPreview{{ off.id }}" type="number" min="1" step="1" name="buyer_counter_price" placeholder="Contraoferta">
           <button class="btn secondary" type="submit">Contraofertar</button>
+          <div id="counterPreview{{ off.id }}" class="muted" style="font-size:12px;">Ingresá el neto vendedor; acá ves el total comprador.</div>
         </form>
         <form method="post" action="{{ url_for('note_request_offer_buyer_action', offer_id=off.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -120,7 +131,13 @@
         {% elif off.status == 'accepted' %}
         <div style="padding:10px 12px;border-radius:12px;background:#ecfdf5;border:1px solid #86efac;">
           <strong>Precio acordado.</strong>
-          <div class="muted" style="margin-top:4px;">Siguiente paso: conectar compra y liberación del archivo.</div>
+          <div class="muted" style="margin-top:4px;">Ya podés avanzar con la compra de esta propuesta.</div>
+          <div style="margin-top:10px;"><a class="btn primary" href="{{ url_for('note_request_offer_checkout', offer_id=off.id) }}">Comprar propuesta</a></div>
+        </div>
+        {% elif off.status == 'purchased' %}
+        <div style="padding:10px 12px;border-radius:12px;background:#ecfdf5;border:1px solid #86efac;">
+          <strong>Comprada.</strong>
+          <div class="muted" style="margin-top:4px;">El pedido ya quedó resuelto.</div>
         </div>
         {% endif %}
       </div>
@@ -133,4 +150,18 @@
     {% endfor %}
   </div>
 </div>
+<script>
+(function(){
+  function updateNetPreview(input){
+    const target = document.querySelector(input.dataset.target);
+    if(!target) return;
+    const n = parseFloat(input.value || '0');
+    const totalRate = {{ TOTAL_FEE_RATE|tojson }};
+    const sellerShare = Math.max(0.0001, 1 - totalRate);
+    const published = n > 0 ? (Math.ceil((n / sellerShare) * 10) / 10).toFixed(1) : '0.0';
+    target.innerHTML = `Total estimado comprador: <strong>$${published}</strong> · Neto vendedor: <strong>$${(n || 0).toFixed(1)}</strong>`;
+  }
+  document.querySelectorAll('.js-net-price').forEach(i => { updateNetPreview(i); i.addEventListener('input', () => updateNetPreview(i)); });
+})();
+</script>
 {% endblock %}

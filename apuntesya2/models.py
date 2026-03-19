@@ -269,6 +269,29 @@ class NoteRequestOffer(Base):
     seller = relationship("User", back_populates="note_request_offers")
 
 
+
+
+class NoteRequestPurchase(Base):
+    __tablename__ = "note_request_purchases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("note_requests.id", ondelete="CASCADE"), nullable=False, index=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("note_request_offers.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    payment_id: Mapped[str] = mapped_column(String(64), nullable=True)
+    preference_id: Mapped[str] = mapped_column(String(64), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False, index=True)
+    amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+    gross_cents: Mapped[int] = mapped_column(Integer, default=0)
+    platform_fee_cents: Mapped[int] = mapped_column(Integer, default=0)
+    mp_fee_cents: Mapped[int] = mapped_column(Integer, default=0)
+    seller_net_cents: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Combo(Base):
     __tablename__ = "combos"
 

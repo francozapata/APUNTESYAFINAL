@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="padding:18px;max-width:900px;margin:0 auto;">
+  <div class="h1" style="margin-bottom:6px;">🧾 Confirmar compra de propuesta</div>
+  <p class="muted" style="margin-top:0;">Vas a comprar una propuesta vinculada a un pedido. En esta etapa la compra queda registrada y el pedido pasa a resuelto.</p>
+
+  <div class="card" style="padding:14px;background:#f8fbff;border:1px solid #dbeafe;">
+    <strong>{{ offer.title }}</strong>
+    <div class="note-card__meta" style="margin-top:8px;display:grid;gap:6px;">
+      <span>Pedido: <strong>{{ note_request.title }}</strong></span>
+      <span>Precio neto acordado para el vendedor: <strong>${{ fee.seller_net }}</strong></span>
+      <span>Total final estimado para el comprador: <strong>${{ fee.published }}</strong></span>
+      <span>Comisión plataforma estimada: <strong>${{ fee.platform_fee }}</strong></span>
+      <span>Costo de cobro estimado: <strong>${{ fee.mp_fee }}</strong></span>
+    </div>
+  </div>
+
+  <div class="card" style="padding:14px;margin-top:14px;border:1px solid #fde68a;background:#fffbeb;">
+    <strong>Importante sobre comisiones</strong>
+    <div class="muted" style="margin-top:6px;">
+      El precio final que paga el comprador incluye costos de cobro y comisión de la plataforma. El vendedor recibe el valor neto acordado.
+    </div>
+  </div>
+
+  <form method="post" style="margin-top:14px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label style="display:flex;gap:8px;align-items:flex-start;">
+      <input type="checkbox" name="ack" value="1">
+      <span>Acepto continuar con la compra y entiendo que, en esta etapa, la entrega automática del archivo todavía no está conectada.</span>
+    </label>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+      <button class="btn primary" type="submit">Ir a Mercado Pago</button>
+      <a class="btn ghost" href="{{ url_for('note_request_detail', request_id=note_request.id) }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

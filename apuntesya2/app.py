@@ -88,6 +88,7 @@ from apuntesya2.models import (
     AdminAction,
     NoteRequest,
     NoteRequestOffer,
+    NoteRequestPurchase,
 )
 
 from apuntesya2.seed_unc_academics import seed_unc
@@ -770,6 +771,7 @@ def _ensure_schema(engine):
         try:
             NoteRequest.__table__.create(bind=engine, checkfirst=True)
             NoteRequestOffer.__table__.create(bind=engine, checkfirst=True)
+            NoteRequestPurchase.__table__.create(bind=engine, checkfirst=True)
         except Exception:
             pass
 
@@ -1313,6 +1315,7 @@ def pricing_ctx():
         published_price_cents=published_price_cents,
         fee_breakdown_from_net=fee_breakdown_from_net,
         fee_breakdown_from_published=fee_breakdown_from_published,
+        amount_to_cents=amount_to_cents,
 
         # 🔥 NUEVO: variables globales para templates
         APY_FEE_RATE=apy_rate,
@@ -2834,6 +2837,215 @@ def note_request_offer_seller_action(offer_id: int):
         s.commit()
     return redirect(url_for("note_request_detail", request_id=nr.id))
 
+
+
+
+@app.route("/request-offers/<int:offer_id>/checkout", methods=["GET", "POST"])
+@login_required
+def note_request_offer_checkout(offer_id: int):
+    with Session() as s:
+        off = s.get(NoteRequestOffer, offer_id)
+        if not off:
+            abort(404)
+        nr = s.get(NoteRequest, off.request_id)
+        if not nr or nr.buyer_id != current_user.id:
+            abort(403)
+        if (off.status or "") != "accepted":
+            flash("Primero tiene que quedar un precio aceptado para habilitar la compra.", "warning")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+
+        seller = s.get(User, off.seller_id)
+        agreed_net_amount = int(off.agreed_price or off.buyer_counter_price or off.seller_price or 0)
+        if agreed_net_amount <= 0:
+            flash("No se pudo calcular el precio de la propuesta.", "warning")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+
+        net_cents = amount_to_cents(agreed_net_amount)
+        gross_cents = int(published_from_net_cents(net_cents))
+        gross_ars = money_1_decimal(cents_to_amount(gross_cents))
+        fee = breakdown_from_net(agreed_net_amount)
+
+        if request.method == "GET":
+            return render_template(
+                "checkout_request_offer.html",
+                offer=off,
+                note_request=nr,
+                seller=seller,
+                gross_cents=gross_cents,
+                gross_ars=gross_ars,
+                fee=fee,
+                legal_version=(app.config.get("LEGAL_VERSION") or "").strip(),
+            )
+
+        if request.form.get("ack") != "1":
+            flash("Antes de pagar, tenés que confirmar la compra y aceptar la política de reembolso.", "warning")
+            return redirect(url_for("note_request_offer_checkout", offer_id=off.id))
+
+        if seller is None or get_valid_seller_token(seller) is None:
+            flash("El vendedor todavía no tiene Mercado Pago vinculado. No se puede procesar la compra.", "warning")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+
+        existing = s.execute(
+            select(NoteRequestPurchase)
+            .where(NoteRequestPurchase.offer_id == off.id)
+            .where(NoteRequestPurchase.buyer_id == current_user.id)
+            .where(NoteRequestPurchase.status.in_(("pending", "approved", "in_process")))
+            .order_by(NoteRequestPurchase.created_at.desc())
+        ).scalars().first()
+
+        if existing and (existing.status or "").lower() == "approved":
+            flash("Esta propuesta ya fue comprada.", "info")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+
+        try:
+            mp_fee_cents = int(round(gross_cents * (float(MP_FEE_IMMEDIATE_TOTAL_PCT) / 100.0)))
+        except Exception:
+            mp_fee_cents = 0
+        platform_fee_cents = max(0, gross_cents - mp_fee_cents - int(net_cents or 0))
+
+        rp = NoteRequestPurchase(
+            buyer_id=current_user.id,
+            seller_id=off.seller_id,
+            request_id=nr.id,
+            offer_id=off.id,
+            status="pending",
+            amount_cents=gross_cents,
+            gross_cents=gross_cents,
+            platform_fee_cents=platform_fee_cents,
+            mp_fee_cents=mp_fee_cents,
+            seller_net_cents=int(net_cents or 0),
+        )
+        s.add(rp)
+        s.commit()
+
+        price_ars = float(money_1_decimal(cents_to_amount(gross_cents)))
+        platform_fee_percent = float(APY_RATE)
+        back_urls = {
+            "success": url_for("mp_return_request_purchase", purchase_id=rp.id, _external=True) + f"?external_reference=request_purchase:{rp.id}",
+            "failure": url_for("mp_return_request_purchase", purchase_id=rp.id, _external=True) + f"?external_reference=request_purchase:{rp.id}",
+            "pending": url_for("mp_return_request_purchase", purchase_id=rp.id, _external=True) + f"?external_reference=request_purchase:{rp.id}",
+        }
+        try:
+            seller_token = get_valid_seller_token(seller)
+            marketplace_fee = float(money_1_decimal(price_ars * platform_fee_percent))
+            wh_secret = (app.config.get("MP_WEBHOOK_SECRET") or "").strip()
+            notification_url = (
+                url_for("mp_webhook", _external=True, secret=wh_secret)
+                if wh_secret else url_for("mp_webhook", _external=True)
+            )
+            pref = mp.create_preference_for_seller_token(
+                seller_access_token=seller_token,
+                title=f"Pedido: {nr.title}",
+                unit_price=price_ars,
+                quantity=1,
+                marketplace_fee=marketplace_fee,
+                external_reference=f"request_purchase:{rp.id}",
+                back_urls=back_urls,
+                notification_url=notification_url
+            )
+            rp2 = s.get(NoteRequestPurchase, rp.id)
+            if rp2:
+                rp2.preference_id = pref.get("id") or pref.get("preference_id")
+                s.commit()
+            init_point = pref.get("init_point") or pref.get("sandbox_init_point")
+            return redirect(init_point)
+        except Exception as e:
+            flash(f"Error al crear preferencia en Mercado Pago: {e}", "warning")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+
+
+@app.route("/mp/request-return/<int:purchase_id>")
+def mp_return_request_purchase(purchase_id: int):
+    payment_id = request.args.get("payment_id") or request.args.get("collection_id") or request.args.get("id")
+    ext_ref = request.args.get("external_reference", "") or ""
+    status_query = request.args.get("status") or request.args.get("collection_status") or ""
+    token = app.config["MP_ACCESS_TOKEN_PLATFORM"]
+    pay = None
+    if payment_id:
+        try:
+            pay = mp.get_payment(token, str(payment_id))
+        except Exception as e:
+            app.logger.warning(f"mp_return_request_purchase: error get_payment({payment_id}): {e}")
+    if not pay and ext_ref:
+        try:
+            res = mp.search_payments_by_external_reference(token, ext_ref)
+            results = (res or {}).get("results") or []
+            if results:
+                pay = results[0].get("payment") or results[0]
+        except Exception as e:
+            app.logger.warning(f"mp_return_request_purchase: error search by ext_ref {ext_ref}: {e}")
+
+    status = (status_query or "").lower()
+    external_reference = ext_ref
+    if isinstance(pay, dict):
+        status = (pay.get("status") or "").lower()
+        external_reference = pay.get("external_reference") or external_reference or ""
+        payment_id = str(pay.get("id") or payment_id or "")
+
+    with Session() as s:
+        rp = s.get(NoteRequestPurchase, purchase_id)
+        if not rp:
+            flash("No encontramos la compra del pedido.", "warning")
+            return redirect(url_for("note_requests_list"))
+        if payment_id:
+            rp.payment_id = str(payment_id)
+        if status:
+            rp.status = status
+        if status == "approved":
+            off = s.get(NoteRequestOffer, rp.offer_id)
+            nr = s.get(NoteRequest, rp.request_id)
+            if off:
+                off.status = "purchased"
+            if nr:
+                nr.status = "resolved"
+            s.commit()
+            try:
+                _emit_request_purchase_notifications(rp.id)
+            except Exception:
+                pass
+            flash("✅ Pago aprobado. La propuesta quedó comprada.", "success")
+            return redirect(url_for("note_request_detail", request_id=rp.request_id))
+        s.commit()
+        flash("Registramos tu intento de pago. Si Mercado Pago lo aprueba, el estado se actualizará en unos instantes.", "info")
+        return redirect(url_for("note_request_detail", request_id=rp.request_id))
+
+
+def _emit_request_purchase_notifications(request_purchase_id: int):
+    with Session() as s:
+        rp = s.get(NoteRequestPurchase, request_purchase_id)
+        if not rp or (rp.status or "").lower() != "approved":
+            return
+        nr = s.get(NoteRequest, rp.request_id)
+        off = s.get(NoteRequestOffer, rp.offer_id)
+        buyer = s.get(User, rp.buyer_id) if rp.buyer_id else None
+        seller = s.get(User, rp.seller_id) if rp.seller_id else None
+        if not nr or not off:
+            return
+        title_buyer = "✅ Compra confirmada"
+        body_buyer = f"Tu pedido “{nr.title}” ya quedó comprado. En esta etapa todavía no se entrega archivo automático; el estado ya quedó resuelto."
+        title_seller = "💰 ¡Te compraron una propuesta!"
+        body_seller = f"Compraron tu propuesta para el pedido “{nr.title}”."
+        notify_and_email_users(
+            s,
+            user_ids=[rp.buyer_id] if rp.buyer_id else [],
+            kind="request_purchase_buyer",
+            title=title_buyer,
+            body=body_buyer,
+            email_subject="Compra confirmada en ApuntesYa",
+            email_body=body_buyer,
+            dedupe_key_prefix=f"request_purchase:{rp.id}:buyer",
+        )
+        notify_and_email_users(
+            s,
+            user_ids=[rp.seller_id] if rp.seller_id else [],
+            kind="request_sale_seller",
+            title=title_seller,
+            body=body_seller,
+            email_subject="¡Te compraron una propuesta en ApuntesYa!",
+            email_body=body_seller,
+            dedupe_key_prefix=f"request_purchase:{rp.id}:seller",
+        )
+        s.commit()
 
 @app.get("/my-requests")
 @login_required
@@ -5697,6 +5909,32 @@ def _upsert_purchase_from_payment(pay: dict):
             try:
                 if (status or "").lower() == "approved":
                     _emit_note_purchase_notifications(pid)
+            except Exception:
+                pass
+            return
+
+        # =========================
+        # PEDIDOS / PROPUESTAS
+        # =========================
+        if external_reference.startswith("request_purchase:"):
+            rp_id = int(external_reference.split(":", 1)[1])
+            with Session() as s:
+                rp = s.get(NoteRequestPurchase, rp_id)
+                if rp:
+                    rp.payment_id = payment_id
+                    if status:
+                        rp.status = status
+                    if (status or "").lower() == "approved":
+                        off = s.get(NoteRequestOffer, rp.offer_id)
+                        nr = s.get(NoteRequest, rp.request_id)
+                        if off:
+                            off.status = "purchased"
+                        if nr:
+                            nr.status = "resolved"
+                    s.commit()
+            try:
+                if (status or "").lower() == "approved":
+                    _emit_request_purchase_notifications(rp_id)
             except Exception:
                 pass
             return

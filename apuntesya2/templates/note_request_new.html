@@ -50,8 +50,13 @@
 
     <div class="grid-2 gap">
       <div class="field">
-        <label>Precio ofrecido (ARS)</label>
-        <input class="input" type="number" min="0" step="1" name="offered_price" value="{{ request.form.get('offered_price','0') }}">
+        <label>Precio de referencia para el vendedor (ARS netos)</label>
+        <input class="input js-net-price" type="number" min="0" step="1" name="offered_price" value="{{ request.form.get('offered_price','0') }}" data-target="#buyerPricePreview">
+        {% set buyer_fee = fee_breakdown_from_net(amount_to_cents(request.form.get('offered_price','0')|int)) %}
+        <div id="buyerPricePreview" class="muted" style="margin-top:8px;">
+          Total final estimado con comisiones: <strong>${{ buyer_fee.published }}</strong> · Neto vendedor aprox.: <strong>${{ buyer_fee.seller_net }}</strong>
+        </div>
+        <div class="muted" style="margin-top:4px;font-size:13px;">El total final se calcula sumando comisión de plataforma y costo de cobro. Lo vas a ver antes de pagar.</div>
       </div>
       <div class="field" style="display:flex;align-items:flex-end;">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -71,11 +76,7 @@
 <script src="{{ url_for('static', filename='js/academics_selects.js') }}?v=3"></script>
 <script>
   document.addEventListener('DOMContentLoaded', async () => {
-    const api = await window.initAcademicsSelects({
-      prefix: 'nr',
-      enableCreate: true
-    });
-
+    const api = await window.initAcademicsSelects({ prefix: 'nr', enableCreate: true });
     const form = document.getElementById('noteRequestForm');
     if (form && api && typeof api.resolveHidden === 'function') {
       form.addEventListener('submit', async (e) => {
@@ -84,6 +85,16 @@
         form.submit();
       });
     }
+    function updateNetPreview(input) {
+      const target = document.querySelector(input.dataset.target);
+      if (!target) return;
+      const n = parseFloat(input.value || '0');
+      const totalRate = {{ TOTAL_FEE_RATE|tojson }};
+      const sellerShare = Math.max(0.0001, 1 - totalRate);
+      const published = n > 0 ? (Math.ceil((n / sellerShare) * 10) / 10).toFixed(1) : '0.0';
+      target.innerHTML = `Total final estimado con comisiones: <strong>$${published}</strong> · Neto vendedor aprox.: <strong>$${(n || 0).toFixed(1)}</strong>`;
+    }
+    document.querySelectorAll('.js-net-price').forEach(i => { updateNetPreview(i); i.addEventListener('input', () => updateNetPreview(i)); });
   });
 </script>
 {% endblock %}
