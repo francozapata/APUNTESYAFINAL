@@ -2685,6 +2685,9 @@ def note_request_offer_new(request_id: int):
         if nr.buyer_id == current_user.id:
             flash("No podés responder tu propio pedido.")
             return redirect(url_for("note_request_detail", request_id=request_id))
+        if nr.status in {"resolved", "closed"}:
+            flash("Este pedido ya no acepta propuestas.")
+            return redirect(url_for("note_request_detail", request_id=request_id))
         existing = s.execute(
             select(NoteRequestOffer).where(
                 NoteRequestOffer.request_id == request_id,
@@ -2705,10 +2708,12 @@ def note_request_offer_new(request_id: int):
         seller_price_raw = (request.form.get("seller_price") or "0").strip().replace(",", ".")
         allow_publish_after_sale = bool(request.form.get("allow_publish_after_sale"))
         confirm_match = bool(request.form.get("confirm_match"))
+
         try:
             page_count = int(page_count_raw) if page_count_raw else None
         except Exception:
             page_count = None
+
         try:
             seller_price = max(0, int(round(float(seller_price_raw))))
         except Exception:
@@ -2721,8 +2726,6 @@ def note_request_offer_new(request_id: int):
             errors.append("La descripción de la propuesta debe tener al menos 20 caracteres.")
         if material_type not in {k for k, _ in REQUEST_MATERIAL_TYPES}:
             errors.append("Elegí un tipo de material válido.")
-        if offered_price <= 0:
-            errors.append("Indicá un precio de referencia mayor a 0.")
         if seller_price <= 0:
             errors.append("Indicá un precio válido para tu propuesta.")
         if not confirm_match:
@@ -2734,6 +2737,12 @@ def note_request_offer_new(request_id: int):
         else:
             with Session() as s:
                 nr = s.get(NoteRequest, request_id)
+                if not nr:
+                    abort(404)
+                if nr.status in {"resolved", "closed"}:
+                    flash("Este pedido ya no acepta propuestas.")
+                    return redirect(url_for("note_request_detail", request_id=request_id))
+
                 off = NoteRequestOffer(
                     request_id=request_id,
                     seller_id=current_user.id,
@@ -2749,9 +2758,10 @@ def note_request_offer_new(request_id: int):
                     status="pending",
                 )
                 s.add(off)
-                if nr and nr.status == "open":
+                if nr.status == "open":
                     nr.status = "has_offers"
                 s.commit()
+
             flash("Tu propuesta fue enviada.")
             return redirect(url_for("note_request_detail", request_id=request_id))
 
@@ -2761,7 +2771,6 @@ def note_request_offer_new(request_id: int):
         request_material_types=REQUEST_MATERIAL_TYPES,
         request_type_label=_request_type_label,
     )
-
 
 @app.post("/request-offers/<int:offer_id>/buyer-action")
 @login_required
