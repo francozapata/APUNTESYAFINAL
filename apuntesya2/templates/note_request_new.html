@@ -51,10 +51,9 @@
     <div class="grid-2 gap">
       <div class="field">
         <label>Precio de referencia para el vendedor (ARS netos)</label>
-        <input class="input js-net-price" type="number" min="0" step="1" name="offered_price" value="{{ request.form.get('offered_price','0') }}" data-target="#buyerPricePreview">
-        {% set buyer_fee = fee_breakdown_from_net(amount_to_cents(request.form.get('offered_price','0')|int)) %}
+        <input class="input js-net-price" type="number" min="1" step="1" name="offered_price" value="{{ request.form.get('offered_price','') }}" data-target="#buyerPricePreview">
         <div id="buyerPricePreview" class="muted" style="margin-top:8px;">
-          Total final estimado con comisiones: <strong>${{ buyer_fee.published }}</strong> · Neto vendedor aprox.: <strong>${{ buyer_fee.seller_net }}</strong>
+          Ingresá un precio mayor a 0 para ver el total final con comisiones.
         </div>
         <div class="muted" style="margin-top:4px;font-size:13px;">El total final se calcula sumando comisión de plataforma y costo de cobro. Lo vas a ver antes de pagar.</div>
       </div>
@@ -91,8 +90,12 @@
       const n = parseFloat(input.value || '0');
       const totalRate = {{ TOTAL_FEE_RATE|tojson }};
       const sellerShare = Math.max(0.0001, 1 - totalRate);
-      const published = n > 0 ? (Math.ceil((n / sellerShare) * 10) / 10).toFixed(1) : '0.0';
-      target.innerHTML = `Total final estimado con comisiones: <strong>$${published}</strong> · Neto vendedor aprox.: <strong>$${(n || 0).toFixed(1)}</strong>`;
+      if (!(n > 0)) {
+        target.innerHTML = 'Ingresá un precio mayor a 0 para ver el total final con comisiones.';
+        return;
+      }
+      const published = (Math.ceil((n / sellerShare) * 10) / 10).toFixed(1);
+      target.innerHTML = `Total final estimado con comisiones: <strong>$${published}</strong> · Neto vendedor aprox.: <strong>$${n.toFixed(1)}</strong>`;
     }
     document.querySelectorAll('.js-net-price').forEach(i => { updateNetPreview(i); i.addEventListener('input', () => updateNetPreview(i)); });
   });

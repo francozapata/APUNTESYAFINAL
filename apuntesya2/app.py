@@ -2608,6 +2608,8 @@ def note_request_new():
             errors.append("La descripción debe tener al menos 20 caracteres.")
         if material_type not in {k for k, _ in REQUEST_MATERIAL_TYPES}:
             errors.append("Elegí un tipo de material válido.")
+        if offered_price <= 0:
+            errors.append("Indicá un precio de referencia mayor a 0.")
 
         if errors:
             for err in errors:
@@ -2719,6 +2721,8 @@ def note_request_offer_new(request_id: int):
             errors.append("La descripción de la propuesta debe tener al menos 20 caracteres.")
         if material_type not in {k for k, _ in REQUEST_MATERIAL_TYPES}:
             errors.append("Elegí un tipo de material válido.")
+        if offered_price <= 0:
+            errors.append("Indicá un precio de referencia mayor a 0.")
         if seller_price <= 0:
             errors.append("Indicá un precio válido para tu propuesta.")
         if not confirm_match:
@@ -2857,7 +2861,7 @@ def note_request_offer_checkout(offer_id: int):
         seller = s.get(User, off.seller_id)
         agreed_net_amount = int(off.agreed_price or off.buyer_counter_price or off.seller_price or 0)
         if agreed_net_amount <= 0:
-            flash("No se pudo calcular el precio de la propuesta.", "warning")
+            flash("Falta definir un precio válido para continuar con la compra.", "warning")
             return redirect(url_for("note_request_detail", request_id=nr.id))
 
         net_cents = amount_to_cents(agreed_net_amount)

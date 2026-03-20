@@ -33,10 +33,11 @@
 
     <div class="card" style="padding:16px;">
       <h3 style="margin-top:0;">Resumen del pedido</h3>
-      {% set req_fee = fee_breakdown_from_net(amount_to_cents(note_request.offered_price or 0)) %}
+      {% set req_has_valid_price = (note_request.offered_price or 0) > 0 %}
+      {% if req_has_valid_price %}{% set req_fee = fee_breakdown_from_net(amount_to_cents(note_request.offered_price)) %}{% endif %}
       <div class="note-card__meta" style="display:grid;gap:8px;">
-        <span>Referencia neta del comprador: <strong>${{ note_request.offered_price or 0 }}</strong></span>
-        <span>Total final estimado con comisiones: <strong>${{ req_fee.published }}</strong></span>
+        <span>Referencia neta del comprador: <strong>{% if req_has_valid_price %}${{ note_request.offered_price }}{% else %}Sin definir{% endif %}</strong></span>
+        <span>Total final estimado con comisiones: <strong>{% if req_has_valid_price %}${{ req_fee.published }}{% else %}Pendiente{% endif %}</strong></span>
         <span>Propuestas recibidas: <strong>{{ offers|length }}</strong></span>
         <span>Publicado: <strong>{{ note_request.created_at.strftime('%d/%m/%Y %H:%M') if note_request.created_at else '-' }}</strong></span>
         <span>Estado: <strong>{{ request_status_label(note_request.status) }}</strong></span>
@@ -51,9 +52,9 @@
         <strong>Ya enviaste una propuesta.</strong>
         <div class="muted" style="margin-top:4px;">Estado actual: {{ offer_status_label(my_offer.status) }}.</div>
         {% if my_offer.status == 'countered' and my_offer.buyer_counter_price %}
-        {% set my_counter_fee = fee_breakdown_from_net(amount_to_cents(my_offer.buyer_counter_price)) %}
+        {% if my_offer.buyer_counter_price and my_offer.buyer_counter_price > 0 %}{% set my_counter_fee = fee_breakdown_from_net(amount_to_cents(my_offer.buyer_counter_price)) %}{% endif %}
         <div style="margin-top:8px;">Contraoferta neta del comprador: <strong>${{ my_offer.buyer_counter_price }}</strong></div>
-        <div class="muted" style="margin-top:4px;">Total final comprador aprox.: <strong>${{ my_counter_fee.published }}</strong> · Vos recibirías: <strong>${{ my_counter_fee.seller_net }}</strong></div>
+        <div class="muted" style="margin-top:4px;">{% if my_offer.buyer_counter_price and my_offer.buyer_counter_price > 0 %}Total final comprador aprox.: <strong>${{ my_counter_fee.published }}</strong> · Vos recibirías: <strong>${{ my_counter_fee.seller_net }}</strong>{% else %}La contraoferta todavía no tiene un precio válido.{% endif %}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
           <form method="post" action="{{ url_for('note_request_offer_seller_action', offer_id=my_offer.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -67,9 +68,9 @@
           </form>
         </div>
         {% elif my_offer.status == 'accepted' %}
-        {% set agreed_fee = fee_breakdown_from_net(amount_to_cents(my_offer.agreed_price or my_offer.seller_price or 0)) %}
-        <div style="margin-top:8px;">Precio neto acordado: <strong>${{ my_offer.agreed_price or my_offer.seller_price }}</strong></div>
-        <div class="muted" style="margin-top:6px;">El comprador ya puede avanzar con el pago. Total comprador aprox.: <strong>${{ agreed_fee.published }}</strong></div>
+        {% set my_agreed_net = my_offer.agreed_price or my_offer.seller_price or 0 %}
+        <div style="margin-top:8px;">Precio neto acordado: <strong>{% if my_agreed_net > 0 %}${{ my_agreed_net }}{% else %}Sin definir{% endif %}</strong></div>
+        <div class="muted" style="margin-top:6px;">{% if my_agreed_net > 0 %}{% set agreed_fee = fee_breakdown_from_net(amount_to_cents(my_agreed_net)) %}El comprador ya puede avanzar con el pago. Total comprador aprox.: <strong>${{ agreed_fee.published }}</strong>{% else %}Falta definir un precio válido para que el comprador pueda avanzar.{% endif %}</div>
         {% elif my_offer.status == 'purchased' %}
         <div style="margin-top:8px;">✅ Esta propuesta ya fue comprada.</div>
         {% endif %}
@@ -98,6 +99,7 @@
         {% if off.year_text %}<span>{{ off.year_text }}</span>{% endif %}
       </div>
       {% set off_net = off.agreed_price or off.buyer_counter_price or off.seller_price or 0 %}
+      {% set off_has_valid_price = off_net > 0 %}
       {% set off_fee = fee_breakdown_from_net(amount_to_cents(off_net)) %}
       <div class="note-card__meta" style="display:grid;gap:6px;margin-top:6px;">
         <span>Estado: <strong>{{ offer_status_label(off.status) }}</strong></span>
@@ -131,8 +133,12 @@
         {% elif off.status == 'accepted' %}
         <div style="padding:10px 12px;border-radius:12px;background:#ecfdf5;border:1px solid #86efac;">
           <strong>Precio acordado.</strong>
+          {% if off_has_valid_price %}
           <div class="muted" style="margin-top:4px;">Ya podés avanzar con la compra de esta propuesta.</div>
           <div style="margin-top:10px;"><a class="btn primary" href="{{ url_for('note_request_offer_checkout', offer_id=off.id) }}">Comprar propuesta</a></div>
+          {% else %}
+          <div class="muted" style="margin-top:4px;">Falta definir un precio válido para continuar.</div>
+          {% endif %}
         </div>
         {% elif off.status == 'purchased' %}
         <div style="padding:10px 12px;border-radius:12px;background:#ecfdf5;border:1px solid #86efac;">
@@ -158,8 +164,12 @@
     const n = parseFloat(input.value || '0');
     const totalRate = {{ TOTAL_FEE_RATE|tojson }};
     const sellerShare = Math.max(0.0001, 1 - totalRate);
-    const published = n > 0 ? (Math.ceil((n / sellerShare) * 10) / 10).toFixed(1) : '0.0';
-    target.innerHTML = `Total estimado comprador: <strong>$${published}</strong> · Neto vendedor: <strong>$${(n || 0).toFixed(1)}</strong>`;
+    if (!(n > 0)) {
+      target.innerHTML = 'Ingresá una contraoferta mayor a 0 para ver el total estimado.';
+      return;
+    }
+    const published = (Math.ceil((n / sellerShare) * 10) / 10).toFixed(1);
+    target.innerHTML = `Total estimado comprador: <strong>$${published}</strong> · Neto vendedor: <strong>$${n.toFixed(1)}</strong>`;
   }
   document.querySelectorAll('.js-net-price').forEach(i => { updateNetPreview(i); i.addEventListener('input', () => updateNetPreview(i)); });
 })();

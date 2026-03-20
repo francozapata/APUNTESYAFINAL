@@ -56,9 +56,8 @@
       <div class="field">
         <label>Precio neto que querés recibir</label>
         <input class="input js-net-price" data-target="#sellerPricePreview" type="number" min="1" step="1" name="seller_price" value="{{ request.form.get('seller_price', note_request.offered_price or '') }}" placeholder="Ej: 3500">
-        {% set seller_fee = fee_breakdown_from_net(amount_to_cents(request.form.get('seller_price', note_request.offered_price or '0')|int)) %}
         <div id="sellerPricePreview" class="muted" style="margin-top:8px;">
-          Total final estimado para el comprador: <strong>${{ seller_fee.published }}</strong> · Vos recibirías aprox.: <strong>${{ seller_fee.seller_net }}</strong>
+          Ingresá un precio mayor a 0 para ver el total final estimado para el comprador.
         </div>
         <div class="muted" style="margin-top:4px;font-size:13px;">El comprador verá el total con comisión y costo de cobro antes de pagar.</div>
       </div>
@@ -88,8 +87,12 @@
     const n = parseFloat(input.value || '0');
     const totalRate = {{ TOTAL_FEE_RATE|tojson }};
     const sellerShare = Math.max(0.0001, 1 - totalRate);
-    const published = n > 0 ? (Math.ceil((n / sellerShare) * 10) / 10).toFixed(1) : '0.0';
-    target.innerHTML = `Total final estimado para el comprador: <strong>$${published}</strong> · Vos recibirías aprox.: <strong>$${(n || 0).toFixed(1)}</strong>`;
+    if (!(n > 0)) {
+      target.innerHTML = 'Ingresá un precio mayor a 0 para ver el total final estimado para el comprador.';
+      return;
+    }
+    const published = (Math.ceil((n / sellerShare) * 10) / 10).toFixed(1);
+    target.innerHTML = `Total final estimado para el comprador: <strong>$${published}</strong> · Vos recibirías aprox.: <strong>$${n.toFixed(1)}</strong>`;
   }
   document.querySelectorAll('.js-net-price').forEach(i => { updateNetPreview(i); i.addEventListener('input', () => updateNetPreview(i)); });
 })();
