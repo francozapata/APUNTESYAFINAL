@@ -103,12 +103,13 @@
       {% set off_fee = fee_breakdown_from_net(amount_to_cents(off_net)) %}
       <div class="note-card__meta" style="display:grid;gap:6px;margin-top:6px;">
         <span>Estado: <strong>{{ offer_status_label(off.status) }}</strong></span>
-        <span>Referencia neta comprador: <strong>${{ note_request.offered_price or 0 }}</strong></span>
-        <span>Precio neto propuesto por vendedor: <strong>${{ off.seller_price or 0 }}</strong></span>
+        <span>Referencia neta comprador: <strong>{% if (note_request.offered_price or 0) > 0 %}${{ note_request.offered_price }}{% else %}Sin definir{% endif %}</strong></span>
+        <span>Precio neto propuesto por vendedor: <strong>{% if (off.seller_price or 0) > 0 %}${{ off.seller_price }}{% else %}Sin definir{% endif %}</strong></span>
         {% if off.buyer_counter_price %}<span>Contraoferta neta del comprador: <strong>${{ off.buyer_counter_price }}</strong></span>{% endif %}
         {% if off.agreed_price %}<span>Precio neto acordado: <strong>${{ off.agreed_price }}</strong></span>{% endif %}
-        <span>Total final estimado comprador: <strong>${{ off_fee.published }}</strong></span>
+        <span>Total final estimado comprador: <strong>{% if off_has_valid_price %}${{ off_fee.published }}{% else %}Pendiente{% endif %}</strong></span>
         <span>Enviada: {{ off.created_at.strftime('%d/%m/%Y') if off.created_at else '-' }}</span>
+        <span>Archivo: <strong>{% if off.file_name %}Adjunto{% else %}Pendiente{% endif %}</strong></span>
       </div>
       {% if is_owner %}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
@@ -144,6 +145,11 @@
         <div style="padding:10px 12px;border-radius:12px;background:#ecfdf5;border:1px solid #86efac;">
           <strong>Comprada.</strong>
           <div class="muted" style="margin-top:4px;">El pedido ya quedó resuelto.</div>
+          {% if off.file_path %}
+          <div style="margin-top:10px;"><a class="btn primary" href="{{ url_for('download_request_offer_file', offer_id=off.id) }}">Descargar archivo</a></div>
+          {% else %}
+          <div class="muted" style="margin-top:8px;">Todavía no hay archivo disponible para descargar.</div>
+          {% endif %}
         </div>
         {% endif %}
       </div>

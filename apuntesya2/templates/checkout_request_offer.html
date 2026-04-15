@@ -2,7 +2,7 @@
 {% block content %}
 <div class="card" style="padding:18px;max-width:900px;margin:0 auto;">
   <div class="h1" style="margin-bottom:6px;">🧾 Confirmar compra de propuesta</div>
-  <p class="muted" style="margin-top:0;">Vas a comprar una propuesta vinculada a un pedido. En esta etapa la compra queda registrada y el pedido pasa a resuelto.</p>
+  <p class="muted" style="margin-top:0;">Vas a comprar una propuesta vinculada a un pedido. Cuando el pago se apruebe, el pedido quedará resuelto y se habilitará la descarga del archivo adjunto.</p>
 
   <div class="card" style="padding:14px;background:#f8fbff;border:1px solid #dbeafe;">
     <strong>{{ offer.title }}</strong>
@@ -26,7 +26,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label style="display:flex;gap:8px;align-items:flex-start;">
       <input type="checkbox" name="ack" value="1">
-      <span>Acepto continuar con la compra y entiendo que, en esta etapa, la entrega automática del archivo todavía no está conectada.</span>
+      <span>Acepto continuar con la compra y entiendo que, si el pago se aprueba, se habilitará la descarga del archivo de la propuesta.</span>
     </label>
 
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">

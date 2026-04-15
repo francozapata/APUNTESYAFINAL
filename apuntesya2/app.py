@@ -2708,6 +2708,11 @@ def note_request_offer_new(request_id: int):
         seller_price_raw = (request.form.get("seller_price") or "0").strip().replace(",", ".")
         allow_publish_after_sale = bool(request.form.get("allow_publish_after_sale"))
         confirm_match = bool(request.form.get("confirm_match"))
+        proposal_file = request.files.get("proposal_file")
+        uploaded_blob_name = None
+        uploaded_file_name = None
+        uploaded_file_mime = None
+        uploaded_file_size = None
 
         try:
             page_count = int(page_count_raw) if page_count_raw else None
@@ -2730,8 +2735,38 @@ def note_request_offer_new(request_id: int):
             errors.append("Indicá un precio válido para tu propuesta.")
         if not confirm_match:
             errors.append("Tenés que confirmar que tu propuesta coincide razonablemente con el pedido.")
+        if not proposal_file or not (proposal_file.filename or "").strip():
+            errors.append("Tenés que adjuntar un archivo PDF para tu propuesta.")
+        elif not allowed_pdf(proposal_file.filename or ""):
+            errors.append("El archivo de la propuesta debe ser un PDF.")
+        elif not (proposal_file.mimetype or "").lower().startswith("application/pdf"):
+            errors.append("El archivo adjunto no parece ser un PDF válido.")
+        elif not (gcs_client and gcs_bucket):
+            errors.append("El almacenamiento de archivos no está configurado todavía. Configurá R2 para poder adjuntar propuestas.")
+
+        if not errors:
+            safe_name = secure_filename((proposal_file.filename or "propuesta.pdf").strip()) or "propuesta.pdf"
+            blob_name = f"request_offers/{request_id}/{current_user.id}/{int(time.time())}_{safe_name}"
+            try:
+                try:
+                    proposal_file.stream.seek(0, 2)
+                    uploaded_file_size = int(proposal_file.stream.tell() or 0)
+                    proposal_file.stream.seek(0)
+                except Exception:
+                    uploaded_file_size = None
+                uploaded_blob_name = gcs_upload_file(proposal_file, blob_name)
+                uploaded_file_name = safe_name
+                uploaded_file_mime = proposal_file.mimetype or "application/pdf"
+            except Exception as e:
+                app.logger.exception("Error subiendo archivo de propuesta a R2")
+                errors.append(f"No se pudo subir el archivo de la propuesta: {e}")
 
         if errors:
+            if uploaded_blob_name:
+                try:
+                    gcs_delete_blob(uploaded_blob_name)
+                except Exception:
+                    pass
             for err in errors:
                 flash(err)
         else:
@@ -2756,6 +2791,10 @@ def note_request_offer_new(request_id: int):
                     seller_price=seller_price,
                     agreed_price=None,
                     status="pending",
+                    file_path=uploaded_blob_name,
+                    file_name=uploaded_file_name,
+                    file_mime=uploaded_file_mime,
+                    file_size=uploaded_file_size,
                 )
                 s.add(off)
                 if nr.status == "open":
@@ -2865,6 +2904,9 @@ def note_request_offer_checkout(offer_id: int):
             abort(403)
         if (off.status or "") != "accepted":
             flash("Primero tiene que quedar un precio aceptado para habilitar la compra.", "warning")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+        if not (off.file_path or "").strip():
+            flash("Esta propuesta todavía no tiene un archivo adjunto disponible para entregar.", "warning")
             return redirect(url_for("note_request_detail", request_id=nr.id))
 
         seller = s.get(User, off.seller_id)
@@ -3035,7 +3077,7 @@ def _emit_request_purchase_notifications(request_purchase_id: int):
         if not nr or not off:
             return
         title_buyer = "✅ Compra confirmada"
-        body_buyer = f"Tu pedido “{nr.title}” ya quedó comprado. En esta etapa todavía no se entrega archivo automático; el estado ya quedó resuelto."
+        body_buyer = f"Tu pedido “{nr.title}” ya quedó comprado. Ya podés descargar el archivo desde el detalle del pedido."
         title_seller = "💰 ¡Te compraron una propuesta!"
         body_seller = f"Compraron tu propuesta para el pedido “{nr.title}”."
         notify_and_email_users(
@@ -3059,6 +3101,67 @@ def _emit_request_purchase_notifications(request_purchase_id: int):
             dedupe_key_prefix=f"request_purchase:{rp.id}:seller",
         )
         s.commit()
+
+@app.route("/request-offers/<int:offer_id>/download")
+@login_required
+def download_request_offer_file(offer_id: int):
+    with Session() as s:
+        off = s.get(NoteRequestOffer, offer_id)
+        if not off:
+            abort(404)
+        nr = s.get(NoteRequest, off.request_id)
+        if not nr:
+            abort(404)
+
+        is_admin = bool(getattr(current_user, "is_admin", False))
+        is_buyer = bool(getattr(nr, "buyer_id", None) == getattr(current_user, "id", None))
+        has_purchase = s.execute(
+            select(NoteRequestPurchase.id).where(
+                NoteRequestPurchase.offer_id == off.id,
+                NoteRequestPurchase.buyer_id == current_user.id,
+                NoteRequestPurchase.status == "approved",
+            )
+        ).scalar_one_or_none() is not None
+
+        allowed = bool(is_admin or (is_buyer and (off.status or "") == "purchased" and has_purchase))
+        if not allowed:
+            abort(404)
+
+        offer_file_path = getattr(off, "file_path", None)
+        if not offer_file_path:
+            flash("No se encontró el archivo asociado a esta propuesta.", "danger")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+
+        try:
+            data = gcs_download_bytes(offer_file_path)
+        except Exception as e:
+            app.logger.warning("No se pudo descargar archivo de propuesta %s: %s", offer_id, e)
+            flash("El archivo no está disponible en este momento.", "danger")
+            return redirect(url_for("note_request_detail", request_id=nr.id))
+
+        try:
+            log_audit_event(
+                actor_user_id=int(getattr(current_user, "id", 0) or 0) or None,
+                action="request_offer_downloaded",
+                target_type="note_request_offer",
+                target_id=int(off.id),
+                meta={
+                    "offer_id": int(off.id),
+                    "request_id": int(nr.id),
+                    "buyer_id": int(getattr(current_user, "id", 0) or 0) or None,
+                },
+            )
+        except Exception:
+            pass
+
+    fname = getattr(off, "file_name", None) or os.path.basename(offer_file_path) or f"propuesta_{offer_id}.pdf"
+    return send_file(
+        BytesIO(data),
+        mimetype=getattr(off, "file_mime", None) or "application/pdf",
+        as_attachment=True,
+        download_name=fname,
+    )
+
 
 @app.get("/my-requests")
 @login_required

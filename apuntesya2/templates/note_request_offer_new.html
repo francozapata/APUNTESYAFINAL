@@ -14,7 +14,7 @@
     </div>
   </div>
 
-  <form method="post" class="stack gap">
+  <form method="post" class="stack gap" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <div class="grid-2 gap">
@@ -61,6 +61,14 @@
         </div>
         <div class="muted" style="margin-top:4px;font-size:13px;">El comprador verá el total con comisión y costo de cobro antes de pagar.</div>
       </div>
+    </div>
+
+
+
+    <div class="field">
+      <label>Archivo PDF de la propuesta</label>
+      <input class="input" type="file" name="proposal_file" accept="application/pdf,.pdf" required>
+      <div class="muted" style="margin-top:6px;font-size:13px;">Este archivo se guarda de forma privada y solo se entrega al comprador si la propuesta termina comprada.</div>
     </div>
 
     <label style="display:flex;gap:8px;align-items:center;">
